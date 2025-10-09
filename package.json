@@ -84,7 +84,7 @@
     "cpy-cli": "^6.0.0",
     "cross-env": "^10.1.0",
     "eslint": "^9.37.0",
-    "eslint-plugin-jsdoc": "^60.8.3",
+    "eslint-plugin-jsdoc": "^61.0.1",
     "globals": "^16.4.0",
     "node-addon-api": "^8.5.0",
     "node-gyp": "^11.4.2",
