@@ -92,7 +92,7 @@
     "eslint-plugin-jsdoc": "^61.1.12",
     "globals": "^16.5.0",
     "node-addon-api": "^8.5.0",
-    "node-gyp": "^11.5.0",
+    "node-gyp": "^12.0.0",
     "prettier": "^3.6.2",
     "rimraf": "^6.1.0",
     "sharp": "^0.34.5",
