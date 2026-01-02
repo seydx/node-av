@@ -92,7 +92,7 @@
     "cross-env": "^10.1.0",
     "eslint": "^9.39.2",
     "eslint-plugin-jsdoc": "^61.5.0",
-    "globals": "^16.5.0",
+    "globals": "^17.0.0",
     "node-addon-api": "^8.5.0",
     "node-gyp": "^12.1.0",
     "prettier": "^3.7.4",
