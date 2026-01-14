@@ -729,22 +729,26 @@ export interface IOInputCallbacks {
   /**
    * Read callback - called when FFmpeg needs to read data.
    *
+   * Can be synchronous or async (return a Promise).
+   *
    * @param size - Number of bytes to read
    *
-   * @returns Buffer with data, null for EOF, or negative error code
+   * @returns Buffer with data, null for EOF, negative error code, or Promise resolving to same
    */
-  read: (size: number) => Buffer | null | number;
+  read: (size: number) => Buffer | null | number | Promise<Buffer | null | number>;
 
   /**
    * Seek callback - called when FFmpeg needs to seek in the stream.
+   *
+   * Can be synchronous or async (return a Promise).
    *
    * @param offset - Offset to seek to
    *
    * @param whence - Seek origin (AVSEEK_SET, AVSEEK_CUR, AVSEEK_END, or AVSEEK_SIZE)
    *
-   * @returns New position or negative error code
+   * @returns New position, negative error code, or Promise resolving to same
    */
-  seek?: (offset: bigint, whence: AVSeekWhence) => bigint | number;
+  seek?: (offset: bigint, whence: AVSeekWhence) => bigint | number | Promise<bigint | number>;
 }
 
 /**
@@ -753,36 +757,73 @@ export interface IOInputCallbacks {
  * Defines callback functions for custom write operations with FFmpeg.
  * Used internally by Muxer for custom output protocols.
  *
+ * @example
+ * ```typescript
+ * // Async callback example - streaming to web destination
+ * const callbacks: IOOutputCallbacks = {
+ *   write: async (buffer) => {
+ *     await streamWriter.write(buffer);
+ *     return buffer.length;
+ *   }
+ * };
+ *
+ * await using muxer = await Muxer.open(callbacks, { format: 'mp4' });
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Sync callback example - buffering for later processing
+ * const chunks: Buffer[] = [];
+ *
+ * const callbacks: IOOutputCallbacks = {
+ *   write: (buffer) => {
+ *     chunks.push(Buffer.from(buffer));
+ *     return buffer.length;
+ *   }
+ * };
+ * ```
+ *
+ * **Note:** The buffer passed to callbacks may be reused by FFmpeg after the
+ * callback returns. If you need to keep the data, copy it with `Buffer.from(buffer)`.
+ *
  */
 export interface IOOutputCallbacks {
   /**
    * Write callback - called when FFmpeg needs to write data.
    *
+   * Can be synchronous or async (return a Promise).
+   * The buffer may be reused by FFmpeg after the callback completes,
+   * so copy it if you need to keep the data.
+   *
    * @param buffer - Buffer containing data to write
    *
-   * @returns Number of bytes written or void
+   * @returns Number of bytes written, void (assumes all bytes written), or Promise resolving to same
    */
-  write: (buffer: Buffer) => number | void;
+  write: (buffer: Buffer) => number | void | Promise<number | void>;
 
   /**
    * Seek callback - called when FFmpeg needs to seek in the output.
+   *
+   * Can be synchronous or async (return a Promise).
    *
    * @param offset - Offset to seek to
    *
    * @param whence - Seek origin (AVSEEK_SET, AVSEEK_CUR, AVSEEK_END)
    *
-   * @returns New position or negative error code
+   * @returns New position, negative error code, or Promise resolving to same
    */
-  seek?: (offset: bigint, whence: AVSeekWhence) => bigint | number;
+  seek?: (offset: bigint, whence: AVSeekWhence) => bigint | number | Promise<bigint | number>;
 
   /**
    * Read callback - some formats may need to read back data.
    *
+   * Can be synchronous or async (return a Promise).
+   *
    * @param size - Number of bytes to read
    *
-   * @returns Buffer with data, null for EOF, or negative error code
+   * @returns Buffer with data, null for EOF, negative error code, or Promise resolving to same
    */
-  read?: (size: number) => Buffer | null | number;
+  read?: (size: number) => Buffer | null | number | Promise<Buffer | null | number>;
 }
 
 /**

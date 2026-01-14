@@ -179,15 +179,11 @@ export class Muxer implements AsyncDisposable, Disposable {
    *
    * @example
    * ```typescript
-   * // Custom I/O callbacks
+   * // Custom I/O callbacks - async streaming to web destination
    * const callbacks = {
    *   write: async (buffer: Buffer) => {
-   *     // Write to custom destination
+   *     await streamWriter.write(buffer);
    *     return buffer.length;
-   *   },
-   *   seek: async (offset: bigint, whence: AVSeekWhence) => {
-   *     // Seek in custom destination
-   *     return offset;
    *   }
    * };
    *
@@ -195,6 +191,20 @@ export class Muxer implements AsyncDisposable, Disposable {
    *   format: 'mp4',
    *   bufferSize: 8192
    * });
+   * ```
+   *
+   * @example
+   * ```typescript
+   * // Custom I/O callbacks - synchronous buffering
+   * const chunks: Buffer[] = [];
+   * const callbacks = {
+   *   write: (buffer: Buffer) => {
+   *     chunks.push(Buffer.from(buffer));
+   *     return buffer.length;
+   *   }
+   * };
+   *
+   * await using output = await Muxer.open(callbacks, { format: 'mp4' });
    * ```
    *
    * @see {@link MuxerOptions} For configuration options

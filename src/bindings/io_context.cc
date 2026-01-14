@@ -115,30 +115,63 @@ int IOContext::ReadPacket(void* opaque, uint8_t* buf, int buf_size) {
   }
 
   // Fallback to ThreadSafeFunction (for async operations or when not in main thread)
-  int bytes_read = 0;
-  std::promise<int> promise;
-  std::future<int> future = promise.get_future();
+  // Use shared_ptr so the promise can outlive the callback (needed for async JS callbacks)
+  auto promisePtr = std::make_shared<std::promise<int>>();
+  std::future<int> future = promisePtr->get_future();
 
-  auto callback = [&promise, &bytes_read, buf, buf_size](Napi::Env env, Napi::Function jsCallback) {
+  auto callback = [promisePtr, buf, buf_size](Napi::Env env, Napi::Function jsCallback) {
     try {
       Napi::Value result = jsCallback.Call({Napi::Number::New(env, buf_size)});
 
+      // Check if result is a Promise (has .then method)
+      if (result.IsObject() && !result.IsBuffer() && !result.IsNull()) {
+        Napi::Object obj = result.As<Napi::Object>();
+        if (obj.Has("then") && obj.Get("then").IsFunction()) {
+          // It's a Promise - attach .then() handler
+          Napi::Function thenFn = obj.Get("then").As<Napi::Function>();
+
+          // Create resolve handler - captures buf for memcpy
+          auto onResolve = Napi::Function::New(env, [promisePtr, buf, buf_size](const Napi::CallbackInfo& info) {
+            if (info.Length() == 0 || info[0].IsNull() || info[0].IsUndefined()) {
+              promisePtr->set_value(AVERROR_EOF);
+            } else if (info[0].IsBuffer()) {
+              Napi::Buffer<uint8_t> buffer = info[0].As<Napi::Buffer<uint8_t>>();
+              int bytes = std::min(static_cast<int>(buffer.Length()), buf_size);
+              memcpy(buf, buffer.Data(), bytes);
+              promisePtr->set_value(bytes);
+            } else if (info[0].IsNumber()) {
+              promisePtr->set_value(info[0].As<Napi::Number>().Int32Value());
+            } else {
+              promisePtr->set_value(AVERROR(EINVAL));
+            }
+          });
+
+          // Create reject handler
+          auto onReject = Napi::Function::New(env, [promisePtr](const Napi::CallbackInfo& info) {
+            promisePtr->set_value(AVERROR(EIO));
+          });
+
+          thenFn.Call(obj, {onResolve, onReject});
+          return; // Don't set promise value here - wait for .then()
+        }
+      }
+
+      // Synchronous result
       if (result.IsNull() || result.IsUndefined()) {
-        bytes_read = AVERROR_EOF;
+        promisePtr->set_value(AVERROR_EOF);
       } else if (result.IsBuffer()) {
         Napi::Buffer<uint8_t> buffer = result.As<Napi::Buffer<uint8_t>>();
-        bytes_read = std::min(static_cast<int>(buffer.Length()), buf_size);
+        int bytes_read = std::min(static_cast<int>(buffer.Length()), buf_size);
         memcpy(buf, buffer.Data(), bytes_read);
+        promisePtr->set_value(bytes_read);
       } else if (result.IsNumber()) {
-        // Error code
-        bytes_read = result.As<Napi::Number>().Int32Value();
+        promisePtr->set_value(result.As<Napi::Number>().Int32Value());
       } else {
-        bytes_read = AVERROR(EINVAL);
+        promisePtr->set_value(AVERROR(EINVAL));
       }
     } catch (...) {
-      bytes_read = AVERROR(EIO);
+      promisePtr->set_value(AVERROR(EIO));
     }
-    promise.set_value(bytes_read);
   };
 
   napi_status status = data->read_callback.BlockingCall(callback);
@@ -180,24 +213,50 @@ int IOContext::WritePacket(void* opaque, const uint8_t* buf, int buf_size) {
   }
 
   // Fallback to ThreadSafeFunction (for async operations or when not in main thread)
-  int bytes_written = 0;
-  std::promise<int> promise;
-  std::future<int> future = promise.get_future();
+  // Use shared_ptr so the promise can outlive the callback (needed for async JS callbacks)
+  auto promisePtr = std::make_shared<std::promise<int>>();
+  std::future<int> future = promisePtr->get_future();
 
-  auto callback = [&promise, &bytes_written, buf, buf_size](Napi::Env env, Napi::Function jsCallback) {
+  auto callback = [promisePtr, buf, buf_size](Napi::Env env, Napi::Function jsCallback) {
     try {
       Napi::Buffer<uint8_t> buffer = Napi::Buffer<uint8_t>::Copy(env, const_cast<uint8_t*>(buf), buf_size);
       Napi::Value result = jsCallback.Call({buffer});
 
+      // Check if result is a Promise (has .then method)
+      if (result.IsObject()) {
+        Napi::Object obj = result.As<Napi::Object>();
+        if (obj.Has("then") && obj.Get("then").IsFunction()) {
+          // It's a Promise - attach .then() handler
+          Napi::Function thenFn = obj.Get("then").As<Napi::Function>();
+
+          // Create resolve handler
+          auto onResolve = Napi::Function::New(env, [promisePtr, buf_size](const Napi::CallbackInfo& info) {
+            int value = buf_size;
+            if (info.Length() > 0 && info[0].IsNumber()) {
+              value = info[0].As<Napi::Number>().Int32Value();
+            }
+            promisePtr->set_value(value);
+          });
+
+          // Create reject handler
+          auto onReject = Napi::Function::New(env, [promisePtr](const Napi::CallbackInfo& info) {
+            promisePtr->set_value(AVERROR(EIO));
+          });
+
+          thenFn.Call(obj, {onResolve, onReject});
+          return; // Don't set promise value here - wait for .then()
+        }
+      }
+
+      // Synchronous result
       if (result.IsNumber()) {
-        bytes_written = result.As<Napi::Number>().Int32Value();
+        promisePtr->set_value(result.As<Napi::Number>().Int32Value());
       } else {
-        bytes_written = buf_size;  // Assume all bytes written
+        promisePtr->set_value(buf_size);  // Assume all bytes written
       }
     } catch (...) {
-      bytes_written = AVERROR(EIO);
+      promisePtr->set_value(AVERROR(EIO));
     }
-    promise.set_value(bytes_written);
   };
 
   napi_status status = data->write_callback.BlockingCall(callback);
@@ -250,29 +309,60 @@ int64_t IOContext::Seek(void* opaque, int64_t offset, int whence) {
   }
 
   // Fallback to ThreadSafeFunction (for async operations or when not in main thread)
-  int64_t new_position = -1;
-  std::promise<int64_t> promise;
-  std::future<int64_t> future = promise.get_future();
+  // Use shared_ptr so the promise can outlive the callback (needed for async JS callbacks)
+  auto promisePtr = std::make_shared<std::promise<int64_t>>();
+  std::future<int64_t> future = promisePtr->get_future();
 
-  auto callback = [&promise, &new_position, offset, whence](Napi::Env env, Napi::Function jsCallback) {
+  auto callback = [promisePtr, offset, whence](Napi::Env env, Napi::Function jsCallback) {
     try {
       Napi::Value result = jsCallback.Call({
         Napi::BigInt::New(env, offset),
         Napi::Number::New(env, whence)
       });
 
+      // Check if result is a Promise (has .then method)
+      if (result.IsObject() && !result.IsNull()) {
+        Napi::Object obj = result.As<Napi::Object>();
+        if (obj.Has("then") && obj.Get("then").IsFunction()) {
+          // It's a Promise - attach .then() handler
+          Napi::Function thenFn = obj.Get("then").As<Napi::Function>();
+
+          // Create resolve handler
+          auto onResolve = Napi::Function::New(env, [promisePtr](const Napi::CallbackInfo& info) {
+            int64_t value = AVERROR(EINVAL);
+            if (info.Length() > 0) {
+              if (info[0].IsBigInt()) {
+                bool lossless;
+                value = info[0].As<Napi::BigInt>().Int64Value(&lossless);
+              } else if (info[0].IsNumber()) {
+                value = static_cast<int64_t>(info[0].As<Napi::Number>().Int64Value());
+              }
+            }
+            promisePtr->set_value(value);
+          });
+
+          // Create reject handler
+          auto onReject = Napi::Function::New(env, [promisePtr](const Napi::CallbackInfo& info) {
+            promisePtr->set_value(static_cast<int64_t>(AVERROR(EIO)));
+          });
+
+          thenFn.Call(obj, {onResolve, onReject});
+          return; // Don't set promise value here - wait for .then()
+        }
+      }
+
+      // Synchronous result
       if (result.IsBigInt()) {
         bool lossless;
-        new_position = result.As<Napi::BigInt>().Int64Value(&lossless);
+        promisePtr->set_value(result.As<Napi::BigInt>().Int64Value(&lossless));
       } else if (result.IsNumber()) {
-        new_position = static_cast<int64_t>(result.As<Napi::Number>().Int64Value());
+        promisePtr->set_value(static_cast<int64_t>(result.As<Napi::Number>().Int64Value()));
       } else {
-        new_position = AVERROR(EINVAL);
+        promisePtr->set_value(static_cast<int64_t>(AVERROR(EINVAL)));
       }
     } catch (...) {
-      new_position = AVERROR(EIO);
+      promisePtr->set_value(static_cast<int64_t>(AVERROR(EIO)));
     }
-    promise.set_value(new_position);
   };
 
   napi_status status = data->seek_callback.BlockingCall(callback);

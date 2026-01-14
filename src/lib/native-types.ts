@@ -376,9 +376,9 @@ export interface NativeIOContext extends AsyncDisposable {
   allocContextWithCallbacks(
     bufferSize: number,
     writeFlag: 0 | 1,
-    readCallback?: (size: number) => Buffer | null | number,
-    writeCallback?: (buffer: Buffer) => number | void,
-    seekCallback?: (offset: bigint, whence: AVSeekWhence) => bigint | number,
+    readCallback?: ((size: number) => Buffer | null | number | Promise<Buffer | null | number>) | null,
+    writeCallback?: ((buffer: Buffer) => number | void | Promise<number | void>) | null,
+    seekCallback?: ((offset: bigint, whence: AVSeekWhence) => bigint | number | Promise<bigint | number>) | null,
   ): void;
   freeContext(): void;
   open2(url: string, flags: AVIOFlag): Promise<number>;
