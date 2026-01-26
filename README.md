@@ -473,6 +473,7 @@ NodeAV provides direct bindings to FFmpeg's C APIs, which work with raw memory p
 | `api-whisper-transcribe` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-whisper-transcribe.ts) |
 | `frame-utils` | | [✓](https://github.com/seydx/node-av/tree/main/examples/frame-utils.ts) | |
 | `avio-read-callback` | [✓](https://github.com/FFmpeg/FFmpeg/tree/master/doc/examples/avio_read_callback.c) | [✓](https://github.com/seydx/node-av/tree/main/examples/avio-read-callback.ts) | |
+| `avio-async-read-callback` | | [✓](https://github.com/seydx/node-av/tree/main/examples/avio-async-read-callback.ts) | |
 | `decode-audio` | [✓](https://github.com/FFmpeg/FFmpeg/tree/master/doc/examples/decode_audio.c) | [✓](https://github.com/seydx/node-av/tree/main/examples/decode-audio.ts) | |
 | `decode-filter-audio` | [✓](https://github.com/FFmpeg/FFmpeg/tree/master/doc/examples/decode_filter_audio.c) | [✓](https://github.com/seydx/node-av/tree/main/examples/decode-filter-audio.ts) | |
 | `decode-filter-video` | [✓](https://github.com/FFmpeg/FFmpeg/tree/master/doc/examples/decode_filter_video.c) | [✓](https://github.com/seydx/node-av/tree/main/examples/decode-filter-video.ts) | |
