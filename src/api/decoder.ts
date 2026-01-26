@@ -280,6 +280,14 @@ export class Decoder implements Disposable {
     // Enable COPY_OPAQUE flag to copy packet.opaque to frame.opaque
     codecContext.setFlags(AV_CODEC_FLAG_COPY_OPAQUE);
 
+    // Thread parameters need to be set before open2
+    if (options.threadCount !== undefined) {
+      codecContext.threadCount = options.threadCount;
+    }
+    if (options.threadType !== undefined) {
+      codecContext.threadType = options.threadType;
+    }
+
     const opts = options.options ? Dictionary.fromObject(options.options) : undefined;
 
     // Open codec
@@ -457,6 +465,14 @@ export class Decoder implements Disposable {
 
     // Enable COPY_OPAQUE flag to copy packet.opaque to frame.opaque
     // codecContext.setFlags(AV_CODEC_FLAG_COPY_OPAQUE);
+
+    // Thread parameters need to be set before open2
+    if (options.threadCount !== undefined) {
+      codecContext.threadCount = options.threadCount;
+    }
+    if (options.threadType !== undefined) {
+      codecContext.threadType = options.threadType;
+    }
 
     const opts = options.options ? Dictionary.fromObject(options.options) : undefined;
 

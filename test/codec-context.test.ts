@@ -21,6 +21,8 @@ import {
   CodecContext,
   CodecParameters,
   Dictionary,
+  FF_THREAD_FRAME,
+  FF_THREAD_SLICE,
   Frame,
   Packet,
   Rational,
@@ -243,6 +245,14 @@ describe('CodecContext', () => {
 
       ctx.threadCount = 0; // Auto-detect
       assert.equal(ctx.threadCount, 0);
+    });
+
+    it('should get and set thread type', () => {
+      ctx.threadType = FF_THREAD_FRAME;
+      assert.equal(ctx.threadType, FF_THREAD_FRAME);
+
+      ctx.threadType = FF_THREAD_SLICE;
+      assert.equal(ctx.threadType, FF_THREAD_SLICE);
     });
 
     it('should get frame number', () => {

@@ -289,6 +289,21 @@ export class CodecContext extends OptionMember<NativeCodecContext> implements Di
   }
 
   /**
+   * Thread type for codec.
+   *
+   * Which multithreading methods to use.
+   *
+   * Direct mapping to AVCodecContext->thread_type.
+   */
+  get threadType(): number {
+    return this.native.threadType;
+  }
+
+  set threadType(value: number) {
+    this.native.threadType = value;
+  }
+
+  /**
    * Picture width in pixels.
    *
    * Direct mapping to AVCodecContext->width.
