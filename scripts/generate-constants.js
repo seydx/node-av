@@ -849,7 +849,10 @@ export type EOFSignal = typeof EOF;
   output += '// Helper function to cast numbers to branded types\n';
   output += 'export function cast<T>(value: number): T {\n';
   output += '  return value as T;\n';
-  output += '}\n';
+  output += '}\n\n';
+
+  output += 'export const FF_THREAD_FRAME = 1;\n';
+  output += 'export const FF_THREAD_SLICE = 2;\n';
 
   return output;
 };
