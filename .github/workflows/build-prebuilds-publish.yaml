@@ -195,7 +195,7 @@ jobs:
             echo "" >> release_notes.md
             echo "### 📋 All Changes since $PREVIOUS_TAG" >> release_notes.md
             echo "" >> release_notes.md
-            git log --pretty=format:"- %s (%h)" $PREVIOUS_TAG..${{ github.ref_name }} >> release_notes.md
+            git log --pretty=format:"- %s (%h) - @%an" $PREVIOUS_TAG..${{ github.ref_name }} >> release_notes.md
           fi
 
           # Output the release notes

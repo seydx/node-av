@@ -186,14 +186,14 @@ jobs:
             echo "" >> test_release_notes.md
             
             # Get commit messages since last tag
-            git log --pretty=format:"- %s (%h)" $LATEST_TAG..HEAD >> test_release_notes.md
+            git log --pretty=format:"- %s (%h) - @%an" $LATEST_TAG..HEAD >> test_release_notes.md
           else
             echo "" >> test_release_notes.md
             echo "### 📝 Recent changes" >> test_release_notes.md
             echo "" >> test_release_notes.md
             
             # Get last 20 commits if no tags exist
-            git log --pretty=format:"- %s (%h)" -20 >> test_release_notes.md
+            git log --pretty=format:"- %s (%h) - @%an" -20 >> test_release_notes.md
           fi
 
       - name: Test GitHub Release (DRY RUN)
