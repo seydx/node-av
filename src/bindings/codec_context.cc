@@ -51,6 +51,7 @@ Napi::Object CodecContext::Init(Napi::Env env, Napi::Object exports) {
     InstanceAccessor<&CodecContext::GetProfile, &CodecContext::SetProfile>("profile"),
     InstanceAccessor<&CodecContext::GetLevel, &CodecContext::SetLevel>("level"),
     InstanceAccessor<&CodecContext::GetThreadCount, &CodecContext::SetThreadCount>("threadCount"),
+    InstanceAccessor<&CodecContext::GetThreadType, &CodecContext::SetThreadType>("threadType"),
     InstanceAccessor<&CodecContext::GetWidth, &CodecContext::SetWidth>("width"),
     InstanceAccessor<&CodecContext::GetHeight, &CodecContext::SetHeight>("height"),
     InstanceAccessor<&CodecContext::GetGopSize, &CodecContext::SetGopSize>("gopSize"),
@@ -411,6 +412,20 @@ Napi::Value CodecContext::GetThreadCount(const Napi::CallbackInfo& info) {
 void CodecContext::SetThreadCount(const Napi::CallbackInfo& info, const Napi::Value& value) {
   if (context_) {
     context_->thread_count = value.As<Napi::Number>().Int32Value();
+  }
+}
+
+Napi::Value CodecContext::GetThreadType(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  if (!context_) {
+    return Napi::Number::New(env, 0);
+  }
+  return Napi::Number::New(env, context_->thread_type);
+}
+
+void CodecContext::SetThreadType(const Napi::CallbackInfo& info, const Napi::Value& value) {
+  if (context_) {
+    context_->thread_type = value.As<Napi::Number>().Int32Value();
   }
 }
 

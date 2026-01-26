@@ -2421,3 +2421,6 @@ export const ULONG_MAX = UINT64_MAX; // 64-bit on 64-bit systems, 32-bit on 32-b
 export function cast<T>(value: number): T {
   return value as T;
 }
+
+export const FF_THREAD_FRAME = 1;
+export const FF_THREAD_SLICE = 2;

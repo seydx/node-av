@@ -211,6 +211,7 @@ export interface NativeCodecContext extends Disposable {
   profile: AVProfile;
   level: number;
   threadCount: number;
+  threadType: number;
   width: number;
   height: number;
   gopSize: number;

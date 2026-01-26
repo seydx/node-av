@@ -94,6 +94,9 @@ private:
   Napi::Value GetThreadCount(const Napi::CallbackInfo& info);
   void SetThreadCount(const Napi::CallbackInfo& info, const Napi::Value& value);
 
+  Napi::Value GetThreadType(const Napi::CallbackInfo& info);
+  void SetThreadType(const Napi::CallbackInfo& info, const Napi::Value& value);
+
   Napi::Value GetWidth(const Napi::CallbackInfo& info);
   void SetWidth(const Napi::CallbackInfo& info, const Napi::Value& value);
 
