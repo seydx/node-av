@@ -240,6 +240,14 @@ export class Encoder implements Disposable {
       codecContext.rcBufferSize = Number(bufSize);
     }
 
+    // Thread parameters need to be set before open
+    if (options.threadCount !== undefined) {
+      codecContext.threadCount = options.threadCount;
+    }
+    if (options.threadType !== undefined) {
+      codecContext.threadType = options.threadType;
+    }
+
     const opts = options.options ? Dictionary.fromObject(options.options) : undefined;
 
     return new Encoder(codecContext, codec, options, opts);
@@ -353,6 +361,14 @@ export class Encoder implements Disposable {
     if (options.bufSize !== undefined) {
       const bufSize = typeof options.bufSize === 'string' ? parseBitrate(options.bufSize) : BigInt(options.bufSize);
       codecContext.rcBufferSize = Number(bufSize);
+    }
+
+    // Thread parameters need to be set before open
+    if (options.threadCount !== undefined) {
+      codecContext.threadCount = options.threadCount;
+    }
+    if (options.threadType !== undefined) {
+      codecContext.threadType = options.threadType;
     }
 
     const opts = options.options ? Dictionary.fromObject(options.options) : undefined;

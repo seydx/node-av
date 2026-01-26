@@ -557,6 +557,25 @@ export interface EncoderOptions {
   filter?: FilterAPI | FilterComplexAPI;
 
   /**
+   * Number of threads to use for encoding.
+   *
+   * Set to 0 to auto-detect based on CPU cores.
+   *
+   * @default 1
+   */
+  threadCount?: number;
+
+  /**
+   * Type of threading to use for encoding.
+   *
+   * Set to FF_THREAD_FRAME for frame-level threading.
+   * Set to FF_THREAD_SLICE for slice-level threading.
+   *
+   * @default 0 (auto-detect)
+   */
+  threadType?: number;
+
+  /**
    * Additional codec-specific options.
    *
    * Key-value pairs of FFmpeg AVCodecContext options.
