@@ -35,6 +35,7 @@ Native Node.js bindings for FFmpeg with full TypeScript support. Provides direct
 - [Resource Management](#resource-management)
 - [FFmpeg Binary Access](#ffmpeg-binary-access)
 - [Performance](#performance)
+  - [Benchmarks](#benchmarks)
   - [Sync vs Async Operations](#sync-vs-async-operations)
 - [Memory Safety Considerations](#memory-safety-considerations)
 - [Examples](#examples)
@@ -425,6 +426,25 @@ The FFmpeg binary is automatically downloaded during installation from GitHub re
 ## Performance
 
 NodeAV executes all media operations directly through FFmpeg's native C libraries. The Node.js bindings add minimal overhead - mostly just the JavaScript-to-C boundary crossings. During typical operations like transcoding or filtering, most processing time is spent in FFmpeg's optimized C code.
+
+### Benchmarks
+
+Performance comparison with FFmpeg CLI (4K 60fps, 30s test files on Apple M3 Max):
+
+| Operation | FFmpeg CLI (FPS) | node-av (FPS) | FFmpeg CLI (Time) | node-av (Time) | Diff |
+|-----------|------------------|---------------|-------------------|----------------|------|
+| SW H.264 Transcode | 96 fps | 96 fps | 18.7s | 18.7s | ≈0% |
+| SW H.265 Transcode | 40 fps | 41 fps | 44.5s | 43.7s | **+1.5%** |
+| HW H.264 Transcode | 55 fps | 55 fps | 33.0s | 32.8s | **+0.5%** |
+| Stream Copy (Remux) | 48k fps | 31k fps | 38ms | 106ms | -35% |
+
+**Memory Usage:**
+| Operation | FFmpeg CLI | node-av | Difference |
+|-----------|-----------|---------|------------|
+| H.264 Transcode (4K) | 3.6 GB | 3.4 GB | **-5%** |
+| Stream Copy | 28 MB | 1 MB | **-96%** |
+
+📊 **[Full benchmark results](BENCHMARK.md)**
 
 ### Sync vs Async Operations
 
