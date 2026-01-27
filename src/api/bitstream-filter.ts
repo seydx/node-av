@@ -219,124 +219,134 @@ export class BitStreamFilterAPI implements Disposable {
   }
 
   /**
-   * Filter a packet.
+   * Send a packet to the filter.
    *
-   * Sends a packet to the filter and attempts to receive a filtered packet.
-   * Handles internal buffering - may return null if more packets needed.
+   * Sends a packet to the filter for processing.
+   * Does not return filtered packets - use {@link receive} to retrieve packets.
+   * A single packet can produce zero, one, or multiple packets depending on filter.
    *
-   * **Note**: This method receives only ONE packet per call.
-   * A single packet can produce multiple output packets (e.g., codec buffering).
-   * To receive all packets from a packet, use {@link filterAll} or {@link packets} instead.
+   * **Important**: This method only SENDS the packet to the filter.
+   * You must call {@link receive} separately (potentially multiple times) to get filtered packets.
    *
-   * Direct mapping to av_bsf_send_packet() and av_bsf_receive_packet().
+   * Direct mapping to av_bsf_send_packet().
    *
-   * @param packet - Packet to filter
+   * @param packet - Packet to send to filter, or null to flush
    *
-   * @returns Filtered packet, null if more data needed, or null if filter is closed
-   *
-   * @throws {FFmpegError} If filtering fails
+   * @throws {FFmpegError} If sending fails
    *
    * @example
    * ```typescript
-   * const outPacket = await filter.filter(inputPacket);
-   * if (outPacket) {
-   *   console.log(`Filtered packet: pts=${outPacket.pts}`);
+   * // Send packet and receive filtered packets
+   * await filter.filter(inputPacket);
+   *
+   * // Receive all available filtered packets
+   * while (true) {
+   *   const outPacket = await filter.receive();
+   *   if (!outPacket) break;
+   *   console.log(`Filtered packet with PTS: ${outPacket.pts}`);
    *   await output.writePacket(outPacket);
    *   outPacket.free();
    * }
    * ```
    *
-   * @see {@link filterAll} For multiple packet filtering
-   * @see {@link packets} For stream processing
+   * @example
+   * ```typescript
+   * for await (const packet of input.packets()) {
+   *   // packet is null at end of stream - automatically flushes filter
+   *   await filter.filter(packet);
+   *
+   *   // Receive available filtered packets
+   *   let outPacket;
+   *   while ((outPacket = await filter.receive())) {
+   *     await output.writePacket(outPacket);
+   *     outPacket.free();
+   *   }
+   * }
+   * ```
+   *
+   * @see {@link receive} For receiving filtered packets
+   * @see {@link filterAll} For combined send+receive operation
+   * @see {@link packets} For automatic packet iteration
    * @see {@link flush} For end-of-stream handling
    * @see {@link filterSync} For synchronous version
    */
-  async filter(packet: Packet): Promise<Packet | null> {
+  async filter(packet: Packet | null): Promise<void> {
     if (this.isClosed) {
-      return null;
+      return;
     }
 
-    // Send packet to filter
+    // Send packet to filter (null signals EOF/flush)
     const sendRet = await this.ctx.sendPacket(packet);
 
-    // Handle EAGAIN: filter buffer is full, need to read packets first
-    if (sendRet === AVERROR_EAGAIN) {
-      // Filter is full, receive a packet first
-      const outPacket = await this.receive();
-      if (outPacket) {
-        return outPacket;
-      }
-      // If receive() returned null, this is unexpected - treat as error
-      throw new Error('Filter returned EAGAIN but no packet available');
-    }
-
-    if (sendRet < 0 && sendRet !== AVERROR_EOF) {
+    if (sendRet < 0 && sendRet !== AVERROR_EOF && sendRet !== AVERROR_EAGAIN) {
       FFmpegError.throwIfError(sendRet, 'Failed to send packet to bitstream filter');
     }
-
-    // Try to receive packet
-    return await this.receive();
   }
 
   /**
-   * Filter a packet synchronously.
+   * Send a packet to the filter synchronously.
    * Synchronous version of filter.
    *
-   * Sends a packet to the filter and attempts to receive a filtered packet.
-   * Handles internal buffering - may return null if more packets needed.
+   * Sends a packet to the filter for processing.
+   * Does not return filtered packets - use {@link receiveSync} to retrieve packets.
+   * A single packet can produce zero, one, or multiple packets depending on filter.
    *
-   * **Note**: This method receives only ONE packet per call.
-   * A single packet can produce multiple output packets (e.g., codec buffering).
-   * To receive all packets from a packet, use {@link filterAllSync} or {@link packetsSync} instead.
+   * **Important**: This method only SENDS the packet to the filter.
+   * You must call {@link receiveSync} separately (potentially multiple times) to get filtered packets.
    *
-   * Direct mapping to av_bsf_send_packet() and av_bsf_receive_packet().
+   * Direct mapping to av_bsf_send_packet().
    *
-   * @param packet - Packet to filter
+   * @param packet - Packet to send to filter, or null to flush
    *
-   * @returns Filtered packet, null if more data needed, or null if filter is closed
-   *
-   * @throws {FFmpegError} If filtering fails
+   * @throws {FFmpegError} If sending fails
    *
    * @example
    * ```typescript
-   * const outPacket = filter.filterSync(inputPacket);
-   * if (outPacket) {
-   *   console.log(`Filtered packet: pts=${outPacket.pts}`);
+   * // Send packet and receive filtered packets
+   * filter.filterSync(inputPacket);
+   *
+   * // Receive all available filtered packets
+   * while (true) {
+   *   const outPacket = filter.receiveSync();
+   *   if (!outPacket) break;
+   *   console.log(`Filtered packet with PTS: ${outPacket.pts}`);
    *   output.writePacketSync(outPacket);
    *   outPacket.free();
    * }
    * ```
    *
-   * @see {@link filterAllSync} For multiple packet filtering
-   * @see {@link packetsSync} For stream processing
+   * @example
+   * ```typescript
+   * for (const packet of packets) {
+   *   // packet is null at end of stream - automatically flushes filter
+   *   filter.filterSync(packet);
+   *
+   *   // Receive available filtered packets
+   *   let outPacket;
+   *   while ((outPacket = filter.receiveSync())) {
+   *     output.writePacketSync(outPacket);
+   *     outPacket.free();
+   *   }
+   * }
+   * ```
+   *
+   * @see {@link receiveSync} For receiving filtered packets
+   * @see {@link filterAllSync} For combined send+receive operation
+   * @see {@link packetsSync} For automatic packet iteration
    * @see {@link flushSync} For end-of-stream handling
    * @see {@link filter} For async version
    */
-  filterSync(packet: Packet): Packet | null {
+  filterSync(packet: Packet | null): void {
     if (this.isClosed) {
-      return null;
+      return;
     }
 
-    // Send packet to filter
+    // Send packet to filter (null signals EOF/flush)
     const sendRet = this.ctx.sendPacketSync(packet);
 
-    // Handle EAGAIN: filter buffer is full, need to read packets first
-    if (sendRet === AVERROR_EAGAIN) {
-      // Filter is full, receive a packet first
-      const outPacket = this.receiveSync();
-      if (outPacket) {
-        return outPacket;
-      }
-      // If receive() returned null, this is unexpected - treat as error
-      throw new Error('Filter returned EAGAIN but no packet available');
-    }
-
-    if (sendRet < 0 && sendRet !== AVERROR_EOF) {
+    if (sendRet < 0 && sendRet !== AVERROR_EOF && sendRet !== AVERROR_EAGAIN) {
       FFmpegError.throwIfError(sendRet, 'Failed to send packet to bitstream filter');
     }
-
-    // Try to receive packet
-    return this.receiveSync();
   }
 
   /**
@@ -348,7 +358,7 @@ export class BitStreamFilterAPI implements Disposable {
    *
    * Direct mapping to av_bsf_send_packet() and av_bsf_receive_packet().
    *
-   * @param packet - Packet to filter
+   * @param packet - Packet to filter, or null to flush
    *
    * @returns Array of filtered packets (empty if more data needed or filter is closed)
    *
@@ -364,25 +374,26 @@ export class BitStreamFilterAPI implements Disposable {
    * }
    * ```
    *
+   * @example
+   * ```typescript
+   * // Flush remaining packets at end of stream
+   * const remaining = await filter.filterAll(null);
+   * for (const packet of remaining) {
+   *   await output.writePacket(packet);
+   *   packet.free();
+   * }
+   * ```
+   *
    * @see {@link filter} For single packet filtering
    * @see {@link packets} For stream processing
    * @see {@link flush} For end-of-stream handling
    * @see {@link filterAllSync} For synchronous version
    */
-  async filterAll(packet: Packet): Promise<Packet[]> {
-    if (this.isClosed) {
-      return [];
-    }
-
-    const outputPackets: Packet[] = [];
-
-    // Send packet to filter
-    const sendRet = await this.ctx.sendPacket(packet);
-    if (sendRet < 0 && sendRet !== AVERROR_EOF) {
-      FFmpegError.throwIfError(sendRet, 'Failed to send packet to bitstream filter');
-    }
+  async filterAll(packet: Packet | null): Promise<Packet[]> {
+    await this.filter(packet);
 
     // Receive all output packets
+    const outputPackets: Packet[] = [];
     while (true) {
       const outPacket = await this.receive();
       if (!outPacket) break;
@@ -402,7 +413,7 @@ export class BitStreamFilterAPI implements Disposable {
    *
    * Direct mapping to av_bsf_send_packet() and av_bsf_receive_packet().
    *
-   * @param packet - Packet to filter
+   * @param packet - Packet to filter, or null to flush
    *
    * @returns Array of filtered packets (empty if more data needed or filter is closed)
    *
@@ -418,25 +429,26 @@ export class BitStreamFilterAPI implements Disposable {
    * }
    * ```
    *
+   * @example
+   * ```typescript
+   * // Flush remaining packets at end of stream
+   * const remaining = filter.filterAllSync(null);
+   * for (const packet of remaining) {
+   *   output.writePacketSync(packet);
+   *   packet.free();
+   * }
+   * ```
+   *
    * @see {@link filterSync} For single packet filtering
    * @see {@link packetsSync} For stream processing
    * @see {@link flushSync} For end-of-stream handling
    * @see {@link filterAll} For async version
    */
-  filterAllSync(packet: Packet): Packet[] {
-    if (this.isClosed) {
-      return [];
-    }
-
-    const outputPackets: Packet[] = [];
-
-    // Send packet to filter
-    const sendRet = this.ctx.sendPacketSync(packet);
-    if (sendRet < 0 && sendRet !== AVERROR_EOF) {
-      FFmpegError.throwIfError(sendRet, 'Failed to send packet to bitstream filter');
-    }
+  filterAllSync(packet: Packet | null): Packet[] {
+    this.filterSync(packet);
 
     // Receive all output packets
+    const outputPackets: Packet[] = [];
     while (true) {
       const outPacket = this.receiveSync();
       if (!outPacket) break;
@@ -447,201 +459,201 @@ export class BitStreamFilterAPI implements Disposable {
   }
 
   /**
-   * Process packet stream through filter.
+   * Filter packet stream to filtered packet stream.
    *
-   * High-level async generator for filtering packet streams.
-   * Automatically handles flushing at end of stream.
-   * Yields filtered packets ready for output.
+   * High-level async generator for complete filtering pipeline.
+   * Filter is only flushed when EOF (null) signal is explicitly received.
+   * Primary interface for stream-based filtering.
    *
-   * @param packets - Async iterable of packets
+   * **EOF Handling:**
+   * - Send null to flush filter and get remaining buffered packets
+   * - Generator yields null after flushing when null is received
+   * - No automatic flushing - filter stays open until EOF or close()
    *
-   * @yields {Packet} Filtered packets
+   * @param packets - Async iterable of packets, single packet, or null to flush
+   *
+   * @yields {Packet | null} Filtered packets, followed by null when explicitly flushed
    *
    * @throws {FFmpegError} If filtering fails
    *
    * @example
    * ```typescript
-   * // Filter entire stream
+   * // Stream of packets with automatic EOF propagation
    * for await (const packet of filter.packets(input.packets())) {
+   *   if (packet === null) {
+   *     console.log('Filter flushed');
+   *     break;
+   *   }
+   *   await output.writePacket(packet);
+   *   packet.free(); // Must free output packets
+   * }
+   * ```
+   *
+   * @example
+   * ```typescript
+   * // Single packet - no automatic flush
+   * for await (const packet of filter.packets(singlePacket)) {
+   *   await output.writePacket(packet);
+   *   packet.free();
+   * }
+   * // Filter remains open, buffered packets not flushed
+   * ```
+   *
+   * @example
+   * ```typescript
+   * // Explicit flush with EOF
+   * for await (const packet of filter.packets(null)) {
+   *   if (packet === null) {
+   *     console.log('All buffered packets flushed');
+   *     break;
+   *   }
+   *   console.log('Buffered packet:', packet.pts);
    *   await output.writePacket(packet);
    *   packet.free();
    * }
    * ```
    *
-   * @example
-   * ```typescript
-   * // Chain with decoder
-   * const decoder = await Decoder.create(stream);
-   * const filter = BitStreamFilterAPI.create('h264_mp4toannexb', stream);
-   *
-   * for await (const frame of decoder.frames(filter.packets(input.packets()))) {
-   *   // Process frames
-   *   frame.free();
-   * }
-   * ```
-   *
-   * @see {@link filterAll} For filtering single packets
-   * @see {@link flush} For end-of-stream handling
+   * @see {@link filter} For single packet filtering
+   * @see {@link Demuxer.packets} For packet source
+   * @see {@link packetsSync} For sync version
    */
-  async *packets(packets: AsyncIterable<Packet | null>): AsyncGenerator<Packet | null> {
-    // Process all input packets
-    for await (const packet of packets) {
-      // Handle EOF signal
+  async *packets(packets: AsyncIterable<Packet | null> | Packet | null): AsyncGenerator<Packet | null> {
+    const self = this;
+
+    const processPacket = async function* (packet: Packet) {
+      await self.filter(packet);
+
+      while (true) {
+        const outPacket = await self.receive();
+        if (!outPacket) break;
+        yield outPacket;
+      }
+    }.bind(this);
+
+    const finalize = async function* () {
+      for await (const remaining of self.flushPackets()) {
+        yield remaining;
+      }
+      yield null;
+    }.bind(this);
+
+    if (packets === null) {
+      yield* finalize();
+      return;
+    }
+
+    if (packets instanceof Packet) {
+      yield* processPacket(packets);
+      return;
+    }
+
+    for await (using packet of packets) {
       if (packet === null) {
-        // Flush filter
-        await this.flush();
-        while (true) {
-          const remaining = await this.receive();
-          if (!remaining) break;
-          yield remaining;
-        }
-        // Signal EOF and stop processing
-        yield null;
+        yield* finalize();
         return;
       }
 
-      if (this.isClosed) {
-        break;
-      }
-
-      // Send packet to filter
-      const sendRet = await this.ctx.sendPacket(packet);
-
-      // Handle EAGAIN
-      if (sendRet === AVERROR_EAGAIN) {
-        // Filter buffer full, receive packets first
-        while (true) {
-          const outPacket = await this.receive();
-          if (!outPacket) break;
-          yield outPacket;
-        }
-
-        // Retry sending
-        const retryRet = await this.ctx.sendPacket(packet);
-        if (retryRet < 0 && retryRet !== AVERROR_EOF && retryRet !== AVERROR_EAGAIN) {
-          FFmpegError.throwIfError(retryRet, 'Failed to send packet to bitstream filter');
-        }
-      } else if (sendRet < 0 && sendRet !== AVERROR_EOF) {
-        FFmpegError.throwIfError(sendRet, 'Failed to send packet to bitstream filter');
-      }
-
-      // Receive ALL available packets immediately
-      while (true) {
-        const outPacket = await this.receive();
-        if (!outPacket) break; // EAGAIN or EOF
-        yield outPacket;
-      }
+      yield* processPacket(packet);
     }
-
-    // Flush filter after all packets (fallback if no null was sent)
-    await this.flush();
-    while (true) {
-      const remaining = await this.receive();
-      if (!remaining) break;
-      yield remaining;
-    }
-
-    // Signal EOF
-    yield null;
   }
 
   /**
-   * Process packet stream through filter synchronously.
+   * Filter packet stream to filtered packet stream synchronously.
    * Synchronous version of packets.
    *
-   * High-level sync generator for filtering packet streams.
-   * Automatically handles flushing at end of stream.
-   * Yields filtered packets ready for output.
+   * High-level sync generator for complete filtering pipeline.
+   * Filter is only flushed when EOF (null) signal is explicitly received.
+   * Primary interface for stream-based filtering.
    *
-   * @param packets - Iterable of packets
+   * **EOF Handling:**
+   * - Send null to flush filter and get remaining buffered packets
+   * - Generator yields null after flushing when null is received
+   * - No automatic flushing - filter stays open until EOF or close()
    *
-   * @yields {Packet} Filtered packets
+   * @param packets - Iterable of packets, single packet, or null to flush
+   *
+   * @yields {Packet | null} Filtered packets, followed by null when explicitly flushed
    *
    * @throws {FFmpegError} If filtering fails
    *
    * @example
    * ```typescript
-   * // Filter entire stream
-   * for (const packet of filter.packetsSync(packets)) {
+   * // Stream of packets with automatic EOF propagation
+   * for (const packet of filter.packetsSync(inputPackets)) {
+   *   if (packet === null) {
+   *     console.log('Filter flushed');
+   *     break;
+   *   }
    *   output.writePacketSync(packet);
-   *   packet.free();
+   *   packet.free(); // Must free output packets
    * }
    * ```
    *
    * @example
    * ```typescript
-   * // Chain with decoder
-   * const decoder = await Decoder.create(stream);
-   * const filter = BitStreamFilterAPI.create('h264_mp4toannexb', stream);
+   * // Single packet - no automatic flush
+   * for (const packet of filter.packetsSync(singlePacket)) {
+   *   output.writePacketSync(packet);
+   *   packet.free();
+   * }
+   * // Filter remains open, buffered packets not flushed
+   * ```
    *
-   * for (const frame of decoder.framesSync(filter.packetsSync(packets))) {
-   *   // Process frames
-   *   frame.free();
+   * @example
+   * ```typescript
+   * // Explicit flush with EOF
+   * for (const packet of filter.packetsSync(null)) {
+   *   if (packet === null) {
+   *     console.log('All buffered packets flushed');
+   *     break;
+   *   }
+   *   console.log('Buffered packet:', packet.pts);
+   *   output.writePacketSync(packet);
+   *   packet.free();
    * }
    * ```
    *
+   * @see {@link filterSync} For single packet filtering
    * @see {@link packets} For async version
    */
-  *packetsSync(packets: Iterable<Packet | null>): Generator<Packet | null> {
-    // Process all input packets
-    for (const packet of packets) {
-      // Handle EOF signal
+  *packetsSync(packets: Iterable<Packet | null> | Packet | null): Generator<Packet | null> {
+    const self = this;
+
+    const processPacket = function* (packet: Packet) {
+      self.filterSync(packet);
+
+      while (true) {
+        const outPacket = self.receiveSync();
+        if (!outPacket) break;
+        yield outPacket;
+      }
+    }.bind(this);
+
+    const finalize = function* () {
+      for (const remaining of self.flushPacketsSync()) {
+        yield remaining;
+      }
+      yield null;
+    }.bind(this);
+
+    if (packets === null) {
+      yield* finalize();
+      return;
+    }
+
+    if (packets instanceof Packet) {
+      yield* processPacket(packets);
+      return;
+    }
+
+    for (using packet of packets) {
       if (packet === null) {
-        // Flush filter
-        this.flushSync();
-        while (true) {
-          const remaining = this.receiveSync();
-          if (!remaining) break;
-          yield remaining;
-        }
-        // Signal EOF and stop processing
-        yield null;
+        yield* finalize();
         return;
       }
 
-      if (this.isClosed) {
-        break;
-      }
-
-      // Send packet to filter
-      const sendRet = this.ctx.sendPacketSync(packet);
-
-      // Handle EAGAIN
-      if (sendRet === AVERROR_EAGAIN) {
-        // Filter buffer full, receive packets first
-        while (true) {
-          const outPacket = this.receiveSync();
-          if (!outPacket) break;
-          yield outPacket;
-        }
-
-        // Retry sending
-        const retryRet = this.ctx.sendPacketSync(packet);
-        if (retryRet < 0 && retryRet !== AVERROR_EOF && retryRet !== AVERROR_EAGAIN) {
-          FFmpegError.throwIfError(retryRet, 'Failed to send packet to bitstream filter');
-        }
-      } else if (sendRet < 0 && sendRet !== AVERROR_EOF) {
-        FFmpegError.throwIfError(sendRet, 'Failed to send packet to bitstream filter');
-      }
-
-      // Receive ALL available packets immediately
-      while (true) {
-        const outPacket = this.receiveSync();
-        if (!outPacket) break; // EAGAIN or EOF
-        yield outPacket;
-      }
+      yield* processPacket(packet);
     }
-
-    // Flush filter after all packets (fallback if no null was sent)
-    this.flushSync();
-    while (true) {
-      const remaining = this.receiveSync();
-      if (!remaining) break;
-      yield remaining;
-    }
-
-    // Signal EOF
-    yield null;
   }
 
   /**
