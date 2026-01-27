@@ -281,9 +281,7 @@ export class Decoder implements Disposable {
     codecContext.setFlags(AV_CODEC_FLAG_COPY_OPAQUE);
 
     // Thread parameters need to be set before open2
-    if (options.threadCount !== undefined) {
-      codecContext.threadCount = options.threadCount;
-    }
+    codecContext.threadCount = options.threadCount ?? 0;
     if (options.threadType !== undefined) {
       codecContext.threadType = options.threadType;
     }
@@ -467,9 +465,7 @@ export class Decoder implements Disposable {
     // codecContext.setFlags(AV_CODEC_FLAG_COPY_OPAQUE);
 
     // Thread parameters need to be set before open2
-    if (options.threadCount !== undefined) {
-      codecContext.threadCount = options.threadCount;
-    }
+    codecContext.threadCount = options.threadCount ?? 0;
     if (options.threadType !== undefined) {
       codecContext.threadType = options.threadType;
     }
@@ -579,7 +575,7 @@ export class Decoder implements Disposable {
    *
    * Direct mapping to avcodec_send_packet().
    *
-   * @param packet - Compressed packet to send to decoder
+   * @param packet - Compressed packet to send to decoder, or null to flush
    *
    * @throws {FFmpegError} If sending packet fails
    *
@@ -600,18 +596,15 @@ export class Decoder implements Disposable {
    * @example
    * ```typescript
    * for await (const packet of input.packets()) {
-   *   if (packet.streamIndex === decoder.getStream().index) {
-   *     // Send packet
-   *     await decoder.decode(packet);
+   *   // packet is null at end of stream - automatically flushes decoder
+   *   await decoder.decode(packet);
    *
-   *     // Receive available frames
-   *     let frame;
-   *     while ((frame = await decoder.receive())) {
-   *       await processFrame(frame);
-   *       frame.free();
-   *     }
+   *   // Receive available frames
+   *   let frame;
+   *   while ((frame = await decoder.receive())) {
+   *     await processFrame(frame);
+   *     frame.free();
    *   }
-   *   packet.free();
    * }
    * ```
    *
@@ -621,8 +614,14 @@ export class Decoder implements Disposable {
    * @see {@link flush} For end-of-stream handling
    * @see {@link decodeSync} For synchronous version
    */
-  async decode(packet: Packet): Promise<void> {
+  async decode(packet: Packet | null): Promise<void> {
     if (this.isClosed) {
+      return;
+    }
+
+    // Null packet = flush decoder
+    if (packet === null) {
+      await this.flush();
       return;
     }
 
@@ -667,18 +666,18 @@ export class Decoder implements Disposable {
    *
    * Direct mapping to avcodec_send_packet().
    *
-   * @param packet - Compressed packet to send to decoder
+   * @param packet - Compressed packet to send to decoder, or null to flush
    *
    * @throws {FFmpegError} If sending packet fails
    *
    * @example
    * ```typescript
    * // Send packet and receive frames
-   * await decoder.decode(packet);
+   * decoder.decodeSync(packet);
    *
    * // Receive all available frames
    * while (true) {
-   *   const frame = await decoder.receive();
+   *   const frame = decoder.receiveSync();
    *   if (!frame) break;
    *   console.log(`Decoded frame with PTS: ${frame.pts}`);
    *   frame.free();
@@ -687,19 +686,16 @@ export class Decoder implements Disposable {
    *
    * @example
    * ```typescript
-   * for await (const packet of input.packets()) {
-   *   if (packet.streamIndex === decoder.getStream().index) {
-   *     // Send packet
-   *     await decoder.decode(packet);
+   * for (const packet of input.packetsSync()) {
+   *   // packet is null at end of stream - automatically flushes decoder
+   *   decoder.decodeSync(packet);
    *
-   *     // Receive available frames
-   *     let frame;
-   *     while ((frame = await decoder.receive())) {
-   *       await processFrame(frame);
-   *       frame.free();
-   *     }
+   *   // Receive available frames
+   *   let frame;
+   *   while ((frame = decoder.receiveSync())) {
+   *     processFrame(frame);
+   *     frame.free();
    *   }
-   *   packet.free();
    * }
    * ```
    *
@@ -709,8 +705,14 @@ export class Decoder implements Disposable {
    * @see {@link flushSync} For end-of-stream handling
    * @see {@link decode} For async version
    */
-  decodeSync(packet: Packet): void {
+  decodeSync(packet: Packet | null): void {
     if (this.isClosed) {
+      return;
+    }
+
+    // Null packet = flush decoder
+    if (packet === null) {
+      this.flushSync();
       return;
     }
 
@@ -784,15 +786,10 @@ export class Decoder implements Disposable {
    * @see {@link decodeAllSync} For synchronous version
    */
   async decodeAll(packet: Packet | null): Promise<Frame[]> {
-    const frames: Frame[] = [];
-
-    if (packet) {
-      await this.decode(packet);
-    } else {
-      await this.flush();
-    }
+    await this.decode(packet);
 
     // Receive all available frames
+    const frames: Frame[] = [];
     while (true) {
       const remaining = await this.receive();
       if (!remaining) break;
@@ -842,15 +839,10 @@ export class Decoder implements Disposable {
    * @see {@link decodeAll} For async version
    */
   decodeAllSync(packet: Packet | null): Frame[] {
-    const frames: Frame[] = [];
-
-    if (packet) {
-      this.decodeSync(packet);
-    } else {
-      this.flushSync();
-    }
+    this.decodeSync(packet);
 
     // Receive all available frames
+    const frames: Frame[] = [];
     while (true) {
       const remaining = this.receiveSync();
       if (!remaining) break;

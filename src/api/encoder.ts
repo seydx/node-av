@@ -241,9 +241,7 @@ export class Encoder implements Disposable {
     }
 
     // Thread parameters need to be set before open
-    if (options.threadCount !== undefined) {
-      codecContext.threadCount = options.threadCount;
-    }
+    codecContext.threadCount = options.threadCount ?? 0;
     if (options.threadType !== undefined) {
       codecContext.threadType = options.threadType;
     }
@@ -364,9 +362,7 @@ export class Encoder implements Disposable {
     }
 
     // Thread parameters need to be set before open
-    if (options.threadCount !== undefined) {
-      codecContext.threadCount = options.threadCount;
-    }
+    codecContext.threadCount = options.threadCount ?? 0;
     if (options.threadType !== undefined) {
       codecContext.threadType = options.threadType;
     }
@@ -569,7 +565,7 @@ export class Encoder implements Disposable {
    *
    * Direct mapping to avcodec_send_frame().
    *
-   * @param frame - Raw frame to send to encoder
+   * @param frame - Raw frame to send to encoder, or null to flush
    *
    * @throws {FFmpegError} If sending frame fails
    *
@@ -610,8 +606,14 @@ export class Encoder implements Disposable {
    * @see {@link flush} For end-of-stream handling
    * @see {@link encodeSync} For synchronous version
    */
-  async encode(frame: Frame): Promise<void> {
+  async encode(frame: Frame | null): Promise<void> {
     if (this.isClosed) {
+      return;
+    }
+
+    // Null frame = flush encoder
+    if (frame === null) {
+      await this.flush();
       return;
     }
 
@@ -652,7 +654,7 @@ export class Encoder implements Disposable {
    *
    * Direct mapping to avcodec_send_frame().
    *
-   * @param frame - Raw frame to send to encoder
+   * @param frame - Raw frame to send to encoder, or null to flush
    *
    * @throws {FFmpegError} If sending frame fails
    *
@@ -676,8 +678,14 @@ export class Encoder implements Disposable {
    * @see {@link flushSync} For end-of-stream handling
    * @see {@link encode} For async version
    */
-  encodeSync(frame: Frame): void {
+  encodeSync(frame: Frame | null): void {
     if (this.isClosed) {
+      return;
+    }
+
+    // Null frame = flush encoder
+    if (frame === null) {
+      this.flushSync();
       return;
     }
 
@@ -750,11 +758,7 @@ export class Encoder implements Disposable {
    * @see {@link encodeAllSync} For synchronous version
    */
   async encodeAll(frame: Frame | null): Promise<Packet[]> {
-    if (frame) {
-      await this.encode(frame);
-    } else {
-      await this.flush();
-    }
+    await this.encode(frame);
 
     // Receive all available packets
     const packets: Packet[] = [];
@@ -812,11 +816,7 @@ export class Encoder implements Disposable {
    * @see {@link encodeAll} For async version
    */
   encodeAllSync(frame: Frame | null): Packet[] {
-    if (frame) {
-      this.encodeSync(frame);
-    } else {
-      this.flushSync();
-    }
+    this.encodeSync(frame);
 
     // Receive all available packets
     const packets: Packet[] = [];

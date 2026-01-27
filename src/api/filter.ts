@@ -518,7 +518,7 @@ export class FilterAPI implements Disposable {
    *
    * Direct mapping to av_buffersrc_add_frame().
    *
-   * @param frame - Input frame to send to filter
+   * @param frame - Input frame to send to filter, or null to flush
    *
    * @throws {Error} If filter could not be initialized
    *
@@ -560,8 +560,14 @@ export class FilterAPI implements Disposable {
    * @see {@link flush} For end-of-stream handling
    * @see {@link processSync} For synchronous version
    */
-  async process(frame: Frame): Promise<void> {
+  async process(frame: Frame | null): Promise<void> {
     if (this.isClosed) {
+      return;
+    }
+
+    // Null frame = flush filter
+    if (frame === null) {
+      await this.flush();
       return;
     }
 
@@ -617,7 +623,7 @@ export class FilterAPI implements Disposable {
    *
    * Direct mapping to av_buffersrc_add_frame().
    *
-   * @param frame - Input frame to send to filter
+   * @param frame - Input frame to send to filter, or null to flush
    *
    * @throws {Error} If filter could not be initialized
    *
@@ -642,8 +648,14 @@ export class FilterAPI implements Disposable {
    * @see {@link flushSync} For end-of-stream handling
    * @see {@link process} For async version
    */
-  processSync(frame: Frame): void {
+  processSync(frame: Frame | null): void {
     if (this.isClosed) {
+      return;
+    }
+
+    // Null frame = flush filter
+    if (frame === null) {
+      this.flushSync();
       return;
     }
 
@@ -728,11 +740,7 @@ export class FilterAPI implements Disposable {
    * @see {@link processAllSync} For synchronous version
    */
   async processAll(frame: Frame | null): Promise<Frame[]> {
-    if (frame) {
-      await this.process(frame);
-    } else {
-      await this.flush();
-    }
+    await this.process(frame);
 
     // Receive all available frames
     const frames: Frame[] = [];
@@ -789,11 +797,7 @@ export class FilterAPI implements Disposable {
    * @see {@link process} For async version
    */
   processAllSync(frame: Frame): Frame[] {
-    if (frame) {
-      this.processSync(frame);
-    } else {
-      this.flushSync();
-    }
+    this.processSync(frame);
 
     // Receive all available frames
     const frames: Frame[] = [];
