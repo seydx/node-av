@@ -5,7 +5,61 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [5.1.0] - 2026-01-27
+
+### Added
+
+#### Benchmark Suite
+
+New comprehensive benchmark tool for comparing node-av performance against FFmpeg CLI.
+
+- Transcode speed benchmarks (software and hardware encoding)
+- Memory usage measurements
+- Latency metrics
+
+### Changed
+
+#### Threading API - Auto-Detection & Flushing
+
+Thread count now defaults to `0` (auto-detect) when not explicitly specified. This allows FFmpeg to automatically determine the optimal number of threads based on the system.
+
+**⚠️ Important**: With multi-threaded decoding/encoding, frames are buffered internally and may not be immediately available from `receive()`. Proper flushing is required to retrieve all buffered frames at stream end.
+
+**Example:**
+```typescript
+// Using async generators - flushing is handled automatically
+// input.packets() yields null at EOF which flushes the decoder
+for await (const packet of input.packets()) {
+  await decoder.decode(packet); // null packet at EOF triggers flush
+  while (true) {
+    const frame = await decoder.receive();
+    if (!frame) break; // EAGAIN - no more frames available yet
+    // Process frame...
+  }
+}
+```
+
+#### BitStreamFilterAPI
+
+- Enhanced `setOption()` to support optional filter-specific parameters
+- Allows passing codec-specific options to bitstream filters
+
+#### Decoder/Encoder/FilterAPI/BitStreamFilterAPI - EOF Handling & Manual Flush
+
+- Methods now properly handle `null` frames/packets for explicit EOF signaling
+- Enables manual flushing of internal buffers in encoding/decoding chains
+
+### Fixed
+
+#### Error Handling
+
+- **Muxer Option Validation**: `Muxer` now throws errors when setting invalid options instead of silently failing
+
+#### Hardware Detection
+
+- **VAAPI Runtime Check**: Added FFmpeg patch for dynamic VAAPI/DRM library loading. Gracefully handles missing libraries instead of crashing.
+
+- **HardwareContext.testDecoder()**: Fixed logic bug where hardware types without codec support (like DRM without VAAPI) were incorrectly accepted. Now properly returns `false` when the hardware doesn't support decoding, ensuring `HardwareContext.auto()` only returns functional hardware acceleration.
 
 ## [5.0.0] - 2025-11-19
 
