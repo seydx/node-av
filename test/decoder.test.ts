@@ -6,7 +6,7 @@ import { Demuxer } from '../src/api/demuxer.js';
 import { AV_CODEC_ID_H264, AV_PIX_FMT_YUV420P } from '../src/constants/constants.js';
 import { FF_DECODER_AAC, FF_DECODER_H264 } from '../src/constants/decoders.js';
 import { Codec, Packet } from '../src/lib/index.js';
-import { getInputFile, prepareTestEnvironment } from './index.js';
+import { decodePacket, decodePacketSync, getInputFile, prepareTestEnvironment } from './index.js';
 
 prepareTestEnvironment();
 
@@ -335,25 +335,24 @@ describe('Decoder', () => {
       const maxPackets = 10;
 
       for await (using packet of media.packets()) {
-        if (!packet) {
-          break;
-        }
+        if (!packet) break;
 
         if (packet.streamIndex === videoStream.index) {
-          await decoder.decode(packet);
-          while (true) {
-            using frame = await decoder.receive();
-            if (!frame) break;
+          for await (using frame of decodePacket(decoder, packet)) {
             assert.ok(frame.width > 0);
             assert.ok(frame.height > 0);
             frameCount++;
           }
 
           packetCount++;
-          if (packetCount >= maxPackets) {
-            break;
-          }
+          if (packetCount >= maxPackets) break;
         }
+      }
+
+      // Flush remaining frames
+      for await (using frame of decoder.flushFrames()) {
+        assert.ok(frame.width > 0);
+        frameCount++;
       }
 
       assert.ok(frameCount > 0, 'Should decode at least one frame with explicit codec');
@@ -375,25 +374,24 @@ describe('Decoder', () => {
       const maxPackets = 10;
 
       for (using packet of media.packetsSync()) {
-        if (!packet) {
-          break;
-        }
+        if (!packet) break;
 
         if (packet.streamIndex === videoStream.index) {
-          decoder.decodeSync(packet);
-          while (true) {
-            using frame = decoder.receiveSync();
-            if (!frame) break;
+          for (using frame of decodePacketSync(decoder, packet)) {
             assert.ok(frame.width > 0);
             assert.ok(frame.height > 0);
             frameCount++;
           }
 
           packetCount++;
-          if (packetCount >= maxPackets) {
-            break;
-          }
+          if (packetCount >= maxPackets) break;
         }
+      }
+
+      // Flush remaining frames
+      for (using frame of decoder.flushFramesSync()) {
+        assert.ok(frame.width > 0);
+        frameCount++;
       }
 
       assert.ok(frameCount > 0, 'Should decode at least one frame with explicit codec');
@@ -513,25 +511,24 @@ describe('Decoder', () => {
       const maxPackets = 10;
 
       for await (using packet of media.packets()) {
-        if (!packet) {
-          break;
-        }
+        if (!packet) break;
 
         if (packet.streamIndex === videoStream.index) {
-          await decoder.decode(packet);
-          while (true) {
-            using frame = await decoder.receive();
-            if (!frame) break;
+          for await (using frame of decodePacket(decoder, packet)) {
             assert.ok(frame.width > 0);
             assert.ok(frame.height > 0);
             frameCount++;
           }
 
           packetCount++;
-          if (packetCount >= maxPackets) {
-            break;
-          }
+          if (packetCount >= maxPackets) break;
         }
+      }
+
+      // Flush remaining frames
+      for await (using frame of decoder.flushFrames()) {
+        assert.ok(frame.width > 0);
+        frameCount++;
       }
 
       assert.ok(frameCount > 0, 'Should decode at least one frame');
@@ -552,25 +549,24 @@ describe('Decoder', () => {
       const maxPackets = 10;
 
       for (using packet of media.packetsSync()) {
-        if (!packet) {
-          break;
-        }
+        if (!packet) break;
 
         if (packet.streamIndex === videoStream.index) {
-          decoder.decodeSync(packet);
-          while (true) {
-            using frame = decoder.receiveSync();
-            if (!frame) break;
+          for (using frame of decodePacketSync(decoder, packet)) {
             assert.ok(frame.width > 0);
             assert.ok(frame.height > 0);
             frameCount++;
           }
 
           packetCount++;
-          if (packetCount >= maxPackets) {
-            break;
-          }
+          if (packetCount >= maxPackets) break;
         }
+      }
+
+      // Flush remaining frames
+      for (using frame of decoder.flushFramesSync()) {
+        assert.ok(frame.width > 0);
+        frameCount++;
       }
 
       assert.ok(frameCount > 0, 'Should decode at least one frame');
@@ -591,15 +587,10 @@ describe('Decoder', () => {
       const maxPackets = 10;
 
       for await (using packet of media.packets()) {
-        if (!packet) {
-          break;
-        }
+        if (!packet) break;
 
         if (packet.streamIndex === audioStream.index) {
-          await decoder.decode(packet);
-          while (true) {
-            using frame = await decoder.receive();
-            if (!frame) break;
+          for await (using frame of decodePacket(decoder, packet)) {
             assert.ok(frame.nbSamples > 0);
             assert.ok(frame.sampleRate > 0);
             frameCount++;
@@ -610,6 +601,12 @@ describe('Decoder', () => {
             break;
           }
         }
+      }
+
+      // Flush remaining frames
+      for await (using frame of decoder.flushFrames()) {
+        assert.ok(frame.nbSamples > 0);
+        frameCount++;
       }
 
       assert.ok(frameCount > 0, 'Should decode at least one audio frame');
@@ -630,25 +627,24 @@ describe('Decoder', () => {
       const maxPackets = 10;
 
       for (using packet of media.packetsSync()) {
-        if (!packet) {
-          break;
-        }
+        if (!packet) break;
 
         if (packet.streamIndex === audioStream.index) {
-          decoder.decodeSync(packet);
-          while (true) {
-            using frame = decoder.receiveSync();
-            if (!frame) break;
+          for (using frame of decodePacketSync(decoder, packet)) {
             assert.ok(frame.nbSamples > 0);
             assert.ok(frame.sampleRate > 0);
             frameCount++;
           }
 
           packetCount++;
-          if (packetCount >= maxPackets) {
-            break;
-          }
+          if (packetCount >= maxPackets) break;
         }
+      }
+
+      // Flush remaining frames
+      for (using frame of decoder.flushFramesSync()) {
+        assert.ok(frame.nbSamples > 0);
+        frameCount++;
       }
 
       assert.ok(frameCount > 0, 'Should decode at least one audio frame');
@@ -666,12 +662,13 @@ describe('Decoder', () => {
 
       // Some packets might not immediately produce frames
       for await (using packet of media.packets()) {
-        if (!packet) {
-          break;
-        }
+        if (!packet) break;
 
         if (packet.streamIndex === videoStream.index) {
-          await decoder.decode(packet);
+          // Drain any available frames using helper
+          for await (using _frame of decodePacket(decoder, packet)) {
+            // Just drain, don't need to use frame
+          }
           break; // Just test one packet
         }
       }
@@ -689,12 +686,13 @@ describe('Decoder', () => {
 
       // Some packets might not immediately produce frames
       for (using packet of media.packetsSync()) {
-        if (!packet) {
-          break;
-        }
+        if (!packet) break;
 
         if (packet.streamIndex === videoStream.index) {
-          decoder.decodeSync(packet);
+          // Drain any available frames using helper
+          for (using _frame of decodePacketSync(decoder, packet)) {
+            // Just drain, don't need to use frame
+          }
           break; // Just test one packet
         }
       }

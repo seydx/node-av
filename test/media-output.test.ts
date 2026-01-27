@@ -3,7 +3,7 @@ import { readFile, stat, unlink } from 'node:fs/promises';
 import { describe, it } from 'node:test';
 
 import { AVSEEK_CUR, AVSEEK_END, AVSEEK_SET, AVSEEK_SIZE, Decoder, Demuxer, Encoder, FF_ENCODER_AAC, FF_ENCODER_LIBX264, Muxer, Packet } from '../src/index.js';
-import { getInputFile, getOutputFile, prepareTestEnvironment } from './index.js';
+import { decodePacket, decodePacketSync, encodeFrame, encodeFrameSync, getInputFile, getOutputFile, prepareTestEnvironment } from './index.js';
 
 import type { IOOutputCallbacks } from '../src/api/types.js';
 import type { AVSeekWhence } from '../src/index.js';
@@ -318,27 +318,21 @@ describe('Muxer', () => {
       // Still not initialized until first packet
       assert.equal(output.streamsInitialized, false, 'Should not be initialized before first packet');
 
-      // Write first packet to trigger initialization
+      // Write first packet to trigger initialization using helpers
       for await (using packet of input.packets()) {
-        if (!packet) {
-          break;
-        }
+        if (!packet) break;
 
         if (packet.streamIndex === 0) {
-          await decoder.decode(packet);
-          while (true) {
-            using frame = await decoder.receive();
-            if (!frame) break;
-            await encoder.encode(frame);
-            while (true) {
-              using encoded = await encoder.receive();
-              if (!encoded) break;
+          for await (using frame of decodePacket(decoder, packet)) {
+            for await (using encoded of encodeFrame(encoder, frame)) {
               await output.writePacket(encoded, streamIdx);
               // Now should be initialized
               assert.equal(output.streamsInitialized, true, 'Should be initialized after first packet');
               break;
             }
+            break;
           }
+          break;
         }
       }
 
@@ -613,31 +607,24 @@ describe('Muxer', () => {
       const streamIdx = output.addStream(videoStream, { encoder });
       let headerWritten = false;
 
-      // Get first packet and decode/encode to initialize encoder and write header
+      // Get first packet and decode/encode to initialize encoder and write header using helpers
       for await (using packet of input.packets(videoStream.index)) {
-        if (!packet) {
-          break;
-        }
+        if (!packet) break;
 
-        await decoder.decode(packet);
-        while (true) {
-          using frame = await decoder.receive();
-          if (!frame) break;
-          await encoder.encode(frame);
-          while (true) {
-            using encoded = await encoder.receive();
-            if (!encoded) break;
+        for await (using frame of decodePacket(decoder, packet)) {
+          for await (using encoded of encodeFrame(encoder, frame)) {
             await output.writePacket(encoded, streamIdx); // This triggers header write
             headerWritten = true;
             break; // Just process one packet
           }
+          if (headerWritten) break;
         }
+        if (headerWritten) break;
       }
 
       if (!headerWritten) {
-        for await (const encoded of encoder.flushPackets()) {
+        for await (using encoded of encoder.flushPackets()) {
           await output.writePacket(encoded, streamIdx);
-          encoded.free();
           break;
         }
       }
@@ -735,22 +722,14 @@ describe('Muxer', () => {
 
       const streamIdx = output.addStream(videoStream, { encoder });
 
-      // Process just one frame to test header/trailer writing
+      // Process just one frame to test header/trailer writing using helpers
       let processed = false;
       for await (using packet of input.packets()) {
-        if (!packet) {
-          break;
-        }
+        if (!packet) break;
 
         if (packet.streamIndex === 0 && !processed) {
-          await decoder.decode(packet);
-          while (true) {
-            using frame = await decoder.receive();
-            if (!frame) break;
-            await encoder.encode(frame);
-            while (true) {
-              using encoded = await encoder.receive();
-              if (!encoded) break;
+          for await (using frame of decodePacket(decoder, packet)) {
+            for await (using encoded of encodeFrame(encoder, frame)) {
               // Header written automatically on first packet
               await output.writePacket(encoded, streamIdx);
               processed = true;
@@ -798,28 +777,32 @@ describe('Muxer', () => {
 
       const streamIdx = output.addStream(videoStream, { encoder });
 
-      // Process a few packets
+      // Process a few packets using helpers
       let packetCount = 0;
       for await (using packet of input.packets()) {
-        if (!packet) {
-          break;
-        }
+        if (!packet) break;
 
         if (packet.streamIndex === 0 && packetCount < 3) {
-          await decoder.decode(packet);
-          while (true) {
-            using frame = await decoder.receive();
-            if (!frame) break;
-            await encoder.encode(frame);
-            while (true) {
-              using encoded = await encoder.receive();
-              if (!encoded) break;
+          for await (using frame of decodePacket(decoder, packet)) {
+            for await (using encoded of encodeFrame(encoder, frame)) {
               await output.writePacket(encoded, streamIdx);
               packetCount++;
             }
           }
         }
         if (packetCount >= 3) break;
+      }
+
+      // Flush decoder
+      for await (using frame of decoder.flushFrames()) {
+        for await (using encoded of encodeFrame(encoder, frame)) {
+          await output.writePacket(encoded, streamIdx);
+        }
+      }
+
+      // Flush encoder
+      for await (using encoded of encoder.flushPackets()) {
+        await output.writePacket(encoded, streamIdx);
       }
 
       decoder.close();
@@ -848,28 +831,32 @@ describe('Muxer', () => {
 
       const streamIdx = output.addStream(videoStream, { encoder });
 
-      // Process a few packets
+      // Process a few packets using sync helpers
       let packetCount = 0;
       for (using packet of input.packetsSync()) {
-        if (!packet) {
-          break;
-        }
+        if (!packet) break;
 
         if (packet.streamIndex === 0 && packetCount < 3) {
-          decoder.decodeSync(packet);
-          while (true) {
-            using frame = decoder.receiveSync();
-            if (!frame) break;
-            encoder.encodeSync(frame);
-            while (true) {
-              using encoded = encoder.receiveSync();
-              if (!encoded) break;
+          for (using frame of decodePacketSync(decoder, packet)) {
+            for (using encoded of encodeFrameSync(encoder, frame)) {
               output.writePacketSync(encoded, streamIdx);
               packetCount++;
             }
           }
         }
         if (packetCount >= 3) break;
+      }
+
+      // Flush decoder
+      for (using frame of decoder.flushFramesSync()) {
+        for (using encoded of encodeFrameSync(encoder, frame)) {
+          output.writePacketSync(encoded, streamIdx);
+        }
+      }
+
+      // Flush encoder
+      for (using encoded of encoder.flushPacketsSync()) {
+        output.writePacketSync(encoded, streamIdx);
       }
 
       decoder.close();
@@ -1291,34 +1278,32 @@ describe('Muxer', () => {
 
       const streamIdx = output.addStream(videoStream, { encoder });
 
-      // Process some packets - header written automatically on first packet
+      // Process some packets using helpers - header written automatically on first packet
       let packetCount = 0;
       for await (using packet of input.packets()) {
-        if (!packet) {
-          break;
-        }
+        if (!packet) break;
 
         if (packet.streamIndex === 0 && packetCount < 10) {
-          await decoder.decode(packet);
-          while (true) {
-            using frame = await decoder.receive();
-            if (!frame) break;
-            await encoder.encode(frame);
-            while (true) {
-              using encoded = await encoder.receive();
-              if (!encoded) break;
+          for await (using frame of decodePacket(decoder, packet)) {
+            for await (using encoded of encodeFrame(encoder, frame)) {
               await output.writePacket(encoded, streamIdx);
               packetCount++;
             }
           }
         }
+        if (packetCount >= 10) break;
+      }
+
+      // Flush decoder
+      for await (using frame of decoder.flushFrames()) {
+        for await (using encoded of encodeFrame(encoder, frame)) {
+          await output.writePacket(encoded, streamIdx);
+        }
       }
 
       // Flush encoder
-      await encoder.flush();
-      for await (const flushPacket of encoder.flushPackets()) {
+      for await (using flushPacket of encoder.flushPackets()) {
         await output.writePacket(flushPacket, streamIdx);
-        flushPacket.free();
       }
 
       // Trailer written automatically on close

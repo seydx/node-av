@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 
 import { AV_PIX_FMT_YUV420P, AV_SAMPLE_FMT_FLTP, Encoder, FF_ENCODER_AAC, FF_ENCODER_LIBX264, HardwareContext } from '../src/index.js';
 import { Frame, Rational } from '../src/lib/index.js';
-import { skipInCI } from './index.js';
+import { encodeFrame, encodeFrameSync, skipInCI } from './index.js';
 
 describe('Encoder', () => {
   describe('create', () => {
@@ -183,8 +183,10 @@ describe('Encoder', () => {
         }
       }
 
-      // Encode frame
-      await encoder.encode(frame);
+      // Encode frame and drain packets using helper
+      for await (using _packet of encodeFrame(encoder, frame)) {
+        // drain packets
+      }
 
       encoder.close();
     });
@@ -223,8 +225,10 @@ describe('Encoder', () => {
         }
       }
 
-      // Encode frame
-      encoder.encodeSync(frame);
+      // Encode frame and drain packets using sync helper
+      for (using _packet of encodeFrameSync(encoder, frame)) {
+        // drain packets
+      }
 
       encoder.close();
     });
@@ -247,8 +251,10 @@ describe('Encoder', () => {
       const ret = frame.getBuffer();
       assert.equal(ret, 0, 'Should allocate frame buffer');
 
-      // Encode frame
-      await encoder.encode(frame);
+      // Encode frame and drain packets using helper
+      for await (using _packet of encodeFrame(encoder, frame)) {
+        // drain packets
+      }
 
       encoder.close();
     });
@@ -271,8 +277,10 @@ describe('Encoder', () => {
       const ret = frame.getBuffer();
       assert.equal(ret, 0, 'Should allocate frame buffer');
 
-      // Encode frame
-      encoder.encodeSync(frame);
+      // Encode frame and drain packets using sync helper
+      for (using _packet of encodeFrameSync(encoder, frame)) {
+        // drain packets
+      }
 
       encoder.close();
     });
@@ -290,7 +298,10 @@ describe('Encoder', () => {
       frame.timeBase = new Rational(1, 25);
       frame.getBuffer();
 
-      await encoder.encode(frame);
+      // Drain any available packets using helper
+      for await (using _packet of encodeFrame(encoder, frame)) {
+        // drain packets
+      }
 
       encoder.close();
     });
@@ -308,7 +319,10 @@ describe('Encoder', () => {
       frame.timeBase = new Rational(1, 25);
       frame.getBuffer();
 
-      encoder.encodeSync(frame);
+      // Drain any available packets using sync helper
+      for (using _packet of encodeFrameSync(encoder, frame)) {
+        // drain packets
+      }
 
       encoder.close();
     });
@@ -325,7 +339,10 @@ describe('Encoder', () => {
       initFrame.pts = 0n;
       initFrame.timeBase = new Rational(1, 25);
       initFrame.getBuffer();
-      await encoder.encode(initFrame);
+      // Drain any available packets using helper
+      for await (using _packet of encodeFrame(encoder, initFrame)) {
+        // drain packets
+      }
 
       encoder.close();
 
@@ -352,7 +369,10 @@ describe('Encoder', () => {
       initFrame.pts = 0n;
       initFrame.timeBase = new Rational(1, 25);
       initFrame.getBuffer();
-      encoder.encodeSync(initFrame);
+      // Drain any available packets using sync helper
+      for (using _packet of encodeFrameSync(encoder, initFrame)) {
+        // drain packets
+      }
 
       encoder.close();
 
@@ -385,7 +405,10 @@ describe('Encoder', () => {
         frame.timeBase = new Rational(1, 25);
         frame.getBuffer();
 
-        await encoder.encode(frame);
+        // Drain available packets using helper after each encode
+        for await (using _packet of encodeFrame(encoder, frame)) {
+          // drain packets
+        }
       }
 
       // Flush encoder
@@ -416,7 +439,10 @@ describe('Encoder', () => {
         frame.timeBase = new Rational(1, 25);
         frame.getBuffer();
 
-        encoder.encodeSync(frame);
+        // Drain available packets using sync helper after each encode
+        for (using _packet of encodeFrameSync(encoder, frame)) {
+          // drain packets
+        }
       }
 
       // Flush encoder

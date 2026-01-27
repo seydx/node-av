@@ -16,7 +16,7 @@ import {
   Frame,
   Rational,
 } from '../src/index.js';
-import { getInputFile, prepareTestEnvironment } from './index.js';
+import { decodePacket, decodePacketSync, filterFrame, getInputFile, prepareTestEnvironment } from './index.js';
 
 prepareTestEnvironment();
 
@@ -330,20 +330,20 @@ describe('High-Level Filter API', () => {
       async function* limitedFrames() {
         let count = 0;
         for await (using packet of media.packets()) {
-          if (!packet) {
-            break;
-          }
+          if (!packet) break;
 
           if (packet.streamIndex === videoStream!.index) {
-            await decoder.decode(packet);
-            while (true) {
-              using frame = await decoder.receive();
-              if (!frame) break;
+            for await (const frame of decodePacket(decoder, packet)) {
               yield frame;
               count++;
               if (count >= maxFrames) break;
             }
+            if (count >= maxFrames) break;
           }
+        }
+        // Flush decoder to get remaining frames
+        for await (const frame of decoder.flushFrames()) {
+          yield frame;
         }
       }
 
@@ -380,20 +380,20 @@ describe('High-Level Filter API', () => {
       function* limitedFrames() {
         let count = 0;
         for (using packet of media.packetsSync()) {
-          if (!packet) {
-            break;
-          }
+          if (!packet) break;
 
           if (packet.streamIndex === videoStream!.index) {
-            decoder.decodeSync(packet);
-            while (true) {
-              using frame = decoder.receiveSync();
-              if (!frame) break;
+            for (const frame of decodePacketSync(decoder, packet)) {
               yield frame;
               count++;
               if (count >= maxFrames) break;
             }
+            if (count >= maxFrames) break;
           }
+        }
+        // Flush decoder to get remaining frames
+        for (const frame of decoder.flushFramesSync()) {
+          yield frame;
         }
       }
 
@@ -432,6 +432,10 @@ describe('High-Level Filter API', () => {
       frame.getBuffer();
 
       await filter.process(frame);
+      while (true) {
+        using output = await filter.receive();
+        if (!output) break;
+      }
 
       const description = filter.getGraphDescription();
       assert.ok(description);
@@ -455,6 +459,10 @@ describe('High-Level Filter API', () => {
       frame.getBuffer();
 
       filter.processSync(frame);
+      while (true) {
+        using output = filter.receiveSync();
+        if (!output) break;
+      }
 
       const description = filter.getGraphDescription();
       assert.ok(description);
@@ -687,28 +695,29 @@ describe('High-Level Filter API', () => {
       const maxFrames = 5;
 
       for await (using packet of media.packets()) {
-        if (!packet) {
-          break;
-        }
+        if (!packet) break;
 
         if (packet.streamIndex === videoStream.index) {
-          await decoder.decode(packet);
-          while (true) {
-            using frame = await decoder.receive();
-            if (!frame) break;
-            await filter.process(frame);
-            while (true) {
-              using filtered = await filter.receive();
-              if (!filtered) break;
+          for await (using frame of decodePacket(decoder, packet)) {
+            for await (using filtered of filterFrame(filter, frame)) {
               assert.equal(filtered.width, 640);
               assert.equal(filtered.height, 480);
               processedFrames++;
             }
-            if (processedFrames >= maxFrames) {
-              break;
-            }
+            if (processedFrames >= maxFrames) break;
           }
+          if (processedFrames >= maxFrames) break;
         }
+      }
+
+      // Flush decoder and filter
+      for await (using frame of decoder.flushFrames()) {
+        for await (using _filtered of filterFrame(filter, frame)) {
+          processedFrames++;
+        }
+      }
+      for await (using _filtered of filter.flushFrames()) {
+        processedFrames++;
       }
 
       assert.ok(processedFrames > 0);
@@ -747,19 +756,11 @@ describe('High-Level Filter API', () => {
       const maxFrames = 10;
 
       for await (using packet of media.packets()) {
-        if (!packet) {
-          break;
-        }
+        if (!packet) break;
 
         if (packet.streamIndex === audioStream.index) {
-          await decoder.decode(packet);
-          while (true) {
-            using frame = await decoder.receive();
-            if (!frame) break;
-            await filter.process(frame);
-            while (true) {
-              using filtered = await filter.receive();
-              if (!filtered) break;
+          for await (using frame of decodePacket(decoder, packet)) {
+            for await (using filtered of filterFrame(filter, frame)) {
               // Check that the filter applied the correct format
               assert.equal(filtered.sampleRate, 44100);
               assert.equal(filtered.format, AV_SAMPLE_FMT_S16);
@@ -767,7 +768,18 @@ describe('High-Level Filter API', () => {
             }
             if (processedFrames >= maxFrames) break;
           }
+          if (processedFrames >= maxFrames) break;
         }
+      }
+
+      // Flush decoder and filter
+      for await (using frame of decoder.flushFrames()) {
+        for await (using _filtered of filterFrame(filter, frame)) {
+          processedFrames++;
+        }
+      }
+      for await (using _filtered of filter.flushFrames()) {
+        processedFrames++;
       }
 
       assert.ok(processedFrames > 0, 'Should process audio frames');

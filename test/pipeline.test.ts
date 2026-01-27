@@ -596,7 +596,7 @@ describe('Pipeline - Comprehensive Tests', () => {
 
       // Get first few frames
       let frameCount = 0;
-      for await (const frame of frameGenerator) {
+      for await (using frame of frameGenerator) {
         assert.ok(frame instanceof Frame, 'Should yield Frame objects');
         frameCount++;
         if (frameCount >= 5) break;
@@ -623,7 +623,7 @@ describe('Pipeline - Comprehensive Tests', () => {
 
       // Get first few filtered frames
       let frameCount = 0;
-      for await (const frame of frameGenerator) {
+      for await (using frame of frameGenerator) {
         assert.ok(frame instanceof Frame, 'Should yield Frame objects');
         assert.equal(frame.width, 160, 'Frame should be scaled to 160 width');
         assert.equal(frame.height, 120, 'Frame should be scaled to 120 height');

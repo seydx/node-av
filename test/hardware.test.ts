@@ -18,9 +18,7 @@ import {
   HardwareContext,
   type AVHWDeviceType,
 } from '../src/index.js';
-import { getInputFile, prepareTestEnvironment, skipInCI } from './index.js';
-
-import type { Frame } from '../src/lib/index.js';
+import { decodeFirstFrame, decodePacket, decodePacketSync, encodeFrame, encodeFrameSync, getInputFile, prepareTestEnvironment, skipInCI } from './index.js';
 
 prepareTestEnvironment();
 
@@ -479,25 +477,10 @@ describe('HardwareContext', () => {
           hardware: hw,
         });
 
-        // Decode first frame to verify it works
-        let frameCount = 0;
-        for await (using packet of media.packets()) {
-          if (!packet) {
-            break;
-          }
-
-          if (packet.streamIndex === videoStream.index) {
-            await decoder.decode(packet);
-            while (true) {
-              using frame = await decoder.receive();
-              if (!frame) break;
-              frameCount++;
-              break; // Just test first frame
-            }
-          }
-        }
-
-        assert.ok(frameCount > 0, 'Should decode at least one frame');
+        // Decode first frame to verify it works using helper
+        const frame = await decodeFirstFrame(decoder, media.packets(), videoStream.index);
+        assert.ok(frame, 'Should decode at least one frame');
+        frame.free();
 
         decoder.close();
         media.close();
@@ -528,25 +511,10 @@ describe('HardwareContext', () => {
           hardware: hw,
         });
 
-        // Decode first frame to verify it works
-        let frameCount = 0;
-        for await (using packet of media.packets()) {
-          if (!packet) {
-            break;
-          }
-
-          if (packet.streamIndex === videoStream.index) {
-            decoder.decodeSync(packet);
-            while (true) {
-              using frame = decoder.receiveSync();
-              if (!frame) break;
-              frameCount++;
-              break; // Just test first frame
-            }
-          }
-        }
-
-        assert.ok(frameCount > 0, 'Should decode at least one frame');
+        // Decode first frame to verify it works using helper
+        const frame = await decodeFirstFrame(decoder, media.packets(), videoStream.index);
+        assert.ok(frame, 'Should decode at least one frame');
+        frame.free();
 
         decoder.close();
         media.close();
@@ -566,25 +534,10 @@ describe('HardwareContext', () => {
       const hw = HardwareContext.auto();
       const decoder = await Decoder.create(videoStream, hw ? { hardware: hw } : {});
 
-      // Decode first frame
-      let frameCount = 0;
-      for await (using packet of media.packets()) {
-        if (!packet) {
-          break;
-        }
-
-        if (packet.streamIndex === videoStream.index) {
-          await decoder.decode(packet);
-          while (true) {
-            using frame = await decoder.receive();
-            if (!frame) break;
-            frameCount++;
-            break;
-          }
-        }
-      }
-
-      assert.ok(frameCount > 0, 'Should decode at least one frame');
+      // Decode first frame using helper
+      const frame = await decodeFirstFrame(decoder, media.packets(), videoStream.index);
+      assert.ok(frame, 'Should decode at least one frame');
+      frame?.free();
 
       decoder.close();
       media.close();
@@ -600,21 +553,17 @@ describe('HardwareContext', () => {
       const hw = HardwareContext.auto();
       const decoder = await Decoder.create(videoStream, hw ? { hardware: hw } : {});
 
-      // Decode first frame
+      // Decode first frame using sync helper
       let frameCount = 0;
       for await (using packet of media.packets()) {
-        if (!packet) {
-          break;
-        }
+        if (!packet) break;
 
         if (packet.streamIndex === videoStream.index) {
-          decoder.decodeSync(packet);
-          while (true) {
-            using frame = decoder.receiveSync();
-            if (!frame) break;
+          for (using _frame of decodePacketSync(decoder, packet)) {
             frameCount++;
-            break;
+            break; // Just test first frame
           }
+          if (frameCount > 0) break;
         }
       }
 
@@ -806,26 +755,14 @@ describe('HardwareContext', () => {
           hardware: derived,
         });
 
-        // Try to decode one frame
-        let frameDecoded = false;
-        for await (using packet of media.packets()) {
-          if (!packet) {
-            break;
-          }
-
-          if (packet.streamIndex === videoStream.index) {
-            await decoder.decode(packet);
-            while (true) {
-              using frame = await decoder.receive();
-              if (!frame) break;
-              console.log(`Decoded frame using derived ${derived.deviceTypeName} context`);
-              frameDecoded = true;
-              break;
-            }
-          }
+        // Try to decode one frame using helper
+        const frame = await decodeFirstFrame(decoder, media.packets(), videoStream.index);
+        if (frame) {
+          console.log(`Decoded frame using derived ${derived.deviceTypeName} context`);
+          frame.free();
         }
 
-        assert.ok(frameDecoded, 'Should decode at least one frame with derived context');
+        assert.ok(frame, 'Should decode at least one frame with derived context');
 
         decoder.close();
         media.close();
@@ -881,17 +818,12 @@ describe('HardwareContext', () => {
         let encodedPackets = 0;
         const maxFrames = 10; // Process only first 10 frames for test
 
-        // Process frames
+        // Process frames using helpers
         for await (using packet of media.packets()) {
-          if (!packet) {
-            break;
-          }
+          if (!packet) break;
 
           if (packet.streamIndex === videoStream.index) {
-            await decoder.decode(packet);
-            while (true) {
-              using frame = await decoder.receive();
-              if (!frame) break;
+            for await (using frame of decodePacket(decoder, packet)) {
               decodedFrames++;
 
               // Check if frame is on GPU (hardware pixel format)
@@ -902,17 +834,21 @@ describe('HardwareContext', () => {
               }
 
               // Encode the frame directly (zero-copy if both on same GPU)
-              await encoder.encode(frame);
-              while (true) {
-                using encodedPacket = await encoder.receive();
-                if (!encodedPacket) break;
+              for await (using _encodedPacket of encodeFrame(encoder, frame)) {
                 encodedPackets++;
               }
 
-              if (decodedFrames >= maxFrames) {
-                break;
-              }
+              if (decodedFrames >= maxFrames) break;
             }
+            if (decodedFrames >= maxFrames) break;
+          }
+        }
+
+        // Flush decoder
+        for await (using frame of decoder.flushFrames()) {
+          decodedFrames++;
+          for await (using _encodedPacket of encodeFrame(encoder, frame)) {
+            encodedPackets++;
           }
         }
 
@@ -977,17 +913,12 @@ describe('HardwareContext', () => {
         let encodedPackets = 0;
         const maxFrames = 10; // Process only first 10 frames for test
 
-        // Process frames using sync methods
+        // Process frames using sync helpers
         for await (using packet of media.packets()) {
-          if (!packet) {
-            break;
-          }
+          if (!packet) break;
 
           if (packet.streamIndex === videoStream.index) {
-            decoder.decodeSync(packet);
-            while (true) {
-              using frame = decoder.receiveSync();
-              if (!frame) break;
+            for (using frame of decodePacketSync(decoder, packet)) {
               decodedFrames++;
 
               // Check if frame is on GPU (hardware pixel format)
@@ -998,22 +929,26 @@ describe('HardwareContext', () => {
               }
 
               // Encode the frame directly (zero-copy if both on same GPU)
-              encoder.encodeSync(frame);
-              while (true) {
-                using encodedPacket = encoder.receiveSync();
-                if (!encodedPacket) break;
+              for (using _encodedPacket of encodeFrameSync(encoder, frame)) {
                 encodedPackets++;
               }
 
-              if (decodedFrames >= maxFrames) {
-                break;
-              }
+              if (decodedFrames >= maxFrames) break;
             }
+            if (decodedFrames >= maxFrames) break;
+          }
+        }
+
+        // Flush decoder
+        for (using frame of decoder.flushFramesSync()) {
+          decodedFrames++;
+          for (using _encodedPacket of encodeFrameSync(encoder, frame)) {
+            encodedPackets++;
           }
         }
 
         // Flush encoder
-        for await (using _flushPacket of encoder.flushPackets()) {
+        for (using _flushPacket of encoder.flushPacketsSync()) {
           encodedPackets++;
         }
 
@@ -1056,37 +991,9 @@ describe('HardwareContext', () => {
           hardware: hw,
         });
 
-        // Process one frame from each decoder
-        let frame1: Frame | null | undefined = null;
-        let frame2: Frame | null | undefined = null;
-
-        for await (using packet of media1.packets()) {
-          if (!packet) {
-            break;
-          }
-
-          if (packet.streamIndex === videoStream1.index) {
-            await decoder1.decode(packet);
-            while (true) {
-              frame1 = await decoder1.receive();
-              if (frame1) break;
-            }
-          }
-        }
-
-        for await (using packet of media2.packets()) {
-          if (!packet) {
-            break;
-          }
-
-          if (packet.streamIndex === videoStream2.index) {
-            await decoder2.decode(packet);
-            while (true) {
-              frame2 = await decoder2.receive();
-              if (frame2) break;
-            }
-          }
-        }
+        // Process one frame from each decoder using helper
+        const frame1 = await decodeFirstFrame(decoder1, media1.packets(), videoStream1.index);
+        const frame2 = await decodeFirstFrame(decoder2, media2.packets(), videoStream2.index);
 
         assert.ok(frame1, 'Should decode frame from stream 1');
         assert.ok(frame2, 'Should decode frame from stream 2');

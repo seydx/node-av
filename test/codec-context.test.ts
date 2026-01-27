@@ -656,6 +656,16 @@ describe('CodecContext', () => {
       // PCM might not buffer, so EAGAIN is possible
       assert.ok(sendRet === 0 || sendRet === -11); // 0 or EAGAIN
 
+      const frame = new Frame();
+      frame.alloc();
+
+      while (true) {
+        const recvRet = await ctx.receiveFrame(frame);
+        if (recvRet < 0) break; // EAGAIN or EOF
+        frame.unref();
+      }
+
+      frame.free();
       packet.free();
     });
 
@@ -689,6 +699,16 @@ describe('CodecContext', () => {
       const sendRet = await ctx.sendFrame(frame);
       assert.equal(sendRet, 0); // PCM encoder should accept immediately
 
+      const packet = new Packet();
+      packet.alloc();
+
+      while (true) {
+        const recvRet = await ctx.receivePacket(packet);
+        if (recvRet < 0) break; // EAGAIN or EOF
+        packet.unref();
+      }
+
+      packet.free();
       frame.free();
     });
 

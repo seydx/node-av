@@ -2,7 +2,7 @@ import assert from 'node:assert';
 import { describe, it } from 'node:test';
 
 import { AV_PIX_FMT_NV12, AV_PIX_FMT_YUV420P, Decoder, Demuxer, Encoder, FF_ENCODER_LIBX264, FilterAPI, FilterPreset, HardwareContext } from '../src/index.js';
-import { getInputFile, prepareTestEnvironment, skipInCI } from './index.js';
+import { decodePacket, encodeFrame, filterFrame, getInputFile, prepareTestEnvironment, skipInCI } from './index.js';
 
 prepareTestEnvironment();
 
@@ -13,33 +13,19 @@ async function processFrames(input: Demuxer, decoder: Decoder, filter: FilterAPI
   let frameCount = 0;
 
   for await (using packet of input.packets()) {
-    if (!packet) {
-      break;
-    }
+    if (!packet) break;
 
     if (packet.streamIndex === videoStreamIndex) {
-      await decoder.decode(packet);
-      while (true) {
-        using decodedFrame = await decoder.receive();
-        if (!decodedFrame) break;
+      for await (using decodedFrame of decodePacket(decoder, packet)) {
         if (filter) {
-          await filter.process(decodedFrame);
-          while (true) {
-            using filteredFrame = await filter.receive();
-            if (!filteredFrame) break;
-            await encoder.encode(filteredFrame);
-            while (true) {
-              using encodedPacket = await encoder.receive();
-              if (!encodedPacket) break;
+          for await (using filteredFrame of filterFrame(filter, decodedFrame)) {
+            for await (using _encodedPacket of encodeFrame(encoder, filteredFrame)) {
               frameCount++;
               if (frameCount >= maxFrames) break;
             }
           }
         } else {
-          await encoder.encode(decodedFrame);
-          while (true) {
-            using encodedPacket = await encoder.receive();
-            if (!encodedPacket) break;
+          for await (using _encodedPacket of encodeFrame(encoder, decodedFrame)) {
             frameCount++;
             if (frameCount >= maxFrames) break;
           }
@@ -49,42 +35,29 @@ async function processFrames(input: Demuxer, decoder: Decoder, filter: FilterAPI
   }
 
   // Flush remaining frames
-
-  for await (const decodedFrame of decoder.flushFrames()) {
+  for await (using decodedFrame of decoder.flushFrames()) {
     if (filter) {
-      await filter.process(decodedFrame);
-      while (true) {
-        using filteredFrame = await filter.receive();
-        if (!filteredFrame) break;
-        await encoder.encode(filteredFrame);
-        while (true) {
-          using encodedPacket = await encoder.receive();
-          if (!encodedPacket) break;
+      for await (using filteredFrame of filterFrame(filter, decodedFrame)) {
+        for await (using _encodedPacket of encodeFrame(encoder, filteredFrame)) {
           frameCount++;
         }
       }
     } else {
-      await encoder.encode(decodedFrame);
-      while (true) {
-        using encodedPacket = await encoder.receive();
-        if (!encodedPacket) break;
+      for await (using _encodedPacket of encodeFrame(encoder, decodedFrame)) {
         frameCount++;
       }
     }
   }
 
   if (filter) {
-    for await (const filteredFrame of filter.flushFrames()) {
-      await encoder.encode(filteredFrame);
-      while (true) {
-        using encodedPacket = await encoder.receive();
-        if (!encodedPacket) break;
+    for await (using filteredFrame of filter.flushFrames()) {
+      for await (using _encodedPacket of encodeFrame(encoder, filteredFrame)) {
         frameCount++;
       }
     }
   }
 
-  for await (const _ of encoder.flushPackets()) {
+  for await (using _packet of encoder.flushPackets()) {
     frameCount++;
   }
 
@@ -369,18 +342,11 @@ describe('Transcode Scenarios', () => {
 
           // Try to process a software frame with hardware filter
           for await (using packet of input.packets()) {
-            if (!packet) {
-              break;
-            }
+            if (packet && packet.streamIndex !== videoStream.index) continue;
 
-            if (packet.streamIndex === videoStream.index) {
-              await decoder.decode(packet);
-              while (true) {
-                using decodedFrame = await decoder.receive();
-                if (!decodedFrame) break;
-                await filter.process(decodedFrame);
-                break;
-              }
+            for await (using decodedFrame of decodePacket(decoder, packet)) {
+              await filter.process(decodedFrame);
+              return; // Got frame, tried process - will throw
             }
           }
         },
@@ -407,32 +373,36 @@ describe('Transcode Scenarios', () => {
         maxBFrames: 0,
       });
 
+      let processed = false;
+
       // Should still work, encoder will handle the mismatch
       for await (using packet of input.packets()) {
-        if (!packet) {
-          break;
-        }
+        if (!packet) break;
 
         if (packet.streamIndex === videoStream.index) {
-          await decoder.decode(packet);
-          while (true) {
-            using decodedFrame = await decoder.receive();
-            if (!decodedFrame) break;
+          for await (using decodedFrame of decodePacket(decoder, packet)) {
             // This might fail or succeed depending on encoder implementation
             try {
-              await encoder.encode(decodedFrame);
-              while (true) {
-                using encodedPacket = await encoder.receive();
-                if (!encodedPacket) break;
+              for await (using _encodedPacket of encodeFrame(encoder, decodedFrame)) {
                 // Successfully encoded despite mismatch
+                processed = true;
                 break;
               }
             } catch (err) {
               // Expected - size mismatch
               console.log('Expected error with size mismatch:', err);
-              break;
+              processed = true;
             }
+            break;
           }
+          break;
+        }
+      }
+
+      // Flush decoder (may produce more frames)
+      if (processed) {
+        for await (using _frame of decoder.flushFrames()) {
+          // Just drain remaining frames
         }
       }
 

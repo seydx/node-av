@@ -214,8 +214,9 @@ describe('CodecParser', () => {
           if (packet.size > 0) {
             const sendRet = await codecCtx.sendPacket(packet);
             if (sendRet >= 0) {
-              const recvRet = await codecCtx.receiveFrame(frame);
-              if (recvRet >= 0) {
+              while (true) {
+                const recvRet = await codecCtx.receiveFrame(frame);
+                if (recvRet < 0) break; // EAGAIN or EOF
                 frame.unref();
               }
             }
@@ -275,8 +276,9 @@ describe('CodecParser', () => {
           if (packet.size > 0) {
             const sendRet = codecCtx.sendPacketSync(packet);
             if (sendRet >= 0) {
-              const recvRet = codecCtx.receiveFrameSync(frame);
-              if (recvRet >= 0) {
+              while (true) {
+                const recvRet = codecCtx.receiveFrameSync(frame);
+                if (recvRet < 0) break; // EAGAIN or EOF
                 frame.unref();
               }
             }

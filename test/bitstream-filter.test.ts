@@ -165,7 +165,9 @@ describe('BitStreamFilter', () => {
         assert.fail(`Unexpected error: ${recvRet}`);
       }
 
+      outputPacket.free();
       inputPacket.unref();
+      inputPacket.free();
       ctx.free();
     });
 
@@ -202,7 +204,9 @@ describe('BitStreamFilter', () => {
         assert.fail(`Unexpected error: ${recvRet}`);
       }
 
+      outputPacket.free();
       inputPacket.unref();
+      inputPacket.free();
       ctx.free();
     });
 
@@ -225,14 +229,19 @@ describe('BitStreamFilter', () => {
         const recvRet = await ctx.receivePacket(outputPacket);
 
         if (recvRet === AVERROR_EOF) {
+          outputPacket.free();
           break;
         } else if (recvRet === 0) {
           // Got a packet, continue
           outputPacket.unref();
+          outputPacket.free();
         } else if (recvRet === AVERROR_EAGAIN) {
           // EAGAIN
           // No more packets available right now
+          outputPacket.free();
           break;
+        } else {
+          outputPacket.free();
         }
       }
 
@@ -258,14 +267,19 @@ describe('BitStreamFilter', () => {
         const recvRet = ctx.receivePacketSync(outputPacket);
 
         if (recvRet === AVERROR_EOF) {
+          outputPacket.free();
           break;
         } else if (recvRet === 0) {
           // Got a packet, continue
           outputPacket.unref();
+          outputPacket.free();
         } else if (recvRet === AVERROR_EAGAIN) {
           // EAGAIN
           // No more packets available right now
+          outputPacket.free();
           break;
+        } else {
+          outputPacket.free();
         }
       }
 
@@ -339,18 +353,21 @@ describe('BitStreamFilter', () => {
 
         if (readRet < 0) {
           packet.unref();
+          packet.free();
           break;
         }
 
         // Only process video packets
         if (packet.streamIndex !== videoStream.index) {
           packet.unref();
+          packet.free();
           continue;
         }
 
         // Send packet to filter
         const sendRet = await bsfCtx.sendPacket(packet);
         packet.unref();
+        packet.free();
 
         if (sendRet < 0 && sendRet !== AVERROR_EAGAIN) {
           // Not EAGAIN
@@ -366,17 +383,20 @@ describe('BitStreamFilter', () => {
           if (recvRet === AVERROR_EAGAIN || recvRet === AVERROR_EOF) {
             // EAGAIN or EOF
             filteredPacket.unref();
+            filteredPacket.free();
             break;
           }
 
           if (recvRet < 0) {
             filteredPacket.unref();
+            filteredPacket.free();
             assert.fail(`Failed to receive packet: ${recvRet}`);
           }
 
           // Packet was successfully filtered
           assert.ok(filteredPacket.size > 0, 'Filtered packet should have data');
           filteredPacket.unref();
+          filteredPacket.free();
         }
 
         packetsProcessed++;
@@ -438,18 +458,21 @@ describe('BitStreamFilter', () => {
 
         if (readRet < 0) {
           packet.unref();
+          packet.free();
           break;
         }
 
         // Only process video packets
         if (packet.streamIndex !== videoStream.index) {
           packet.unref();
+          packet.free();
           continue;
         }
 
         // Send packet to filter
         const sendRet = bsfCtx.sendPacketSync(packet);
         packet.unref();
+        packet.free();
 
         if (sendRet < 0 && sendRet !== AVERROR_EAGAIN) {
           // Not EAGAIN
@@ -465,17 +488,20 @@ describe('BitStreamFilter', () => {
           if (recvRet === AVERROR_EAGAIN || recvRet === AVERROR_EOF) {
             // EAGAIN or EOF
             filteredPacket.unref();
+            filteredPacket.free();
             break;
           }
 
           if (recvRet < 0) {
             filteredPacket.unref();
+            filteredPacket.free();
             assert.fail(`Failed to receive packet: ${recvRet}`);
           }
 
           // Packet was successfully filtered
           assert.ok(filteredPacket.size > 0, 'Filtered packet should have data');
           filteredPacket.unref();
+          filteredPacket.free();
         }
 
         packetsProcessed++;

@@ -47,6 +47,7 @@ describe('BitStreamFilterAPI', () => {
         for (const outPacket of filtered) {
           assert.ok(outPacket instanceof Packet);
           assert.ok(outPacket.size >= 0);
+          outPacket.free(); // Free packet after use
         }
 
         packetsProcessed++;
@@ -86,6 +87,7 @@ describe('BitStreamFilterAPI', () => {
         for (const outPacket of filtered) {
           assert.ok(outPacket instanceof Packet);
           assert.ok(outPacket.size >= 0);
+          outPacket.free(); // Free packet after use
         }
 
         packetsProcessed++;
@@ -256,7 +258,7 @@ describe('BitStreamFilterAPI', () => {
       }
 
       let processedCount = 0;
-      for await (const filtered of bsf.packets(videoPackets())) {
+      for await (using filtered of bsf.packets(videoPackets())) {
         if (!filtered) {
           break;
         }
@@ -292,7 +294,7 @@ describe('BitStreamFilterAPI', () => {
       }
 
       let processedCount = 0;
-      for (const filtered of bsf.packetsSync(videoPackets())) {
+      for (using filtered of bsf.packetsSync(videoPackets())) {
         if (!filtered) {
           break;
         }
