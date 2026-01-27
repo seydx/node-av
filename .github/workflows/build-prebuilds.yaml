@@ -357,16 +357,20 @@ jobs:
         run: npm run test:all
 
       - name: Upload Prebuild
+        if: always()
         uses: actions/upload-artifact@v6
         with:
           name: prebuild-windows-mingw-${{ matrix.os.arch }}
           path: prebuilds/
+          if-no-files-found: ignore
 
       - name: Upload FFmpeg binary
+        if: always()
         uses: actions/upload-artifact@v6
         with:
           name: ffmpeg-v${{ steps.ffmpeg-version.outputs.version }}-win-${{ matrix.os.arch }}-jellyfin.zip
           path: ffmpeg-binary-win-${{ matrix.os.arch }}-jellyfin/
+          if-no-files-found: ignore
 
   build_windows_msvc:
     name: "Windows MSVC ${{ matrix.os.arch }}"
@@ -514,16 +518,20 @@ jobs:
         run: npm run test:all
 
       - name: Upload prebuilds
+        if: always()
         uses: actions/upload-artifact@v6
         with:
           name: prebuild-win32-msvc-${{ matrix.os.arch }}
           path: prebuilds/
+          if-no-files-found: ignore
 
       - name: Upload FFmpeg binary
+        if: always()
         uses: actions/upload-artifact@v6
         with:
           name: ffmpeg-v${{ steps.ffmpeg-version.outputs.version }}-win-${{ matrix.os.arch }}.zip
           path: ffmpeg-binary-win-${{ matrix.os.arch }}/
+          if-no-files-found: ignore
 
   build_linux:
     name: "Linux ${{ matrix.arch }}"
@@ -780,16 +788,20 @@ jobs:
         run: npm run test:all
 
       - name: Upload Prebuild
+        if: always()
         uses: actions/upload-artifact@v6
         with:
           name: prebuild-linux-${{ matrix.arch }}
           path: prebuilds/
+          if-no-files-found: ignore
 
       - name: Upload FFmpeg binary
+        if: always()
         uses: actions/upload-artifact@v6
         with:
           name: ffmpeg-v${{ steps.ffmpeg-version.outputs.version }}-linux-${{ matrix.arch }}-jellyfin.zip
           path: ffmpeg-binary-linux-${{ matrix.arch }}-jellyfin/
+          if-no-files-found: ignore
 
   build_macos:
     name: "macOS ${{ matrix.arch }}"
@@ -974,13 +986,17 @@ jobs:
         run: npm run test:all
 
       - name: Upload Prebuild
+        if: always()
         uses: actions/upload-artifact@v6
         with:
           name: prebuild-macos-${{ matrix.arch }}
           path: prebuilds/
+          if-no-files-found: ignore
 
       - name: Upload FFmpeg binary
+        if: always()
         uses: actions/upload-artifact@v6
         with:
           name: ffmpeg-v${{ steps.ffmpeg-version.outputs.version }}-macos-${{ matrix.arch }}-jellyfin.zip
           path: ffmpeg-binary-macos-${{ matrix.arch }}-jellyfin/
+          if-no-files-found: ignore
