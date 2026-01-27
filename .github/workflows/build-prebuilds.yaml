@@ -5,9 +5,9 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  CACHE_VERSION_WINDOWS: "v17"
-  CACHE_VERSION_LINUX: "v32"
-  CACHE_VERSION_MACOS: "v15"
+  CACHE_VERSION_WINDOWS: "v18"
+  CACHE_VERSION_LINUX: "v33"
+  CACHE_VERSION_MACOS: "v16"
   # JELLYFIN_FFMPEG_HASH: "21198ee5630df2b0dabe4bb416e6c9c4a32522ed"
 
 on:
