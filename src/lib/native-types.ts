@@ -44,6 +44,7 @@ import type {
   AVSeekFlag,
   AVSeekWhence,
   AVStreamEventFlag,
+  AVThreadType,
   SwsFlags,
 } from '../constants/index.js';
 import type { ChannelLayout, CodecProfile, FilterPad, ImageOptions, IRational, RTSPStreamInfo } from './types.js';
@@ -211,7 +212,7 @@ export interface NativeCodecContext extends Disposable {
   profile: AVProfile;
   level: number;
   threadCount: number;
-  threadType: number;
+  threadType: AVThreadType;
   width: number;
   height: number;
   gopSize: number;

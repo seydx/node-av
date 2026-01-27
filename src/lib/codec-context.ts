@@ -18,6 +18,7 @@ import type {
   AVPixelFormat,
   AVProfile,
   AVSampleFormat,
+  AVThreadType,
 } from '../constants/constants.js';
 import type { CodecParameters } from './codec-parameters.js';
 import type { Codec } from './codec.js';
@@ -292,14 +293,16 @@ export class CodecContext extends OptionMember<NativeCodecContext> implements Di
    * Thread type for codec.
    *
    * Which multithreading methods to use.
+   * - FF_THREAD_FRAME (1): Decode more than one frame at once
+   * - FF_THREAD_SLICE (2): Decode more than one part of a single frame at once
    *
    * Direct mapping to AVCodecContext->thread_type.
    */
-  get threadType(): number {
+  get threadType(): AVThreadType {
     return this.native.threadType;
   }
 
-  set threadType(value: number) {
+  set threadType(value: AVThreadType) {
     this.native.threadType = value;
   }
 

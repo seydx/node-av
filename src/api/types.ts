@@ -1,5 +1,5 @@
 import type { RtpPacket } from 'werift';
-import type { AVMediaType, AVPixelFormat, AVSampleFormat, AVSeekWhence } from '../constants/index.js';
+import type { AVMediaType, AVPixelFormat, AVSampleFormat, AVSeekWhence, AVThreadType } from '../constants/index.js';
 import type { IRational } from '../lib/types.js';
 import type { Decoder } from './decoder.js';
 import type { Demuxer } from './demuxer.js';
@@ -467,12 +467,16 @@ export interface DecoderOptions {
   /**
    * Type of threading to use for decoding.
    *
-   * Set to FF_THREAD_FRAME for frame-level threading.
-   * Set to FF_THREAD_SLICE for slice-level threading.
+   * - `FF_THREAD_FRAME` (1): Decode multiple frames in parallel.
+   *   Higher throughput but adds latency (1 frame delay per thread).
+   *   Not recommended for live streaming where future frames are unavailable.
    *
-   * @default 0 (auto-detect)
+   * - `FF_THREAD_SLICE` (2): Decode parts of a single frame in parallel.
+   *   No additional latency, suitable for real-time/live streaming.
+   *
+   * @default FFmpeg default (both methods, codec chooses best)
    */
-  threadType?: number;
+  threadType?: AVThreadType;
 
   /**
    * Additional codec-specific options.
@@ -568,12 +572,15 @@ export interface EncoderOptions {
   /**
    * Type of threading to use for encoding.
    *
-   * Set to FF_THREAD_FRAME for frame-level threading.
-   * Set to FF_THREAD_SLICE for slice-level threading.
+   * - `FF_THREAD_FRAME` (1): Encode multiple frames in parallel.
+   *   Higher throughput but adds latency (1 frame delay per thread).
    *
-   * @default 0 (auto-detect)
+   * - `FF_THREAD_SLICE` (2): Encode parts of a single frame in parallel.
+   *   Lower latency, suitable for real-time encoding.
+   *
+   * @default FFmpeg default (both methods, codec chooses best)
    */
-  threadType?: number;
+  threadType?: AVThreadType;
 
   /**
    * Additional codec-specific options.
