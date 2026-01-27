@@ -98,6 +98,9 @@ const mjpegData = join(__dirname, 'data', 'test_mjpeg.mjpeg');
  * @see {@link Encoder} For hardware-accelerated encoding
  */
 export class HardwareContext implements Disposable {
+  private static _autoTested = false;
+  private static _autoCachedType: AVHWDeviceType = AV_HWDEVICE_TYPE_NONE;
+
   private _deviceContext: HardwareDeviceContext;
   private _deviceType: AVHWDeviceType;
   private _deviceTypeName: FFHWDeviceType;
@@ -152,6 +155,18 @@ export class HardwareContext implements Disposable {
    * @see {@link listAvailable} To check available types
    */
   static auto(options: HardwareOptions = {}): HardwareContext | null {
+    const hasOptions = options.device ?? options.options;
+
+    // Use cached device type if no custom options and already tested
+    if (!hasOptions && this._autoTested) {
+      // No hardware was found during testing
+      if (this._autoCachedType === AV_HWDEVICE_TYPE_NONE) {
+        return null;
+      }
+      // Create new instance using cached device type
+      return this.create(this._autoCachedType, options.device, options.options);
+    }
+
     // Platform-specific preference order
     const preferenceOrder = this.getPreferenceOrder();
 
@@ -161,13 +176,18 @@ export class HardwareContext implements Disposable {
           options.device = '/dev/dri/renderD128'; // Default VAAPI render node
         }
 
-        let hwCtx: HardwareContext | null = this.createFromType(deviceType, options.device, options.options);
+        const hwCtx = this.createFromType(deviceType, options.device, options.options);
 
         const isSupported = hwCtx.testDecoder();
         if (!isSupported) {
           hwCtx.dispose();
-          hwCtx = null;
           continue;
+        }
+
+        // Cache device type if no custom options
+        if (!hasOptions) {
+          this._autoTested = true;
+          this._autoCachedType = deviceType;
         }
 
         return hwCtx;
@@ -177,7 +197,30 @@ export class HardwareContext implements Disposable {
       }
     }
 
+    // Cache "no hardware" if no custom options
+    if (!hasOptions) {
+      this._autoTested = true;
+      this._autoCachedType = AV_HWDEVICE_TYPE_NONE;
+    }
+
     return null;
+  }
+
+  /**
+   * Reset the auto-detection cache.
+   *
+   * Forces the next call to auto() to re-test hardware availability.
+   * Useful for testing or if hardware availability may have changed.
+   *
+   * @example
+   * ```typescript
+   * HardwareContext.resetAutoCache();
+   * const hw = HardwareContext.auto(); // Will re-test
+   * ```
+   */
+  static resetAutoCache(): void {
+    this._autoCachedType = AV_HWDEVICE_TYPE_NONE;
+    this._autoTested = false;
   }
 
   /**

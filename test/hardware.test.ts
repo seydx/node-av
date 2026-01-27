@@ -69,6 +69,66 @@ describe('HardwareContext', () => {
     it('should handle unknown device type', () => {
       assert.equal(HardwareContext.create(AV_HWDEVICE_TYPE_NONE), null, 'Should return null for unknown device type');
     });
+
+    it('should cache auto() device type', () => {
+      // Reset cache first
+      HardwareContext.resetAutoCache();
+
+      // First call - tests hardware, caches device TYPE
+      const hw1 = HardwareContext.auto();
+
+      // Second call - uses cached type, creates NEW instance
+      const hw2 = HardwareContext.auto();
+
+      if (hw1 !== null && hw2 !== null) {
+        // Different instances but same device type
+        assert.notStrictEqual(hw1, hw2, 'Should create new instance each time');
+        assert.strictEqual(hw1.deviceType, hw2.deviceType, 'Should use same cached device type');
+      }
+
+      // Cleanup
+      hw1?.dispose();
+      hw2?.dispose();
+    });
+
+    it('should reset cache with resetAutoCache()', () => {
+      // Reset and get first result
+      HardwareContext.resetAutoCache();
+      const hw1 = HardwareContext.auto();
+
+      // Reset cache
+      HardwareContext.resetAutoCache();
+
+      // Next call should test again
+      const hw2 = HardwareContext.auto();
+
+      if (hw1 !== null && hw2 !== null) {
+        // Both should have same type (same hardware available)
+        assert.strictEqual(hw1.deviceType, hw2.deviceType, 'Should find same hardware after reset');
+      }
+
+      // Cleanup
+      hw1?.dispose();
+      hw2?.dispose();
+    });
+
+    it('should bypass cache when options provided', () => {
+      // Reset and get cached result
+      HardwareContext.resetAutoCache();
+      const hw1 = HardwareContext.auto();
+
+      // Call with options - should not use cache
+      const hw2 = HardwareContext.auto({ device: '/dev/dri/renderD128' });
+
+      // hw2 is a new instance (not from cache)
+      if (hw1 !== null && hw2 !== null) {
+        assert.notStrictEqual(hw1, hw2, 'With options, should create new instance');
+      }
+
+      // Cleanup
+      hw1?.dispose();
+      hw2?.dispose();
+    });
   });
 
   describe('instance methods', () => {
