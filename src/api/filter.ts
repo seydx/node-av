@@ -1490,10 +1490,13 @@ export class FilterAPI implements Disposable {
     this.inputQueue.close();
     this.outputQueue.close();
 
-    this.frame.free();
-    this.graph.free();
+    this.buffersrcCtx?.free();
+    this.buffersinkCtx?.free();
     this.buffersrcCtx = null;
     this.buffersinkCtx = null;
+
+    this.frame.free();
+    this.graph.free();
 
     this.initialized = false;
     this.initializePromise = null;

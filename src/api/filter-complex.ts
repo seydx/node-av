@@ -1771,19 +1771,24 @@ export class FilterComplexAPI implements Disposable {
 
     this.isClosed = true;
 
-    // Free any queued frames
     for (const inputState of this.inputs.values()) {
       for (const frame of inputState.queuedFrames) {
         frame.free();
       }
       inputState.queuedFrames = [];
+      inputState.buffersrc?.free();
+      inputState.buffersrc = null;
     }
 
-    // Clear maps
+    for (const outputState of this.outputs.values()) {
+      outputState.buffersink?.free();
+      outputState.buffersink = null;
+    }
+
     this.inputs.clear();
     this.outputs.clear();
 
-    // Free graph
+    this.frame.free();
     this.graph.free();
 
     this.initialized = false;
