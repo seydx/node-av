@@ -601,7 +601,7 @@ describe('Encoder', () => {
       }
 
       // Get hardware encoder codec name
-      const encoderCodec = hw.getEncoderCodec('h264');
+      const encoderCodec = hw.getEncoderCodec('h264', true);
       if (!encoderCodec) {
         hw.dispose();
         return;

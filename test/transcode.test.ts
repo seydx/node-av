@@ -166,7 +166,7 @@ describe('Transcode Scenarios', () => {
     });
     assert.ok(filter, 'Should create filter with hardware upload');
 
-    const encoderCodec = hw.getEncoderCodec('h264');
+    const encoderCodec = hw.getEncoderCodec('h264', true);
     if (!encoderCodec) {
       console.log('No hardware encoder codec available - skipping test');
       return;
@@ -213,7 +213,7 @@ describe('Transcode Scenarios', () => {
     });
     assert.ok(filter, 'Should create hardware filter');
 
-    const encoderCodec = hw.getEncoderCodec('h264');
+    const encoderCodec = hw.getEncoderCodec('h264', true);
     if (!encoderCodec) {
       console.log('No hardware encoder codec available - skipping test');
       return;
@@ -249,7 +249,7 @@ describe('Transcode Scenarios', () => {
     using decoder = await Decoder.create(videoStream, { hardware: hw });
     assert.ok(decoder, 'Should create hardware decoder');
 
-    const encoderCodec = hw.getEncoderCodec('h264');
+    const encoderCodec = hw.getEncoderCodec('h264', true);
     if (!encoderCodec) {
       console.log('No hardware encoder codec available - skipping test');
       return;
@@ -292,7 +292,7 @@ describe('Transcode Scenarios', () => {
     });
     assert.ok(filter, 'Should create software filter');
 
-    const encoderCodec = hw.getEncoderCodec('h264');
+    const encoderCodec = hw.getEncoderCodec('h264', true);
     if (!encoderCodec) {
       console.log('No hardware encoder codec available - skipping test');
       return;

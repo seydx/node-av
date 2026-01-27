@@ -55,7 +55,7 @@ describe('HardwareContext', () => {
       // Either way: should NOT crash
       if (hw) {
         // If hardware is available, getEncoderCodec should also not crash
-        const codec = hw.getEncoderCodec('h264');
+        const codec = hw.getEncoderCodec('h264', true);
         console.log(`Hardware available: ${hw.deviceTypeName}, h264 encoder: ${codec?.name ?? 'none'}`);
         hw.dispose();
       } else {
@@ -86,9 +86,9 @@ describe('HardwareContext', () => {
       const hw = HardwareContext.auto();
       if (hw) {
         // Test getting hardware encoder codec
-        const h264Encoder = hw.getEncoderCodec('h264');
-        const hevcEncoder = hw.getEncoderCodec('hevc');
-        const av1Encoder = hw.getEncoderCodec('av1');
+        const h264Encoder = hw.getEncoderCodec('h264', true);
+        const hevcEncoder = hw.getEncoderCodec('hevc', true);
+        const av1Encoder = hw.getEncoderCodec('av1', true);
 
         console.log(`Hardware encoder codecs for ${hw.deviceTypeName}:`);
         console.log(`  h264: ${h264Encoder?.name ?? 'not supported'}`);
@@ -238,7 +238,7 @@ describe('HardwareContext', () => {
 
       try {
         // Try to test H.264 encoder
-        const encoderCodec = hw.getEncoderCodec('h264');
+        const encoderCodec = hw.getEncoderCodec('h264', true);
         if (!encoderCodec) {
           console.log('No H.264 hardware encoder available - skipping test');
           hw.dispose();
@@ -274,7 +274,7 @@ describe('HardwareContext', () => {
           console.log(`  ${name} decoder: ${decoderWorks ? '✓ PASSED' : '✗ FAILED'}`);
 
           // Test encoder if available
-          const encoderCodec = hw.getEncoderCodec('h264');
+          const encoderCodec = hw.getEncoderCodec('h264', true);
           if (encoderCodec) {
             const encoderWorks = hw.testEncoder(AV_CODEC_ID_H264, encoderCodec);
             console.log(`  ${name} encoder (${encoderCodec.name}): ${encoderWorks ? '✓ PASSED' : '✗ FAILED'}`);
@@ -582,7 +582,7 @@ describe('HardwareContext', () => {
         return;
       }
 
-      const hwEncoderCodec = hw.getEncoderCodec('h264');
+      const hwEncoderCodec = hw.getEncoderCodec('h264', true);
       if (!hwEncoderCodec) {
         console.log('Hardware encoder codec not available - skipping test');
         return;
@@ -607,7 +607,7 @@ describe('HardwareContext', () => {
 
       try {
         // Use hardware-specific encoder codec if available
-        const hwEncoderCodec = hw.getEncoderCodec('h264');
+        const hwEncoderCodec = hw.getEncoderCodec('h264', true);
         if (!hwEncoderCodec) {
           hw.dispose();
           return;
@@ -799,7 +799,7 @@ describe('HardwareContext', () => {
 
         // Create hardware encoder
         // Use hardware-specific encoder codec
-        const hwEncoderCodec = hw.getEncoderCodec('h264');
+        const hwEncoderCodec = hw.getEncoderCodec('h264', true);
 
         if (!hwEncoderCodec) {
           // Not supported, skip
@@ -894,7 +894,7 @@ describe('HardwareContext', () => {
 
         // Create hardware encoder
         // Use hardware-specific encoder codec
-        const hwEncoderCodec = hw.getEncoderCodec('h264');
+        const hwEncoderCodec = hw.getEncoderCodec('h264', true);
 
         if (!hwEncoderCodec) {
           // Not supported, skip
@@ -1023,7 +1023,7 @@ describe('HardwareContext', () => {
       console.log(`Hardware ${hw.deviceTypeName} codec support:`);
 
       // Test getting hardware encoder codecs
-      const h264HwCodec = hw.getEncoderCodec('h264');
+      const h264HwCodec = hw.getEncoderCodec('h264', true);
       if (!h264HwCodec) {
         return;
       }
