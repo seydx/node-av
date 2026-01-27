@@ -1,3 +1,18 @@
+/**
+ * Frame Utils Benchmark Example
+ *
+ * This example demonstrates the FrameUtils class for high-performance NV12 frame
+ * processing. It benchmarks various image processing operations including:
+ *
+ * - Format conversion (NV12 to RGBA, RGB, Grayscale)
+ * - Resize operations (upscale and downscale)
+ * - Crop operations
+ * - Combined crop + resize + format conversion
+ *
+ * Usage: tsx examples/frame-utils.ts
+ * Example: tsx examples/frame-utils.ts
+ */
+
 import { readFile } from 'fs/promises';
 import { dirname, resolve } from 'path';
 import sharp from 'sharp';

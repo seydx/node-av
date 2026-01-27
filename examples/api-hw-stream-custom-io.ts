@@ -193,8 +193,14 @@ await using audioOutput = await Muxer.open(
   },
 );
 
-const audioOutputIndex = audioOutput.addStream(audioStream);
-const videoOutputIndex = videoOutput.addStream(videoEncoder, { inputStream: videoStream });
+// Only add streams manually for non-pipeline modes
+// Pipeline (iterType 5) adds streams automatically via consumeNamedStream()
+let audioOutputIndex = 0;
+let videoOutputIndex = 0;
+if (iterType !== 5) {
+  audioOutputIndex = audioOutput.addStream(audioStream);
+  videoOutputIndex = videoOutput.addStream(videoEncoder, { inputStream: videoStream });
+}
 
 // Set up timeout for stream duration
 const timeout = setTimeout(() => {
