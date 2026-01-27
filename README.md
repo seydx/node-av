@@ -583,3 +583,24 @@ For issues and questions, please use the GitHub issue tracker.
 - [FFmpeg Doxygen](https://ffmpeg.org/doxygen/trunk/)
 - [Jellyfin FFmpeg](https://github.com/seydx/jellyfin-ffmpeg)
 - [FFmpeg MSVC](https://github.com/seydx/ffmpeg-msvc-prebuilt)
+
+## Star History
+
+<picture>
+  <source
+    media="(prefers-color-scheme: dark)"
+    srcset="
+      https://api.star-history.com/svg?repos=seydx/node-av&type=Date&theme=dark
+    "
+  />
+  <source
+    media="(prefers-color-scheme: light)"
+    srcset="
+      https://api.star-history.com/svg?repos=seydx/node-av&type=Date
+    "
+  />
+  <img
+    alt="Star History Chart"
+    src="https://api.star-history.com/svg?repos=seydx/node-av&type=Date"
+  />
+</picture>
