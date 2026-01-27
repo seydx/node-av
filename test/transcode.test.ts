@@ -2,7 +2,7 @@ import assert from 'node:assert';
 import { describe, it } from 'node:test';
 
 import { AV_PIX_FMT_NV12, AV_PIX_FMT_YUV420P, Decoder, Demuxer, Encoder, FF_ENCODER_LIBX264, FilterAPI, FilterPreset, HardwareContext } from '../src/index.js';
-import { decodePacket, encodeFrame, filterFrame, getInputFile, prepareTestEnvironment, skipInCI } from './index.js';
+import { decodePacket, encodeFrame, filterFrame, getInputFile, prepareTestEnvironment } from './index.js';
 
 prepareTestEnvironment();
 
@@ -108,7 +108,7 @@ describe('Transcode Scenarios', () => {
     assert.ok(frameCount > 0, 'Should process at least one frame');
   });
 
-  it('should handle HW Decode -> HW Filter -> SW Encode', skipInCI, async () => {
+  it('should handle HW Decode -> HW Filter -> SW Encode', async () => {
     using hw = HardwareContext.auto();
     if (!hw) {
       console.log('No hardware available - skipping test');
@@ -142,7 +142,7 @@ describe('Transcode Scenarios', () => {
     assert.ok(frameCount > 0, 'Should process at least one frame');
   });
 
-  it('should handle SW Decode -> HW Filter -> HW Encode', skipInCI, async () => {
+  it('should handle SW Decode -> HW Filter -> HW Encode', async () => {
     using hw = HardwareContext.auto();
     if (!hw) {
       console.log('No hardware available - skipping test');
@@ -189,7 +189,7 @@ describe('Transcode Scenarios', () => {
     assert.ok(frameCount > 0, 'Should process at least one frame');
   });
 
-  it('should handle HW Decode -> HW Filter -> HW Encode', skipInCI, async () => {
+  it('should handle HW Decode -> HW Filter -> HW Encode', async () => {
     using hw = HardwareContext.auto();
     if (!hw) {
       console.log('No hardware available - skipping test');
@@ -233,7 +233,7 @@ describe('Transcode Scenarios', () => {
     assert.ok(frameCount > 0, 'Should process at least one frame');
   });
 
-  it('should handle HW Decode -> HW Encode (no filter)', skipInCI, async () => {
+  it('should handle HW Decode -> HW Encode (no filter)', async () => {
     using hw = HardwareContext.auto();
     if (!hw) {
       console.log('No hardware available - skipping test');
@@ -268,7 +268,7 @@ describe('Transcode Scenarios', () => {
     assert.ok(frameCount > 0, 'Should process at least one frame');
   });
 
-  it('should handle SW Decode -> SW/HW Filter -> HW Encode', skipInCI, async () => {
+  it('should handle SW Decode -> SW/HW Filter -> HW Encode', async () => {
     using hw = HardwareContext.auto();
     if (!hw) {
       console.log('No hardware available - skipping test');
@@ -316,7 +316,7 @@ describe('Transcode Scenarios', () => {
   });
 
   describe('Error Cases', () => {
-    it('should handle software frame with hardware filter gracefully', skipInCI, async () => {
+    it('should handle software frame with hardware filter gracefully', async () => {
       using hw = HardwareContext.auto();
       if (!hw) {
         console.log('No hardware available, skipping test');

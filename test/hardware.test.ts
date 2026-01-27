@@ -18,7 +18,7 @@ import {
   HardwareContext,
   type AVHWDeviceType,
 } from '../src/index.js';
-import { decodeFirstFrame, decodePacket, decodePacketSync, encodeFrame, encodeFrameSync, getInputFile, prepareTestEnvironment, skipInCI } from './index.js';
+import { decodeFirstFrame, decodePacket, decodePacketSync, encodeFrame, encodeFrameSync, getInputFile, prepareTestEnvironment } from './index.js';
 
 prepareTestEnvironment();
 
@@ -32,7 +32,7 @@ describe('HardwareContext', () => {
       console.log('Available hardware:', available.join(', ') || 'none');
     });
 
-    it('should auto-detect hardware', skipInCI, async () => {
+    it('should auto-detect hardware', async () => {
       const hw = HardwareContext.auto();
       if (hw) {
         console.log(`Auto-detected hardware: ${hw.deviceTypeName}`);
@@ -72,7 +72,7 @@ describe('HardwareContext', () => {
   });
 
   describe('instance methods', () => {
-    it('should provide device information', skipInCI, () => {
+    it('should provide device information', () => {
       const hw = HardwareContext.auto();
       if (hw) {
         assert.ok(hw.deviceTypeName, 'Should have device type name');
@@ -82,7 +82,7 @@ describe('HardwareContext', () => {
       }
     });
 
-    it('should get encoder codec for base codec name', skipInCI, async () => {
+    it('should get encoder codec for base codec name', async () => {
       const hw = HardwareContext.auto();
       if (hw) {
         // Test getting hardware encoder codec
@@ -102,7 +102,7 @@ describe('HardwareContext', () => {
       }
     });
 
-    it('should support Symbol.dispose', skipInCI, () => {
+    it('should support Symbol.dispose', () => {
       const hw = HardwareContext.auto();
       if (hw) {
         {
@@ -114,7 +114,7 @@ describe('HardwareContext', () => {
       }
     });
 
-    it('should check if hardware is disposed', skipInCI, () => {
+    it('should check if hardware is disposed', () => {
       const hw = HardwareContext.auto();
       if (hw) {
         assert.equal(hw.isDisposed, false, 'Should not be disposed initially');
@@ -124,7 +124,7 @@ describe('HardwareContext', () => {
     });
   });
 
-  describe('specific hardware types', skipInCI, () => {
+  describe('specific hardware types', () => {
     it('should handle CUDA if available', () => {
       const cuda = HardwareContext.create(AV_HWDEVICE_TYPE_CUDA);
       if (cuda) {
@@ -209,7 +209,7 @@ describe('HardwareContext', () => {
     });
   });
 
-  describe('hardware validation', skipInCI, () => {
+  describe('hardware validation', () => {
     it('should validate decoder with testDecoder()', () => {
       const hw = HardwareContext.auto();
       if (!hw) {
@@ -344,7 +344,7 @@ describe('HardwareContext', () => {
   });
 
   describe('hardware disposal', () => {
-    it('should safely dispose hardware multiple times', skipInCI, () => {
+    it('should safely dispose hardware multiple times', () => {
       const hw = HardwareContext.auto();
       if (!hw) {
         console.log('No hardware available - skipping test');
@@ -364,7 +364,7 @@ describe('HardwareContext', () => {
       assert.ok(hw.isDisposed, 'Should still be disposed');
     });
 
-    it('should dispose hardware when decoder closes', skipInCI, async () => {
+    it('should dispose hardware when decoder closes', async () => {
       const hw = HardwareContext.auto();
       if (!hw) {
         console.log('No hardware available - skipping test');
@@ -391,7 +391,7 @@ describe('HardwareContext', () => {
       media.close();
     });
 
-    it('should dispose hardware when encoder closes', skipInCI, async () => {
+    it('should dispose hardware when encoder closes', async () => {
       const hw = HardwareContext.auto();
       if (!hw) {
         console.log('No hardware available - skipping test');
@@ -418,7 +418,7 @@ describe('HardwareContext', () => {
       }
     });
 
-    it('should allow sharing hardware between multiple decoders', skipInCI, async () => {
+    it('should allow sharing hardware between multiple decoders', async () => {
       const hw = HardwareContext.auto();
       if (!hw) {
         console.log('No hardware available - skipping test');
@@ -457,7 +457,7 @@ describe('HardwareContext', () => {
   });
 
   describe('hardware integration', () => {
-    it('should work with Decoder when hardware is available (async)', skipInCI, async () => {
+    it('should work with Decoder when hardware is available (async)', async () => {
       // Try to get hardware context
       const hw = HardwareContext.auto();
 
@@ -491,7 +491,7 @@ describe('HardwareContext', () => {
       }
     });
 
-    it('should work with Decoder when hardware is available (sync)', skipInCI, async () => {
+    it('should work with Decoder when hardware is available (sync)', async () => {
       // Try to get hardware context
       const hw = HardwareContext.auto();
 
@@ -525,7 +525,7 @@ describe('HardwareContext', () => {
       }
     });
 
-    it('should work with Decoder using auto hardware detection (async)', skipInCI, async () => {
+    it('should work with Decoder using auto hardware detection (async)', async () => {
       const media = await Demuxer.open(inputFile);
       const videoStream = media.video(0);
       assert.ok(videoStream, 'Should have video stream');
@@ -544,7 +544,7 @@ describe('HardwareContext', () => {
       // hw is disposed by decoder.close()
     });
 
-    it('should work with Decoder using auto hardware detection (sync)', skipInCI, async () => {
+    it('should work with Decoder using auto hardware detection (sync)', async () => {
       const media = await Demuxer.open(inputFile);
       const videoStream = media.video(0);
       assert.ok(videoStream, 'Should have video stream');
@@ -574,7 +574,7 @@ describe('HardwareContext', () => {
       // hw is disposed by decoder.close()
     });
 
-    it('should work with Encoder when hardware is available', skipInCI, async () => {
+    it('should work with Encoder when hardware is available', async () => {
       const hw = HardwareContext.auto();
 
       if (!hw) {
@@ -599,7 +599,7 @@ describe('HardwareContext', () => {
       hw.dispose();
     });
 
-    it('should work with Encoder using auto hardware detection', skipInCI, async () => {
+    it('should work with Encoder using auto hardware detection', async () => {
       const hw = HardwareContext.auto();
       if (!hw) {
         return;
@@ -630,7 +630,7 @@ describe('HardwareContext', () => {
   });
 
   describe('hardware derivation', () => {
-    it('should derive hardware context from another (with AVHWDeviceType)', skipInCI, () => {
+    it('should derive hardware context from another (with AVHWDeviceType)', () => {
       const hw = HardwareContext.auto();
       if (!hw) {
         console.log('No hardware available - skipping derivation test');
@@ -661,7 +661,7 @@ describe('HardwareContext', () => {
       hw.dispose();
     });
 
-    it('should return null for invalid derivation', skipInCI, () => {
+    it('should return null for invalid derivation', () => {
       const hw = HardwareContext.auto();
       if (!hw) {
         console.log('No hardware available - skipping test');
@@ -679,7 +679,7 @@ describe('HardwareContext', () => {
       hw.dispose();
     });
 
-    it('should return null when source is disposed', skipInCI, () => {
+    it('should return null when source is disposed', () => {
       const hw = HardwareContext.auto();
       if (!hw) {
         console.log('No hardware available - skipping test');
@@ -693,7 +693,7 @@ describe('HardwareContext', () => {
       assert.equal(derived, null, 'Should return null when source is disposed');
     });
 
-    it('should test common derivation paths', skipInCI, () => {
+    it('should test common derivation paths', () => {
       // Common derivation paths:
       // - VAAPI -> OpenCL
       // - CUDA -> Vulkan
@@ -730,7 +730,7 @@ describe('HardwareContext', () => {
       hw.dispose();
     });
 
-    it('should work with derived context in decoder', skipInCI, async () => {
+    it('should work with derived context in decoder', async () => {
       const hw = HardwareContext.auto();
       if (!hw) {
         console.log('No hardware available - skipping test');
@@ -776,7 +776,7 @@ describe('HardwareContext', () => {
   });
 
   describe('zero-copy GPU transfer', () => {
-    it('should transfer frames from decoder to encoder on GPU (zero-copy) (async)', skipInCI, async () => {
+    it('should transfer frames from decoder to encoder on GPU (zero-copy) (async)', async () => {
       // This test demonstrates zero-copy GPU frame transfer
       // where frames stay on GPU between decode and encode
 
@@ -871,7 +871,7 @@ describe('HardwareContext', () => {
       }
     });
 
-    it('should transfer frames from decoder to encoder on GPU (zero-copy) (sync)', skipInCI, async () => {
+    it('should transfer frames from decoder to encoder on GPU (zero-copy) (sync)', async () => {
       // This test demonstrates zero-copy GPU frame transfer with sync methods
       // where frames stay on GPU between decode and encode
 
@@ -966,7 +966,7 @@ describe('HardwareContext', () => {
       }
     });
 
-    it('should demonstrate GPU memory efficiency with multiple streams', skipInCI, async () => {
+    it('should demonstrate GPU memory efficiency with multiple streams', async () => {
       const hw = HardwareContext.auto();
       if (!hw) {
         console.log('No hardware acceleration available - skipping test');
@@ -1013,7 +1013,7 @@ describe('HardwareContext', () => {
       }
     });
 
-    it('should verify hardware codec selection', skipInCI, async () => {
+    it('should verify hardware codec selection', async () => {
       const hw = HardwareContext.auto();
       if (!hw) {
         console.log('No hardware acceleration available - skipping test');

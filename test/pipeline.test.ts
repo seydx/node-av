@@ -861,7 +861,7 @@ describe('Pipeline - Comprehensive Tests', () => {
     });
   });
 
-  describe('Hardware Acceleration', skipInCI, () => {
+  describe('Hardware Acceleration', () => {
     it('should support hardware decoder in pipeline', async function (t) {
       // Check if hardware acceleration is available
       const hw = HardwareContext.auto();

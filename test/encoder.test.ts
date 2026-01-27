@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 
 import { AV_PIX_FMT_YUV420P, AV_SAMPLE_FMT_FLTP, Encoder, FF_ENCODER_AAC, FF_ENCODER_LIBX264, HardwareContext } from '../src/index.js';
 import { Frame, Rational } from '../src/lib/index.js';
-import { encodeFrame, encodeFrameSync, skipInCI } from './index.js';
+import { encodeFrame, encodeFrameSync } from './index.js';
 
 describe('Encoder', () => {
   describe('create', () => {
@@ -593,7 +593,7 @@ describe('Encoder', () => {
   });
 
   describe('hardware encoding', () => {
-    it('should create hardware encoder with hardware context', skipInCI, async () => {
+    it('should create hardware encoder with hardware context', async () => {
       // Try to get hardware context
       const hw = HardwareContext.auto();
       if (!hw) {
