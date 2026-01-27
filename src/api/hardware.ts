@@ -795,14 +795,10 @@ export class HardwareContext implements Disposable {
    */
   testDecoder(codecId: AVCodecID = AV_CODEC_ID_H264): boolean {
     try {
-      if (this.supportsCodec(codecId, false)) {
-        const isSupported = this.testCodec(codecId);
-        if (!isSupported) {
-          return false;
-        }
+      if (!this.supportsCodec(codecId, false)) {
+        return false;
       }
-
-      return true;
+      return this.testCodec(codecId);
     } catch {
       return false;
     }
