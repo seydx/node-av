@@ -343,9 +343,8 @@ function formatDuration(ms: number): string {
 export async function generateReport(report: BenchmarkReport): Promise<string> {
   const systemSection = formatSystemInfoSection(report.systemInfo);
   // Support both single file (legacy) and multiple files
-  const inputSection = report.inputFileInfos && report.inputFileInfos.length > 0
-    ? formatInputFilesSection(report.inputFileInfos)
-    : formatInputFileSection(report.inputFileInfo);
+  const inputSection =
+    report.inputFileInfos && report.inputFileInfos.length > 0 ? formatInputFilesSection(report.inputFileInfos) : formatInputFileSection(report.inputFileInfo);
   const transcodeSection = formatTranscodeSection(report.transcodeResults);
   const memorySection = formatMemorySection(report.memoryResults);
   const latencySection = formatLatencySection(report.latencyMetrics);
