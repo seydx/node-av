@@ -234,7 +234,8 @@ export class Muxer implements AsyncDisposable, Disposable {
         // Set format options if provided
         if (options?.options) {
           for (const [key, value] of Object.entries(options.options)) {
-            output.formatContext.setOption(key, value);
+            const ret = output.formatContext.setOption(key, value);
+            FFmpegError.throwIfError(ret, `Failed to set muxer option '${key}'`);
           }
         }
 
@@ -260,7 +261,8 @@ export class Muxer implements AsyncDisposable, Disposable {
         // Set format options if provided
         if (options?.options) {
           for (const [key, value] of Object.entries(options.options)) {
-            output.formatContext.setOption(key, value);
+            const ret = output.formatContext.setOption(key, value);
+            FFmpegError.throwIfError(ret, `Failed to set muxer option '${key}'`);
           }
         }
 
@@ -362,7 +364,8 @@ export class Muxer implements AsyncDisposable, Disposable {
         // Set format options if provided
         if (options?.options) {
           for (const [key, value] of Object.entries(options.options)) {
-            output.formatContext.setOption(key, value);
+            const ret = output.formatContext.setOption(key, value);
+            FFmpegError.throwIfError(ret, `Failed to set muxer option '${key}'`);
           }
         }
 
@@ -388,7 +391,8 @@ export class Muxer implements AsyncDisposable, Disposable {
         // Set format options if provided
         if (options?.options) {
           for (const [key, value] of Object.entries(options.options)) {
-            output.formatContext.setOption(key, value);
+            const ret = output.formatContext.setOption(key, value);
+            FFmpegError.throwIfError(ret, `Failed to set muxer option '${key}'`);
           }
         }
 
