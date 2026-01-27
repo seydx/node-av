@@ -8,7 +8,7 @@
 import { execSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { arch, cpus, platform, release, totalmem } from 'node:os';
-import { dirname, resolve } from 'node:path';
+import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { getFFmpegVersion, probeMediaFile } from './ffmpeg-cli.js';
@@ -38,17 +38,24 @@ export interface SystemInfo {
 }
 
 /**
+ * Input file information
+ */
+export interface InputFileInfo {
+  path: string;
+  duration: number;
+  resolution?: string;
+  codec?: string;
+  fps?: number;
+}
+
+/**
  * Complete benchmark report data
  */
 export interface BenchmarkReport {
   systemInfo: SystemInfo;
-  inputFileInfo?: {
-    path: string;
-    duration: number;
-    resolution?: string;
-    codec?: string;
-    fps?: number;
-  };
+  /** @deprecated Use inputFileInfos instead */
+  inputFileInfo?: InputFileInfo;
+  inputFileInfos?: InputFileInfo[];
   transcodeResults: BenchmarkComparison[];
   memoryResults: BenchmarkComparison[];
   latencyMetrics?: LatencyMetrics;
@@ -139,9 +146,9 @@ function formatSystemInfoSection(info: SystemInfo): string {
 }
 
 /**
- * Format input file info section
+ * Format input file info section (single file - legacy)
  */
-function formatInputFileSection(info: { path: string; duration: number; resolution?: string; codec?: string; fps?: number } | undefined): string {
+function formatInputFileSection(info: InputFileInfo | undefined): string {
   if (!info) return '';
 
   return `## Test Input
@@ -157,39 +164,76 @@ function formatInputFileSection(info: { path: string; duration: number; resoluti
 }
 
 /**
+ * Format input files info section (multiple files)
+ */
+function formatInputFilesSection(infos: InputFileInfo[] | undefined): string {
+  if (!infos || infos.length === 0) return '';
+
+  let section = `## Test Inputs
+
+| File | Codec | Resolution | FPS | Duration |
+|------|-------|------------|-----|----------|
+`;
+
+  for (const info of infos) {
+    const filename = basename(info.path);
+    section += `| ${filename} | ${info.codec ?? 'N/A'} | ${info.resolution ?? 'N/A'} | ${info.fps?.toFixed(0) ?? 'N/A'} | ${info.duration.toFixed(1)}s |\n`;
+  }
+
+  return section;
+}
+
+/**
  * Format transcode results table
  */
 function formatTranscodeSection(results: BenchmarkComparison[]): string {
   if (results.length === 0) return '';
 
-  let section = `## Transcode Speed
+  // Group results by input file
+  const grouped = new Map<string, BenchmarkComparison[]>();
+  for (const result of results) {
+    const inputFile = basename(result.config.inputFile);
+    if (!grouped.has(inputFile)) {
+      grouped.set(inputFile, []);
+    }
+    grouped.get(inputFile)!.push(result);
+  }
 
-| Test | FFmpeg CLI | node-av | Difference |
-|------|-----------|---------|------------|
+  let section = '## Transcode Speed\n';
+
+  // If only one input file, don't show grouping
+  if (grouped.size === 1) {
+    const results = [...grouped.values()][0];
+    section += formatTranscodeTable(results);
+  } else {
+    // Multiple input files - show grouped
+    for (const [inputFile, groupResults] of grouped) {
+      section += '\n### Input: ' + inputFile + '\n';
+      section += formatTranscodeTable(groupResults);
+    }
+  }
+
+  return section;
+}
+
+/**
+ * Format a single transcode results table
+ */
+function formatTranscodeTable(results: BenchmarkComparison[]): string {
+  let section = `
+| Test | FFmpeg CLI (FPS) | node-av (FPS) | FFmpeg CLI (Time) | node-av (Time) | Diff |
+|------|------------------|---------------|-------------------|----------------|------|
 `;
 
   for (const result of results) {
     const ffmpegFps = result.ffmpegCLI.fps?.mean.toFixed(1) ?? 'N/A';
     const nodeAVFps = result.nodeAV.fps?.mean.toFixed(1) ?? 'N/A';
+    const ffmpegDuration = formatDuration(result.ffmpegCLI.durationMs.mean);
+    const nodeAVDuration = formatDuration(result.nodeAV.durationMs.mean);
     const diff = result.comparison.fpsDiffPercent;
     const diffStr = diff !== undefined ? formatPercentDiff(diff) : 'N/A';
 
-    section += `| ${result.config.name} | ${ffmpegFps} fps | ${nodeAVFps} fps | ${diffStr} |\n`;
-  }
-
-  section += `
-### Duration Comparison
-
-| Test | FFmpeg CLI | node-av | Difference |
-|------|-----------|---------|------------|
-`;
-
-  for (const result of results) {
-    const ffmpegDuration = formatDuration(result.ffmpegCLI.durationMs.mean);
-    const nodeAVDuration = formatDuration(result.nodeAV.durationMs.mean);
-    const diffStr = formatPercentDiff(result.comparison.durationDiffPercent);
-
-    section += `| ${result.config.name} | ${ffmpegDuration} | ${nodeAVDuration} | ${diffStr} |\n`;
+    section += `| ${result.config.name} | ${ffmpegFps} fps | ${nodeAVFps} fps | ${ffmpegDuration} | ${nodeAVDuration} | ${diffStr} |\n`;
   }
 
   return section;
@@ -201,8 +245,42 @@ function formatTranscodeSection(results: BenchmarkComparison[]): string {
 function formatMemorySection(results: BenchmarkComparison[]): string {
   if (results.length === 0) return '';
 
-  let section = `## Memory Usage
+  // Group results by input file
+  const grouped = new Map<string, BenchmarkComparison[]>();
+  for (const result of results) {
+    const inputFile = basename(result.config.inputFile);
+    if (!grouped.has(inputFile)) {
+      grouped.set(inputFile, []);
+    }
+    grouped.get(inputFile)!.push(result);
+  }
 
+  let section = '## Memory Usage\n';
+
+  // If only one input file, don't show grouping
+  if (grouped.size === 1) {
+    const results = [...grouped.values()][0];
+    section += formatMemoryTable(results);
+  } else {
+    // Multiple input files - show grouped
+    for (const [inputFile, groupResults] of grouped) {
+      section += '\n### Input: ' + inputFile + '\n';
+      section += formatMemoryTable(groupResults);
+    }
+  }
+
+  section += `
+*Note: FFmpeg CLI memory is measured via \`/usr/bin/time\` (macOS: \`-l\`, Linux: \`-v\`).
+`;
+
+  return section;
+}
+
+/**
+ * Format a single memory results table
+ */
+function formatMemoryTable(results: BenchmarkComparison[]): string {
+  let section = `
 | Test | FFmpeg CLI Peak | node-av Peak | Difference |
 |------|----------------|--------------|------------|
 `;
@@ -215,10 +293,6 @@ function formatMemorySection(results: BenchmarkComparison[]): string {
 
     section += `| ${result.config.name} | ${ffmpegMem} | ${nodeAVMem} | ${diffStr} |\n`;
   }
-
-  section += `
-*Note: FFmpeg CLI memory is measured via \`/usr/bin/time\` (macOS: \`-l\`, Linux: \`-v\`).
-`;
 
   return section;
 }
@@ -268,7 +342,10 @@ function formatDuration(ms: number): string {
  */
 export async function generateReport(report: BenchmarkReport): Promise<string> {
   const systemSection = formatSystemInfoSection(report.systemInfo);
-  const inputSection = formatInputFileSection(report.inputFileInfo);
+  // Support both single file (legacy) and multiple files
+  const inputSection = report.inputFileInfos && report.inputFileInfos.length > 0
+    ? formatInputFilesSection(report.inputFileInfos)
+    : formatInputFileSection(report.inputFileInfo);
   const transcodeSection = formatTranscodeSection(report.transcodeResults);
   const memorySection = formatMemorySection(report.memoryResults);
   const latencySection = formatLatencySection(report.latencyMetrics);
@@ -313,7 +390,7 @@ export function saveResultsJSON(report: BenchmarkReport): void {
 /**
  * Create input file info from probing
  */
-export async function createInputFileInfo(filePath: string): Promise<{ path: string; duration: number; resolution?: string; codec?: string; fps?: number }> {
+export async function createInputFileInfo(filePath: string): Promise<InputFileInfo> {
   try {
     const info = await probeMediaFile(filePath);
     return {

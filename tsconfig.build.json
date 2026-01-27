@@ -33,5 +33,6 @@
     "examples",
     "externals",
     "projects",
+    "benchmarks"
   ]
 }

@@ -28,6 +28,7 @@ tree.ts
 python-*
 requirements-lock.txt
 /binary
+/testdata/bbb-*
 
 # Editor directories and files
 .idea

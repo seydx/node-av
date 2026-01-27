@@ -23,8 +23,8 @@
     "noImplicitAny": true,
   },
   "include": [
-    "examples/*.ts",
-    "examples/**/**/*.ts",
+    "benchmarks/*.ts",
+    "benchmarks/**/**/*.ts",
   ],
   "exclude": [
     "src",
@@ -35,6 +35,5 @@
     "test",
     "externals",
     "projects",
-    "benchmarks"
   ]
 }
