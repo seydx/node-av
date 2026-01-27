@@ -17,6 +17,8 @@ New comprehensive benchmark tool for comparing node-av performance against FFmpe
 - Memory usage measurements
 - Latency metrics
 
+📊 **[Full benchmark results](https://github.com/seydx/node-av/tree/main/BENCHMARK.md)**
+
 ### Changed
 
 #### Threading API - Auto-Detection & Flushing
@@ -48,6 +50,15 @@ for await (const packet of input.packets()) {
 
 - Methods now properly handle `null` frames/packets for explicit EOF signaling
 - Enables manual flushing of internal buffers in encoding/decoding chains
+
+#### HardwareContext.auto() - Device Type Caching
+
+`HardwareContext.auto()` now caches the successful hardware device type instead of testing all hardware types on every call. Subsequent calls skip the full hardware test and directly create the cached type.
+
+- First call: Tests all hardware types, caches the successful device type
+- Subsequent calls: Directly creates the cached hardware type (much faster)
+- `resetAutoCache()`: Clears cache, forces re-testing on next call
+- Custom options bypass cache (always tests)
 
 ### Fixed
 
