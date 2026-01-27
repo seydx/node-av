@@ -72,6 +72,10 @@ for await (const packet of input.packets()) {
 
 - **HardwareContext.testDecoder()**: Fixed logic bug where hardware types without codec support (like DRM without VAAPI) were incorrectly accepted. Now properly returns `false` when the hardware doesn't support decoding, ensuring `HardwareContext.auto()` only returns functional hardware acceleration.
 
+#### FilterAPI / FilterComplexAPI
+
+- **Stability Fix**: Improved resource cleanup order in `close()` to properly invalidate FilterContext references before freeing the graph.
+
 ## [5.0.0] - 2025-11-19
 
 ### Breaking Changes
