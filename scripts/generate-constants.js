@@ -27,8 +27,8 @@ const parseConstants = (headerPath) => {
   const content = readFileSync(headerPath, 'utf8');
   const constants = [];
 
-  // Parse #define constants (including AVERROR, AVFMT, AVIO, AVFILTER, AVSTREAM, AVSEEK, SWS, and SWR)
-  const definePattern = /#define\s+((?:AV|AVERROR|AVFMT|AVIO|AVFILTER|AVSTREAM|AVSEEK|SWS|SWR)_[A-Z0-9_]+)\s+(.+?)(?:\s*\/\*.*)?$/gm;
+  // Parse #define constants (including AVERROR, AVFMT, AVIO, AVFILTER, AVSTREAM, AVSEEK, SWS, SWR, and FF_THREAD)
+  const definePattern = /#define\s+((?:AV|AVERROR|AVFMT|AVIO|AVFILTER|AVSTREAM|AVSEEK|SWS|SWR|FF_THREAD)_[A-Z0-9_]+)\s+(.+?)(?:\s*\/\*.*)?$/gm;
   let match;
   while ((match = definePattern.exec(content)) !== null) {
     let name = match[1];
@@ -301,6 +301,8 @@ const groupConstantsByPrefix = (constants) => {
       ['AV_EF_', 'AV_EF'],
       ['AV_UTF8_FLAG_', 'AV_UTF8_FLAG'],
       ['AV_GET_BUFFER_FLAG_', 'AV_GET_BUFFER_FLAG'],
+      // Thread type flags
+      ['FF_THREAD_', 'FF_THREAD'],
     ];
 
     // Special exact matches
@@ -331,6 +333,9 @@ const groupConstantsByPrefix = (constants) => {
         // For constants like AVERROR_, AVFMT_, AVIO_, SWS_, SWR_ etc.
         if (name.match(/^(AVERROR|AVFMT|AVSTREAM|AVIO|AVFILTER|AVSEEK|SWS|SWR)_/)) {
           prefix = parts[0];
+        } else if (name.startsWith('FF_THREAD_')) {
+          // Special case: FF_THREAD needs both parts
+          prefix = 'FF_THREAD';
         } else if (name.startsWith('AV_')) {
           // For AV_ prefixed constants, try first 2-3 parts
 
@@ -623,6 +628,9 @@ export type EOFSignal = typeof EOF;
     // Software scale/resample with original names
     ['SWS', 'SWSFlag'],
     ['SWR', 'SWRFlag'],
+
+    // Thread type flags
+    ['FF_THREAD', 'AVThreadType'],
   ]);
 
   // Generate constants by group
@@ -849,10 +857,7 @@ export type EOFSignal = typeof EOF;
   output += '// Helper function to cast numbers to branded types\n';
   output += 'export function cast<T>(value: number): T {\n';
   output += '  return value as T;\n';
-  output += '}\n\n';
-
-  output += 'export const FF_THREAD_FRAME = 1;\n';
-  output += 'export const FF_THREAD_SLICE = 2;\n';
+  output += '}\n';
 
   return output;
 };

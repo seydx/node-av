@@ -2329,6 +2329,12 @@ export type SWRFlag = number & { readonly [__ffmpeg_brand]: 'SWRFlag' };
 export const SWR_FLAG_RESAMPLE = 1 as SWRFlag;
 export const SWR_CH_MAX = 64 as SWRFlag;
 
+// FF_THREAD constants (from libavcodec/avcodec.h)
+export type AVThreadType = number & { readonly [__ffmpeg_brand]: 'AVThreadType' };
+
+export const FF_THREAD_FRAME = 1 as AVThreadType;
+export const FF_THREAD_SLICE = 2 as AVThreadType;
+
 // ============================================================================
 // AV_CODEC_HW_CONFIG_METHOD - Hardware configuration methods
 // ============================================================================
@@ -2421,6 +2427,3 @@ export const ULONG_MAX = UINT64_MAX; // 64-bit on 64-bit systems, 32-bit on 32-b
 export function cast<T>(value: number): T {
   return value as T;
 }
-
-export const FF_THREAD_FRAME = 1;
-export const FF_THREAD_SLICE = 2;
