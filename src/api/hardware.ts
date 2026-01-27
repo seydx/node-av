@@ -50,9 +50,9 @@ import { avGetHardwareDeviceTypeFromName } from '../lib/utilities.js';
 import { Decoder } from './decoder.js';
 import { Demuxer } from './demuxer.js';
 import { Encoder } from './encoder.js';
+import { FilterAPI } from './filter.js';
 
 import type { AVCodecID, AVHWDeviceType, AVPixelFormat, FFDecoderCodec, FFEncoderCodec, FFHWDeviceType } from '../constants/index.js';
-import type { Packet } from '../lib/packet.js';
 import type { BaseCodecName, HardwareOptions } from './types.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -927,11 +927,13 @@ export class HardwareContext implements Disposable {
    *
    * @param encoderCodec - Optional encoder codec name or instance to test
    *
+   * @param useFilter - Whether to test hwdownload filter (default: true)
+   *
    * @returns true if decoding succeeds
    *
    * @internal
    */
-  private testCodec(decoderCodec: FFDecoderCodec | AVCodecID | Codec, encoderCodec?: FFEncoderCodec | Codec): boolean {
+  private testCodec(decoderCodec: FFDecoderCodec | AVCodecID | Codec, encoderCodec?: FFEncoderCodec | Codec, useFilter = true): boolean {
     try {
       let codecDecoder: Codec | null = null;
       let codecEncoder: Codec | null = null;
@@ -980,39 +982,47 @@ export class HardwareContext implements Disposable {
         hardware: this,
       });
 
-      const inputGenerator = input.packetsSync();
-      const frameGenerator = decoder.framesSync(inputGenerator);
-      let packetGenerator: Generator<Packet | null> | null = null;
-      let encoder: Encoder | null = null;
+      const packetGenerator = input.packetsSync();
+      const hwFrameGenerator = decoder.framesSync(packetGenerator);
 
+      // Optionally create hwdownload filter to test hardware → software transfer
+      using filter = useFilter
+        ? FilterAPI.create('hwdownload,format=nv12', {
+            framerate: videoStream.avgFrameRate,
+            hardware: this,
+          })
+        : null;
+
+      const frameGenerator = filter ? filter.framesSync(hwFrameGenerator) : hwFrameGenerator;
+
+      // Resolve encoder codec if provided
       if (encoderCodec) {
         if (encoderCodec instanceof Codec) {
           codecEncoder = encoderCodec;
         } else if (typeof encoderCodec === 'string') {
           codecEncoder = Codec.findEncoderByName(encoderCodec);
-        } else if (encoderCodec) {
+        } else {
           codecEncoder = Codec.findEncoder(encoderCodec);
         }
-
         if (!codecEncoder) {
-          throw new Error('Encoder codec not found');
+          return false;
         }
-
-        encoder = Encoder.createSync(codecEncoder, {
-          decoder,
-        });
-
-        packetGenerator = encoder.packetsSync(frameGenerator);
       }
 
-      using _encoder = encoder;
+      using encoder = codecEncoder
+        ? Encoder.createSync(codecEncoder, {
+            decoder,
+            filter: filter ?? undefined,
+          })
+        : null;
+
+      const outputGenerator = encoder ? encoder.packetsSync(frameGenerator) : frameGenerator;
 
       let hasData = false;
-
-      const generator = packetGenerator ?? frameGenerator;
-      for (using _ of generator) {
+      for (using _ of outputGenerator) {
+        if (!_) continue;
         hasData = true;
-        break; // We only need to decode one frame
+        break;
       }
 
       return hasData;
