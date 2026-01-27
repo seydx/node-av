@@ -43,7 +43,7 @@
     "docs:dev": "npm run predocs && vitepress dev docs --port 5173",
     "docs:build": "npm run predocs && rimraf docs/.vitepress/dist && vitepress build docs && cpy --flat docs/logo.png docs/.vitepress/dist",
     "docs:preview": "npm run predocs && vitepress preview docs --port 5174",
-    "format": "prettier --write src/ --write test/ --write scripts/ --write examples/ --ignore-unknown --no-error-on-unmatched-pattern",
+    "format": "prettier --write src/ --write test/ --write scripts/ --write examples/ --write benchmarks/ --ignore-unknown --no-error-on-unmatched-pattern",
     "generate": "npm run patch:ffmpeg && npm run generate:ffmpeg-version && npm run generate:constants && npm run generate:encoders && npm run generate:decoders && npm run generate:hardware && npm run generate:layouts",
     "generate:ffmpeg-version": "node scripts/generate-ffmpeg-version.js",
     "generate:constants": "cross-env FFMPEG_DEV_PATH=externals/jellyfin-ffmpeg node scripts/generate-constants.js && prettier --write src/constants/constants.ts",
@@ -63,6 +63,7 @@
     "release:major": "npm run build:tsc && node scripts/prepare-release.js major",
     "test": "tsx --test test/*.test.ts",
     "test:all": "npm run build:tests && npm run build:tsc && tsx --test test/*.test.ts",
+    "benchmark": "tsx benchmarks/index.ts",
     "update": "updates --update ./"
   },
   "dependencies": {

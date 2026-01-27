@@ -74,6 +74,7 @@ ffmpeg_examples
 /crash-dumps
 /examples/tests
 /examples/internal
+/benchmarks/results/*.json
 /*.pdf
 /test_internal
 /analysis

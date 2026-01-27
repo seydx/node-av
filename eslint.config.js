@@ -23,6 +23,7 @@ export default [
       '**/examples/tests/**',
       '**/projects/**',
       '**/testdata/**',
+      '**/ffbuild/**',
       'script.ts',
       'list.ts',
       '**/prebuildify/**',
