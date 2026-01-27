@@ -444,7 +444,7 @@ Performance comparison with FFmpeg CLI (4K 60fps, 30s test files on Apple M3 Max
 | H.264 Transcode (4K) | 3.6 GB | 3.4 GB | **-5%** |
 | Stream Copy | 28 MB | 1 MB | **-96%** |
 
-📊 **[Full benchmark results](BENCHMARK.md)**
+📊 **[Full benchmark results](https://github.com/seydx/node-av/tree/main/BENCHMARK.md)**
 
 ### Sync vs Async Operations
 
