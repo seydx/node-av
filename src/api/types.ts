@@ -745,6 +745,20 @@ export interface FilterComplexOptions extends FilterOptions {
 }
 
 /**
+ * Options for bitstream filter creation.
+ */
+export interface BitstreamFilterOptions {
+  /**
+   * Filter-specific options.
+   *
+   * Key-value pairs of FFmpeg bitstream filter options.
+   * These are passed directly to the filter via av_opt_set().
+   * Available options depend on the specific filter being used.
+   */
+  options?: Record<string, string | number | boolean | bigint | undefined | null>;
+}
+
+/**
  * Hardware acceleration configuration options.
  *
  * Parameters for configuring hardware-accelerated encoding/decoding.

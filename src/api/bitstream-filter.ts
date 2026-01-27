@@ -9,6 +9,7 @@ import { AsyncQueue } from './utilities/async-queue.js';
 import { Scheduler, SchedulerControl } from './utilities/scheduler.js';
 
 import type { Stream } from '../lib/stream.js';
+import type { BitstreamFilterOptions } from './types.js';
 import type { SchedulableComponent } from './utilities/scheduler.js';
 
 /**
@@ -97,6 +98,8 @@ export class BitStreamFilterAPI implements Disposable {
    *
    * @param stream - Stream to apply filter to
    *
+   * @param filterOptions - Optional filter-specific options
+   *
    * @returns Configured bitstream filter
    *
    * @throws {Error} If initialization fails
@@ -117,13 +120,24 @@ export class BitStreamFilterAPI implements Disposable {
    *
    * @example
    * ```typescript
-   * // Remove metadata
-   * const filter = BitStreamFilterAPI.create('filter_units', stream);
+   * // Remove AUDs from H.264 stream
+   * const filter = BitStreamFilterAPI.create('h264_metadata', stream, {
+   *   options: { aud: 'remove' }
+   * });
+   * ```
+   *
+   * @example
+   * ```typescript
+   * // Set H.264 level
+   * const filter = BitStreamFilterAPI.create('h264_metadata', stream, {
+   *   options: { level: 51 }
+   * });
    * ```
    *
    * @see {@link BitStreamFilter.getByName} For filter discovery
+   * @see {@link BitstreamFilterOptions} For available options
    */
-  static create(filterName: string, stream: Stream): BitStreamFilterAPI {
+  static create(filterName: string, stream: Stream, filterOptions?: BitstreamFilterOptions): BitStreamFilterAPI {
     if (!stream) {
       throw new Error('Stream is required');
     }
@@ -148,6 +162,14 @@ export class BitStreamFilterAPI implements Disposable {
 
       // Set time base
       ctx.inputTimeBase = stream.timeBase;
+
+      // Apply filter-specific options before init
+      if (filterOptions?.options) {
+        for (const [key, value] of Object.entries(filterOptions.options)) {
+          const ret = ctx.setOption(key, value);
+          FFmpegError.throwIfError(ret, `Failed to set bitstream filter option '${key}'`);
+        }
+      }
 
       // Initialize the filter
       const initRet = ctx.init();

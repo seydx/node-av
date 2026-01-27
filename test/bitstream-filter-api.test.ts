@@ -447,4 +447,66 @@ describe('BitStreamFilterAPI', () => {
       packet.unref();
     });
   });
+
+  describe('Filter Options', () => {
+    it('should accept filter options for h264_metadata', async () => {
+      await using media = await Demuxer.open(inputFile);
+      const stream = media.video();
+      assert.ok(stream);
+
+      // Check if codec is H.264
+      if (stream.codecpar.codecId !== AV_CODEC_ID_H264) {
+        // Skip test if not H.264
+        return;
+      }
+
+      // Create filter with options
+      using bsf = BitStreamFilterAPI.create('h264_metadata', stream, {
+        options: {
+          aud: 'remove',
+        },
+      });
+
+      assert.ok(bsf);
+      assert.strictEqual(bsf.name, 'h264_metadata');
+
+      // Process a few packets to verify it works
+      let packetsProcessed = 0;
+      const maxPackets = 3;
+
+      for await (using packet of media.packets()) {
+        if (!packet) break;
+        if (packet.streamIndex !== stream.index) continue;
+
+        const filtered = await bsf.filterAll(packet);
+        assert.ok(Array.isArray(filtered));
+
+        for (const outPacket of filtered) {
+          outPacket.free();
+        }
+
+        packetsProcessed++;
+        if (packetsProcessed >= maxPackets) break;
+      }
+
+      assert.ok(packetsProcessed > 0, 'Should have processed at least one packet');
+    });
+
+    it('should throw for invalid filter option', async () => {
+      await using media = await Demuxer.open(inputFile);
+      const stream = media.video();
+      assert.ok(stream);
+
+      // Try to create filter with invalid option
+      assert.throws(
+        () =>
+          BitStreamFilterAPI.create('null', stream, {
+            options: {
+              invalid_option_that_does_not_exist: 'value',
+            },
+          }),
+        /Failed to set bitstream filter option/,
+      );
+    });
+  });
 });
