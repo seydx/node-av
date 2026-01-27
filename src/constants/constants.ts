@@ -982,9 +982,9 @@ export const AV_HWDEVICE_TYPE_OPENCL = 9 as AVHWDeviceType;
 export const AV_HWDEVICE_TYPE_MEDIACODEC = 10 as AVHWDeviceType;
 export const AV_HWDEVICE_TYPE_VULKAN = 11 as AVHWDeviceType;
 export const AV_HWDEVICE_TYPE_D3D12VA = 12 as AVHWDeviceType;
-export const AV_HWDEVICE_TYPE_AMF = 13 as AVHWDeviceType;
-export const AV_HWDEVICE_TYPE_OHCODEC = 14 as AVHWDeviceType;
-export const AV_HWDEVICE_TYPE_RKMPP = 15 as AVHWDeviceType;
+export const AV_HWDEVICE_TYPE_RKMPP = 13 as AVHWDeviceType;
+export const AV_HWDEVICE_TYPE_AMF = 14 as AVHWDeviceType;
+export const AV_HWDEVICE_TYPE_OHCODEC = 15 as AVHWDeviceType;
 
 // libavutil/hwcontext.h
 export type AVHWFrameTransferDirection = number & { readonly [__ffmpeg_brand]: 'AVHWFrameTransferDirection' };
