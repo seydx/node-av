@@ -46,6 +46,28 @@ describe('HardwareContext', () => {
       }
     });
 
+    it('should not crash when hardware is unavailable', async () => {
+      // This test must NOT use skipInCI - it specifically tests issue #117:
+      // HardwareContext.auto() previously crashed in CI due to implib assert(0)
+      // when dlopen failed for libcuda.so, libva-drm.so, etc.
+      const hw = HardwareContext.auto();
+
+      // In CI without hardware: should return null
+      // On machine with hardware: should return HardwareContext
+      // Either way: should NOT crash
+      if (hw) {
+        // If hardware is available, getEncoderCodec should also not crash
+        const codec = hw.getEncoderCodec('h264');
+        console.log(`Hardware available: ${hw.deviceTypeName}, h264 encoder: ${codec?.name ?? 'none'}`);
+        hw.dispose();
+      } else {
+        console.log('No hardware acceleration available (expected in CI)');
+      }
+
+      // Test passes if we reach here without crashing
+      assert.ok(true, 'HardwareContext.auto() did not crash');
+    });
+
     it('should handle unknown device type', () => {
       assert.equal(HardwareContext.create(AV_HWDEVICE_TYPE_NONE), null, 'Should return null for unknown device type');
     });
