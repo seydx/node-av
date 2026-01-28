@@ -21,6 +21,7 @@ export default [
       '**/.tmp/**',
       '**/externals/**',
       '**/examples/tests/**',
+      '**/examples/electron/**',
       '**/projects/**',
       '**/testdata/**',
       '**/ffbuild/**',
