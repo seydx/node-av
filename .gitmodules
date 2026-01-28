@@ -6,3 +6,6 @@
 	path = externals/node-gyp
 	url = https://github.com/seydx/node-gyp.git
 	branch = main
+[submodule "externals/binary-data"]
+	path = externals/binary-data
+	url = https://github.com/seydx/binary-data.git

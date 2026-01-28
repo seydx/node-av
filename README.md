@@ -38,6 +38,7 @@ Native Node.js bindings for FFmpeg with full TypeScript support. Provides direct
   - [Benchmarks](#benchmarks)
   - [Sync vs Async Operations](#sync-vs-async-operations)
 - [Memory Safety Considerations](#memory-safety-considerations)
+- [Electron](#electron)
 - [Examples](#examples)
 - [Prebuilt Binaries](#prebuilt-binaries)
 - [Troubleshooting](#troubleshooting)
@@ -460,6 +461,22 @@ The key difference: Async methods don't block the Node.js event loop, allowing o
 
 NodeAV provides direct bindings to FFmpeg's C APIs, which work with raw memory pointers. The high-level API adds safety abstractions and automatic resource management, but incorrect usage can still cause crashes. Common issues include mismatched video dimensions, incompatible pixel formats, or improper frame buffer handling. The library validates parameters where possible, but can't guarantee complete memory safety without limiting functionality. When using the low-level API, pay attention to parameter consistency, resource cleanup, and format compatibility. Following the documented patterns helps avoid memory-related issues.
 
+## Electron
+
+NodeAV fully supports Electron applications. The prebuilt binaries are ABI-compatible with Electron, so no native rebuild is required during packaging. Both the native bindings and the bundled FFmpeg CLI binaries work seamlessly within Electron's main process.
+
+Two complete examples are available: one using [Electron Forge](https://github.com/seydx/node-av/tree/main/examples/electron/forge) and one using [Electron Builder](https://github.com/seydx/node-av/tree/main/examples/electron/builder).
+
+If you encounter module resolution errors like `Cannot find module 'lib/binary-stream'`, add this override to your project's `package.json`:
+
+```json
+{
+  "overrides": {
+    "@shinyoshiaki/binary-data": "npm:@seydx/binary-data@0.6.2"
+  }
+}
+```
+
 ## Examples
 
 | Example | FFmpeg | Low-Level API | High-Level API |
@@ -518,7 +535,6 @@ NodeAV provides direct bindings to FFmpeg's C APIs, which work with raw memory p
 | `show-metadata` | [✓](https://github.com/FFmpeg/FFmpeg/tree/master/doc/examples/show_metadata.c) | [✓](https://github.com/seydx/node-av/tree/main/examples/show-metadata.ts) | |
 | `transcode-aac` | [✓](https://github.com/FFmpeg/FFmpeg/tree/master/doc/examples/transcode_aac.c) | [✓](https://github.com/seydx/node-av/tree/main/examples/transcode-aac.ts) | |
 | `transcode` | [✓](https://github.com/FFmpeg/FFmpeg/tree/master/doc/examples/transcode.c) | [✓](https://github.com/seydx/node-av/tree/main/examples/transcode.ts) | |
-
 
 ## Prebuilt Binaries
 

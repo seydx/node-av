@@ -8,8 +8,9 @@
 import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { type } from 'node:os';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
+
+import { getDirname } from '../utils/electron.js';
 
 import type {
   AVCodecID,
@@ -57,8 +58,7 @@ import type {
 } from './native-types.js';
 import type { ChannelLayout, DtsPredictState, IDimension, IRational } from './types.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const __dirname = getDirname(import.meta.url);
 
 // Constructor types for native bindings
 type NativePacketConstructor = new () => NativePacket;

@@ -200,6 +200,8 @@ jobs:
           # Platform packages at the end
           cat >> release_notes.md << EOF
 
+          ### 📦 Packages
+
           The following platform packages have been updated to v$VERSION_NO_V:
           - \`@seydx/node-av-darwin-arm64@$VERSION_NO_V\`
           - \`@seydx/node-av-darwin-x64@$VERSION_NO_V\`

@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>node-av Electron Demo</title>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>node-av</h1>
+        <p>FFmpeg bindings for Node.js & Electron</p>
+      </header>
+
+      <div class="button-group">
+        <button id="btn-info">FFmpeg Info</button>
+        <button id="btn-cli">FFmpeg CLI</button>
+        <button id="btn-hardware">Detect Hardware</button>
+      </div>
+
+      <div class="output-container">
+        <div class="output-header">
+          <div class="indicator"></div>
+          <span>Output</span>
+        </div>
+        <pre id="output">Click a button to get started...</pre>
+      </div>
+    </div>
+    <script type="module" src="/src/renderer.ts"></script>
+  </body>
+</html>

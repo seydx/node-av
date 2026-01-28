@@ -1,5 +1,4 @@
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 
 import {
   AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX,
@@ -47,6 +46,7 @@ import { FFmpegError } from '../lib/error.js';
 import { HardwareDeviceContext } from '../lib/hardware-device-context.js';
 import { Stream } from '../lib/stream.js';
 import { avGetHardwareDeviceTypeFromName } from '../lib/utilities.js';
+import { getDirname } from '../utils/electron.js';
 import { Decoder } from './decoder.js';
 import { Demuxer } from './demuxer.js';
 import { Encoder } from './encoder.js';
@@ -55,8 +55,7 @@ import { FilterAPI } from './filter.js';
 import type { AVCodecID, AVHWDeviceType, AVPixelFormat, FFDecoderCodec, FFEncoderCodec, FFHWDeviceType } from '../constants/index.js';
 import type { BaseCodecName, HardwareOptions } from './types.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const __dirname = getDirname(import.meta.url);
 const h264Data = join(__dirname, 'data', 'test_h264.h264');
 const hevcData = join(__dirname, 'data', 'test_hevc.h265');
 const vp8Data = join(__dirname, 'data', 'test_vp8.ivf');

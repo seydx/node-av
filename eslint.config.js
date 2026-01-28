@@ -21,6 +21,7 @@ export default [
       '**/.tmp/**',
       '**/externals/**',
       '**/examples/tests/**',
+      '**/examples/electron/**',
       '**/projects/**',
       '**/testdata/**',
       '**/ffbuild/**',
@@ -47,7 +48,7 @@ export default [
   }),
   {
     ...jsdoc.configs['flat/recommended-typescript'],
-    files: ['src/ffmpeg/*.ts', 'src/lib/*.ts', 'src/api/*.ts', 'src/api/utilities/*.ts'],
+    files: ['src/ffmpeg/*.ts', 'src/lib/*.ts', 'src/api/*.ts', 'src/api/utilities/*.ts', 'src/utils/*.ts'],
     rules: {
       ...jsdoc.configs['flat/recommended-typescript'].rules,
       'jsdoc/tag-lines': [
