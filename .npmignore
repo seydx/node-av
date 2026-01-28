@@ -26,6 +26,7 @@ typedoc*.json
 CONTRIBUTING.md
 INSTALLATION.md
 CHANGELOG.md
+BENCHMARK.md
 
 /src
 /binary
