@@ -186,14 +186,15 @@ jobs:
             fi
           fi
 
-          # Find the last stable tag (not a beta tag) for commit history
-          LAST_STABLE_TAG=$(git tag -l 'v*' | grep -v '\-beta\.' | sort -V | tail -1)
-          echo "Last stable tag: $LAST_STABLE_TAG"
+          # Find the previous stable tag (not a beta tag) for commit history
+          # Get all stable tags sorted, exclude the current tag, then get the last one
+          PREVIOUS_STABLE_TAG=$(git tag -l 'v*' | grep -v '\-beta\.' | sort -V | grep -v "^${{ github.ref_name }}$" | tail -1)
+          echo "Previous stable tag: $PREVIOUS_STABLE_TAG"
 
-          if [ -n "$LAST_STABLE_TAG" ] && [ "$LAST_STABLE_TAG" != "${{ github.ref_name }}" ]; then
-            echo "### 📋 All Changes since $LAST_STABLE_TAG" >> release_notes.md
+          if [ -n "$PREVIOUS_STABLE_TAG" ]; then
+            echo "### 📋 All Changes since $PREVIOUS_STABLE_TAG" >> release_notes.md
             echo "" >> release_notes.md
-            git log --pretty=format:"- %s (%h) - @%an" $LAST_STABLE_TAG..${{ github.ref_name }} >> release_notes.md
+            git log --pretty=format:"- %s (%h) - @%an" $PREVIOUS_STABLE_TAG..${{ github.ref_name }} >> release_notes.md
             echo "" >> release_notes.md
           fi
 
