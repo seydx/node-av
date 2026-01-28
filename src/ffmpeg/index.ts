@@ -1,13 +1,11 @@
 import { existsSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 
+import { getDirname } from '../utils/electron.js';
 import { getPlatform } from './utils.js';
 import { FFMPEG_VERSION } from './version.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
+const __dirname = getDirname(import.meta.url);
 const ffmpegBinaryPath = resolve(__dirname, '../../binary');
 const ffmpegFile = 'ffmpeg' + (getPlatform() === 'win32' ? '.exe' : '');
 const ffmpegExtractedFilePath = resolve(ffmpegBinaryPath, ffmpegFile);
