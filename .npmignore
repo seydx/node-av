@@ -29,6 +29,7 @@ CHANGELOG.md
 
 /src
 /binary
+/binding.gyp
 /tests
 /binding-jellyfin.gyp
 /binding-msvc.gyp

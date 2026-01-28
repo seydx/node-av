@@ -82,3 +82,5 @@ ffmpeg_examples
 /ffbuild
 /*.bin
 /models
+/electron
+/bin

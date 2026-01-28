@@ -69,7 +69,7 @@
   },
   "dependencies": {
     "unzipper": "^0.12.3",
-    "werift": "^0.22.3"
+    "werift": "^0.22.4"
   },
   "optionalDependencies": {
     "@seydx/node-av-darwin-arm64": "^5.1.0",
