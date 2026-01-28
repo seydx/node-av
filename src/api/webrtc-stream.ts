@@ -296,7 +296,7 @@ export class WebRTCStream {
    *
    * Creates RTCPeerConnection with detected codecs, sets up media tracks,
    * processes the remote SDP offer, and generates a local SDP answer.
-   * Also configures ICE candidate handling via {@link onIceCandidate} callback.
+   * Also configures ICE candidate handling via `onIceCandidate` callback in options.
    * Must be called before {@link start}.
    *
    * @param offerSdp - SDP offer string from remote WebRTC peer

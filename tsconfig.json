@@ -41,5 +41,7 @@
     ".tmp",
     "projects",
     "externals",
+    "examples/electron",
+    "test_internal"
   ]
 }

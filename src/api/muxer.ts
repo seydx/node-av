@@ -527,17 +527,11 @@ export class Muxer implements AsyncDisposable, Disposable {
    * Get MIME type of the output format.
    *
    * Returns format's native MIME type.
-   * For DASH/HLS formats, use {@link getStreamMimeType} for stream-specific MIME types.
-   *
    * Returns null if output is closed or format is not available.
    *
    * @example
    * ```typescript
    * console.log(mp4Output.mimeType); // "video/mp4"
-   * console.log(dashOutput.mimeType); // null (DASH has no global MIME type)
-   *
-   * // For DASH/HLS, get MIME type per stream:
-   * console.log(dashOutput.getStreamMimeType(0)); // "video/mp4"
    * ```
    */
   get mimeType(): string | null {
@@ -555,15 +549,9 @@ export class Muxer implements AsyncDisposable, Disposable {
    * Use this when generating frames programmatically without an input stream.
    *
    * @param encoder - Encoder for encoding frames to packets
-   *
    * @param options - Stream configuration options
-   *
    * @param options.inputStream - Optional input stream for metadata/properties
-   *
-   * @param options.timeBase - Optional custom timebase for the stream
-   *
    * @returns Stream index for packet writing
-   *
    * @throws {Error} If called after packets have been written or output closed
    *
    * @example
@@ -606,15 +594,9 @@ export class Muxer implements AsyncDisposable, Disposable {
    * Direct mapping to avformat_new_stream().
    *
    * @param stream - Input stream (source for properties/metadata)
-   *
    * @param options - Stream configuration options
-   *
    * @param options.encoder - Optional encoder for transcoding
-   *
-   * @param options.timeBase - Optional custom timebase for the stream
-   *
    * @returns Stream index for packet writing
-   *
    * @throws {Error} If called after packets have been written or output closed
    *
    * @example
@@ -629,14 +611,6 @@ export class Muxer implements AsyncDisposable, Disposable {
    * // With encoding
    * const videoIdx = output.addStream(input.video(), {
    *   encoder: videoEncoder
-   * });
-   * ```
-   *
-   * @example
-   * ```typescript
-   * // Stream copy with custom timebase
-   * const streamIdx = output.addStream(input.video(), {
-   *   timeBase: { num: 1, den: 90000 }
    * });
    * ```
    *
