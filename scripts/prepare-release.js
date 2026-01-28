@@ -8,11 +8,19 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, '..');
 
-// Get version type from command line (patch, minor, major)
+// Get version type from command line
 const versionType = process.argv[2] || 'patch';
 
-if (!['patch', 'minor', 'major'].includes(versionType)) {
-  console.error('Usage: node prepare-release.js [patch|minor|major]');
+const validTypes = ['patch', 'minor', 'major', 'beta-patch', 'beta-minor', 'beta-major'];
+if (!validTypes.includes(versionType)) {
+  console.error('Usage: node prepare-release.js [patch|minor|major|beta-patch|beta-minor|beta-major]');
+  console.error('');
+  console.error('  patch       - Bump patch version (1.0.0 -> 1.0.1), or promote beta to stable');
+  console.error('  minor       - Bump minor version (1.0.0 -> 1.1.0), or promote beta to stable');
+  console.error('  major       - Bump major version (1.0.0 -> 2.0.0), or promote beta to stable');
+  console.error('  beta-patch  - Create/bump beta (1.0.0 -> 1.0.1-beta.1, or beta.1 -> beta.2)');
+  console.error('  beta-minor  - Create/bump beta (1.0.0 -> 1.1.0-beta.1, or beta.1 -> beta.2)');
+  console.error('  beta-major  - Create/bump beta (1.0.0 -> 2.0.0-beta.1, or beta.1 -> beta.2)');
   process.exit(1);
 }
 
@@ -23,19 +31,71 @@ const packagePath = join(rootDir, 'package.json');
 const packageJson = JSON.parse(readFileSync(packagePath, 'utf8'));
 const currentVersion = packageJson.version;
 
-// Calculate new version
-const [major, minor, patch] = currentVersion.split('.').map(Number);
+// Parse current version (handles both regular and prerelease versions)
+const versionMatch = currentVersion.match(/^(\d+)\.(\d+)\.(\d+)(?:-(alpha|beta|rc)\.(\d+))?$/);
+if (!versionMatch) {
+  console.error(`Invalid current version format: ${currentVersion}`);
+  process.exit(1);
+}
+
+const [, majorStr, minorStr, patchStr, currentPreType, currentPreNum] = versionMatch;
+const major = Number(majorStr);
+const minor = Number(minorStr);
+const patch = Number(patchStr);
+
 let newVersion;
+
+// Check if we're currently on a prerelease version
+const isPrerelease = currentPreType !== undefined;
 
 switch (versionType) {
   case 'major':
-    newVersion = `${major + 1}.0.0`;
+    // If on prerelease, promote to stable; otherwise bump major
+    if (isPrerelease) {
+      newVersion = `${major}.${minor}.${patch}`;
+    } else {
+      newVersion = `${major + 1}.0.0`;
+    }
     break;
   case 'minor':
-    newVersion = `${major}.${minor + 1}.0`;
+    // If on prerelease, promote to stable; otherwise bump minor
+    if (isPrerelease) {
+      newVersion = `${major}.${minor}.${patch}`;
+    } else {
+      newVersion = `${major}.${minor + 1}.0`;
+    }
     break;
   case 'patch':
-    newVersion = `${major}.${minor}.${patch + 1}`;
+    // If on prerelease, promote to stable; otherwise bump patch
+    if (isPrerelease) {
+      newVersion = `${major}.${minor}.${patch}`;
+    } else {
+      newVersion = `${major}.${minor}.${patch + 1}`;
+    }
+    break;
+  case 'beta-patch':
+    // If already on beta, increment beta number; otherwise create new beta
+    if (isPrerelease && currentPreType === 'beta') {
+      newVersion = `${major}.${minor}.${patch}-beta.${Number(currentPreNum) + 1}`;
+    } else {
+      newVersion = `${major}.${minor}.${patch + 1}-beta.1`;
+    }
+    break;
+  case 'beta-minor':
+    // If already on beta, increment beta number; otherwise create new beta
+    if (isPrerelease && currentPreType === 'beta') {
+      newVersion = `${major}.${minor}.${patch}-beta.${Number(currentPreNum) + 1}`;
+    } else {
+      newVersion = `${major}.${minor + 1}.0-beta.1`;
+    }
+    break;
+  case 'beta-major':
+    // If already on beta, increment beta number; otherwise create new beta
+    if (isPrerelease && currentPreType === 'beta') {
+      newVersion = `${major}.${minor}.${patch}-beta.${Number(currentPreNum) + 1}`;
+    } else {
+      newVersion = `${major + 1}.0.0-beta.1`;
+    }
     break;
 }
 

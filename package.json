@@ -63,6 +63,9 @@
     "release:patch": "npm run build:tsc && node scripts/prepare-release.js patch",
     "release:minor": "npm run build:tsc && node scripts/prepare-release.js minor",
     "release:major": "npm run build:tsc && node scripts/prepare-release.js major",
+    "release:beta:patch": "npm run build:tsc && node scripts/prepare-release.js beta-patch",
+    "release:beta:minor": "npm run build:tsc && node scripts/prepare-release.js beta-minor",
+    "release:beta:major": "npm run build:tsc && node scripts/prepare-release.js beta-major",
     "test": "tsx --test test/*.test.ts",
     "test:all": "npm run build:tests && npm run build:tsc && tsx --test test/*.test.ts",
     "update": "updates --update ./"

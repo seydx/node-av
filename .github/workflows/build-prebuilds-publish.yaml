@@ -160,65 +160,114 @@ jobs:
           VERSION="${{ github.ref_name }}"
           VERSION_NO_V="${VERSION#v}"
 
+          # Check if this is a beta release
+          IS_BETA="false"
+          if [[ "$VERSION_NO_V" == *"-beta."* ]]; then
+            IS_BETA="true"
+            # Extract base version (e.g., 5.2.0 from 5.2.0-beta.1)
+            BASE_VERSION="${VERSION_NO_V%%-beta.*}"
+          fi
+
           # Start building the release body
-          cat > release_notes.md << 'EOF'
-          ## node-av Release ${{ github.ref_name }}
+          echo "" > release_notes.md
 
-          ### 📦 Updated Packages
+          # Beta warning at the top
+          if [ "$IS_BETA" = "true" ]; then
+            echo "> ⚠️ This is a pre-release version for testing. Install with: \`npm install node-av@beta\`" >> release_notes.md
+            echo "" >> release_notes.md
+          fi
 
-          The following platform packages have been updated to ${{ github.ref_name }}:
-          - `@seydx/node-av-darwin-arm64@${{ github.ref_name }}`
-          - `@seydx/node-av-darwin-x64@${{ github.ref_name }}`
-          - `@seydx/node-av-linux-arm64@${{ github.ref_name }}`
-          - `@seydx/node-av-linux-x64@${{ github.ref_name }}`
-          - `@seydx/node-av-win32-arm64-mingw@${{ github.ref_name }}`
-          - `@seydx/node-av-win32-x64-mingw@${{ github.ref_name }}`
-          - `@seydx/node-av-win32-arm64-msvc@${{ github.ref_name }}`
-          - `@seydx/node-av-win32-x64-msvc@${{ github.ref_name }}`
-          EOF
-
-          # Extract the specific version section from CHANGELOG.md
-          if [ -f "CHANGELOG.md" ]; then
-            # Extract content for this specific version
+          # Extract the specific version section from CHANGELOG.md (only for stable releases)
+          if [ "$IS_BETA" = "false" ] && [ -f "CHANGELOG.md" ]; then
             VERSION_CONTENT=$(sed -n "/## \[${VERSION_NO_V}\]/,/## \[/p" CHANGELOG.md | sed '$d')
-
             if [ -n "$VERSION_CONTENT" ]; then
-              echo "" >> release_notes.md
-              # Remove the version header line and add content
               echo "$VERSION_CONTENT" | tail -n +2 >> release_notes.md
+              echo "" >> release_notes.md
             fi
           fi
 
-          # Always add commit history
-          PREVIOUS_TAG=$(git describe --tags --abbrev=0 ${{ github.ref_name }}^ 2>/dev/null || echo "")
-          if [ -n "$PREVIOUS_TAG" ]; then
+          # Find the last stable tag (not a beta tag) for commit history
+          LAST_STABLE_TAG=$(git tag -l 'v*' | grep -v '\-beta\.' | sort -V | tail -1)
+          echo "Last stable tag: $LAST_STABLE_TAG"
+
+          if [ -n "$LAST_STABLE_TAG" ] && [ "$LAST_STABLE_TAG" != "${{ github.ref_name }}" ]; then
+            echo "### 📋 All Changes since $LAST_STABLE_TAG" >> release_notes.md
             echo "" >> release_notes.md
-            echo "### 📋 All Changes since $PREVIOUS_TAG" >> release_notes.md
+            git log --pretty=format:"- %s (%h) - @%an" $LAST_STABLE_TAG..${{ github.ref_name }} >> release_notes.md
             echo "" >> release_notes.md
-            git log --pretty=format:"- %s (%h) - @%an" $PREVIOUS_TAG..${{ github.ref_name }} >> release_notes.md
           fi
+
+          # Platform packages at the end
+          cat >> release_notes.md << EOF
+
+          The following platform packages have been updated to v$VERSION_NO_V:
+          - \`@seydx/node-av-darwin-arm64@$VERSION_NO_V\`
+          - \`@seydx/node-av-darwin-x64@$VERSION_NO_V\`
+          - \`@seydx/node-av-linux-arm64@$VERSION_NO_V\`
+          - \`@seydx/node-av-linux-x64@$VERSION_NO_V\`
+          - \`@seydx/node-av-win32-arm64-mingw@$VERSION_NO_V\`
+          - \`@seydx/node-av-win32-x64-mingw@$VERSION_NO_V\`
+          - \`@seydx/node-av-win32-arm64-msvc@$VERSION_NO_V\`
+          - \`@seydx/node-av-win32-x64-msvc@$VERSION_NO_V\`
+          EOF
 
           # Output the release notes
           cat release_notes.md
 
+      - name: Determine NPM tag
+        id: npm_tag
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          echo "Version: $VERSION"
+
+          # Determine NPM dist-tag based on version
+          if [[ "$VERSION" == *"-beta."* ]]; then
+            echo "tag=beta" >> $GITHUB_OUTPUT
+            echo "NPM tag: beta"
+          else
+            echo "tag=latest" >> $GITHUB_OUTPUT
+            echo "NPM tag: latest"
+          fi
+
       - name: Publish to NPM
         run: |
+          NPM_TAG="${{ steps.npm_tag.outputs.tag }}"
+          echo "Publishing with tag: $NPM_TAG"
+
           # Publish platform packages
           for pkg_dir in packages/*/; do
             if [ -d "$pkg_dir" ]; then
               cd "$pkg_dir"
-              npm publish --access public
+              npm publish --access public --tag "$NPM_TAG"
               cd -
             fi
           done
 
           # Publish main package
-          npm publish --access public
+          npm publish --access public --tag "$NPM_TAG"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Delete existing pre-release
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+
+          # Find and delete ALL existing pre-releases (we only keep one at a time)
+          echo "Deleting all existing pre-releases..."
+          RELEASES=$(gh release list --json tagName,isPrerelease -q ".[] | select(.isPrerelease == true) | .tagName" 2>/dev/null || echo "")
+
+          for TAG in $RELEASES; do
+            if [ "$TAG" != "v$VERSION" ]; then
+              echo "Deleting pre-release: $TAG"
+              gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+            fi
+          done
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: "*.zip"
           body_path: release_notes.md
+          prerelease: ${{ steps.npm_tag.outputs.tag == 'beta' }}
