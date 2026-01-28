@@ -452,9 +452,6 @@ export class RTPStream {
         copyInitialNonkeyframes: true,
         format: 'rtp',
         maxPacketSize: this.options.video.mtu,
-        options: {
-          pkt_size: this.options.video.mtu,
-        },
       },
     );
 
@@ -550,9 +547,6 @@ export class RTPStream {
           copyInitialNonkeyframes: true,
           format: 'rtp',
           maxPacketSize: this.options.audio.mtu,
-          options: {
-            pkt_size: this.options.audio.mtu,
-          },
         },
       );
     }
