@@ -23,10 +23,18 @@ export { TimestampUtils } from './timestamp.js';
 export { StreamingUtils } from './streaming.js';
 
 // Whisper Model Downloader
-export { WhisperDownloader } from './whisper-model.js';
+export {
+  WhisperDownloader,
+  WHISPER_MODELS,
+  WHISPER_VAD_MODELS,
+  type DownloadOptions,
+  type WhisperModelType,
+  type WhisperModelName,
+  type WhisperVADModelName,
+} from './whisper-model.js';
 
 // AsyncQueue
 export { AsyncQueue } from './async-queue.js';
 
 // Scheduler
-export { Scheduler } from './scheduler.js';
+export { Scheduler, SchedulerControl, type SchedulableComponent } from './scheduler.js';
