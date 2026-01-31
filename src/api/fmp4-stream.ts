@@ -247,7 +247,7 @@ export const FMP4_CODECS = {
  */
 export class FMP4Stream {
   private options: Required<FMP4StreamOptions>;
-  private inputUrl: string;
+  private inputUrl: string | null;
   private inputOptions: DemuxerOptions;
   private input?: Demuxer;
   private output?: Muxer;
@@ -263,7 +263,7 @@ export class FMP4Stream {
   private incompleteBoxBuffer: Buffer | null = null;
 
   /**
-   * @param inputUrl - Media input URL
+   * @param input - Media input URL or pre-opened Demuxer
    *
    * @param options - Stream configuration options
    *
@@ -271,9 +271,15 @@ export class FMP4Stream {
    *
    * @internal
    */
-  private constructor(inputUrl: string, options: FMP4StreamOptions) {
-    this.inputUrl = inputUrl;
+  private constructor(input: string | Demuxer, options: FMP4StreamOptions) {
+    if (typeof input === 'string') {
+      this.inputUrl = input;
+    } else {
+      this.inputUrl = null;
+      this.input = input;
+    }
 
+    const inputUrl = this.inputUrl ?? '';
     this.inputOptions = {
       ...options.inputOptions,
       options: {
@@ -323,7 +329,7 @@ export class FMP4Stream {
    * Configures the stream with input URL and options. The input is not opened
    * until start() is called, allowing the stream to be reused after stop().
    *
-   * @param inputUrl - Media source URL (RTSP, file path, HTTP, etc.)
+   * @param input - Media source URL (RTSP, file path, HTTP, etc.) or a pre-opened {@link Demuxer}
    *
    * @param options - Stream configuration options with supported codecs
    *
@@ -348,8 +354,8 @@ export class FMP4Stream {
    * });
    * ```
    */
-  static create(inputUrl: string, options: FMP4StreamOptions = {}): FMP4Stream {
-    return new FMP4Stream(inputUrl, options);
+  static create(input: string | Demuxer, options: FMP4StreamOptions = {}): FMP4Stream {
+    return new FMP4Stream(input, options);
   }
 
   /**
@@ -490,7 +496,12 @@ export class FMP4Stream {
     }
 
     // Open input if not already open
-    this.input ??= await Demuxer.open(this.inputUrl, this.inputOptions);
+    if (!this.input) {
+      if (!this.inputUrl) {
+        throw new Error('No input URL or Demuxer provided');
+      }
+      this.input = await Demuxer.open(this.inputUrl, this.inputOptions);
+    }
 
     const videoStream = this.input.video();
     const audioStream = this.input.audio();
