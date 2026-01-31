@@ -549,9 +549,13 @@ export class Muxer implements AsyncDisposable, Disposable {
    * Use this when generating frames programmatically without an input stream.
    *
    * @param encoder - Encoder for encoding frames to packets
+   *
    * @param options - Stream configuration options
+   *
    * @param options.inputStream - Optional input stream for metadata/properties
+   *
    * @returns Stream index for packet writing
+   *
    * @throws {Error} If called after packets have been written or output closed
    *
    * @example
@@ -594,9 +598,13 @@ export class Muxer implements AsyncDisposable, Disposable {
    * Direct mapping to avformat_new_stream().
    *
    * @param stream - Input stream (source for properties/metadata)
+   *
    * @param options - Stream configuration options
+   *
    * @param options.encoder - Optional encoder for transcoding
+   *
    * @returns Stream index for packet writing
+   *
    * @throws {Error} If called after packets have been written or output closed
    *
    * @example
@@ -1061,6 +1069,20 @@ export class Muxer implements AsyncDisposable, Disposable {
         clonedPacket.free(); // Free the clone since we won't use it
         return;
       }
+    } else if (this.options.startTime !== undefined) {
+      // For encoded (non-streamcopy) streams, apply startTime offset.
+      // Streamcopy handles this in ofStreamcopy; for encoding, the encoder preserves
+      // decoded frame timestamps which may include a device-based offset (e.g., system
+      // uptime from avfoundation). Subtract startTime to normalize timestamps to zero.
+      const startTimeUs = BigInt(Math.floor(this.options.startTime * 1000000));
+      const tsOffset = avRescaleQ(startTimeUs, AV_TIME_BASE_Q, clonedPacket.timeBase);
+
+      if (clonedPacket.pts !== AV_NOPTS_VALUE) {
+        clonedPacket.pts -= tsOffset;
+      }
+      if (clonedPacket.dts !== AV_NOPTS_VALUE) {
+        clonedPacket.dts -= tsOffset;
+      }
     }
 
     // Check if any streams are still uninitialized or header is being written
@@ -1383,6 +1405,20 @@ export class Muxer implements AsyncDisposable, Disposable {
       if (!shouldWrite) {
         clonedPacket.free(); // Free the clone since we won't use it
         return;
+      }
+    } else if (this.options.startTime !== undefined) {
+      // For encoded (non-streamcopy) streams, apply startTime offset.
+      // Streamcopy handles this in ofStreamcopy; for encoding, the encoder preserves
+      // decoded frame timestamps which may include a device-based offset (e.g., system
+      // uptime from avfoundation). Subtract startTime to normalize timestamps to zero.
+      const startTimeUs = BigInt(Math.floor(this.options.startTime * 1000000));
+      const tsOffset = avRescaleQ(startTimeUs, AV_TIME_BASE_Q, clonedPacket.timeBase);
+
+      if (clonedPacket.pts !== AV_NOPTS_VALUE) {
+        clonedPacket.pts -= tsOffset;
+      }
+      if (clonedPacket.dts !== AV_NOPTS_VALUE) {
+        clonedPacket.dts -= tsOffset;
       }
     }
 
