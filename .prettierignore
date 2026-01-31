@@ -8,3 +8,4 @@ interface/
 node_modules/
 bundle/
 build/
+examples/electron/*
