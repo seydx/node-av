@@ -13,6 +13,7 @@ import {
 import { RTPStream } from './rtp-stream.js';
 
 import type { AVCodecID } from '../constants/index.js';
+import type { Demuxer } from './demuxer.js';
 import type { RTPStreamOptions } from './rtp-stream.js';
 
 /**
@@ -152,7 +153,7 @@ export class WebRTCStream {
    * for WebRTC peer connection negotiation. Does not start streaming yet.
    * Call {@link setOffer} to negotiate SDP and {@link start} to begin streaming.
    *
-   * @param inputUrl - Media source URL (RTSP, file path, HTTP, etc.)
+   * @param input - Media source URL (RTSP, file path, HTTP, etc.) or a pre-opened {@link Demuxer}
    *
    * @param options - Session configuration options
    *
@@ -160,7 +161,7 @@ export class WebRTCStream {
    *
    * @example
    * ```typescript
-   * const session = await WebRTCStream.create('rtsp://camera.local/stream', {
+   * const session = WebRTCStream.create('rtsp://camera.local/stream', {
    *   mtu: 1200,
    *   hardware: 'auto',
    *   iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
@@ -169,19 +170,18 @@ export class WebRTCStream {
    *
    * @example
    * ```typescript
-   * // Session from file with hardware acceleration
-   * const session = await WebRTCStream.create('video.mp4', {
-   *   hardware: {
-   *     deviceType: AV_HWDEVICE_TYPE_CUDA
-   *   }
+   * // Session from a pre-opened Demuxer (e.g. screen capture)
+   * const demuxer = await Device.openScreen({ frameRate: 30 });
+   * const session = WebRTCStream.create(demuxer, {
+   *   hardware: 'auto'
    * });
    * ```
    */
-  static create(inputUrl: string, options: WebRTCStreamOptions = {}): WebRTCStream {
+  static create(input: string | Demuxer, options: WebRTCStreamOptions = {}): WebRTCStream {
     const session = new WebRTCStream(options);
 
     // Create stream with WebRTC-specific codec support
-    session.stream = RTPStream.create(inputUrl, {
+    session.stream = RTPStream.create(input, {
       video: options.video,
       audio: options.audio,
       hardware: options.hardware,
@@ -285,8 +285,19 @@ export class WebRTCStream {
     const videoStream = input.video();
     const audioStream = input.audio();
 
+    // Try the input codec first; if unsupported (e.g. rawvideo from device capture),
+    // fall back to the first supported video codec (the transcode target)
+    let videoConfig = this.getVideoCodecConfig(videoStream?.codecpar.codecId);
+    if (!videoConfig && videoStream) {
+      const supportedVideoCodecs = [AV_CODEC_ID_H264, AV_CODEC_ID_HEVC, AV_CODEC_ID_VP8, AV_CODEC_ID_VP9, AV_CODEC_ID_AV1];
+      for (const codecId of supportedVideoCodecs) {
+        videoConfig = this.getVideoCodecConfig(codecId);
+        if (videoConfig) break;
+      }
+    }
+
     return {
-      video: this.getVideoCodecConfig(videoStream?.codecpar.codecId),
+      video: videoConfig,
       audio: this.getAudioCodecConfig(audioStream?.codecpar.codecId),
     };
   }
@@ -323,7 +334,11 @@ export class WebRTCStream {
   async setOffer(offerSdp: string): Promise<string> {
     const codecs = this.getCodecs();
 
-    const videoConfig: any = codecs.video;
+    const videoConfig: any = codecs.video ?? {
+      mimeType: 'video/H264',
+      clockRate: 90000,
+      payloadType: 96,
+    };
     delete videoConfig.codecId;
 
     const audioConfig: any = codecs.audio ?? {

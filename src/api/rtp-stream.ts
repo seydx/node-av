@@ -134,7 +134,7 @@ export interface RTPStreamOptions {
  */
 export class RTPStream {
   private options: Required<RTPStreamOptions>;
-  private inputUrl: string;
+  private inputUrl: string | null;
   private inputOptions: DemuxerOptions;
   private input?: Demuxer;
   private videoOutput?: Muxer;
@@ -151,7 +151,7 @@ export class RTPStream {
   private supportedAudioCodecs: Set<AVCodecID | FFAudioEncoder>;
 
   /**
-   * @param inputUrl - Media input URL
+   * @param input - Media input URL or pre-opened Demuxer
    *
    * @param options - Stream configuration options
    *
@@ -159,9 +159,15 @@ export class RTPStream {
    *
    * @internal
    */
-  private constructor(inputUrl: string, options: RTPStreamOptions) {
-    this.inputUrl = inputUrl;
+  private constructor(input: string | Demuxer, options: RTPStreamOptions) {
+    if (typeof input === 'string') {
+      this.inputUrl = input;
+    } else {
+      this.inputUrl = null;
+      this.input = input;
+    }
 
+    const inputUrl = this.inputUrl ?? '';
     this.inputOptions = {
       ...options.inputOptions,
       options: {
@@ -217,7 +223,7 @@ export class RTPStream {
    * Configures the stream with input URL and options. The input is not opened
    * until start() is called, allowing the stream to be reused after stop().
    *
-   * @param inputUrl - Media source URL (RTSP, file path, HTTP, etc.)
+   * @param input - Media source URL (RTSP, file path, HTTP, etc.) or a pre-opened {@link Demuxer}
    *
    * @param options - Stream configuration options
    *
@@ -240,9 +246,19 @@ export class RTPStream {
    *   hardware: 'auto'
    * });
    * ```
+   *
+   * @example
+   * ```typescript
+   * // Stream from a pre-opened Demuxer (e.g. Device.openScreen())
+   * const demuxer = await Device.openScreen({ frameRate: 30 });
+   * const stream = RTPStream.create(demuxer, {
+   *   hardware: 'auto',
+   *   onVideoPacket: (rtp) => sendPacket(rtp)
+   * });
+   * ```
    */
-  static create(inputUrl: string, options: RTPStreamOptions = {}): RTPStream {
-    return new RTPStream(inputUrl, options);
+  static create(input: string | Demuxer, options: RTPStreamOptions = {}): RTPStream {
+    return new RTPStream(input, options);
   }
 
   /**
@@ -308,7 +324,12 @@ export class RTPStream {
       return;
     }
 
-    this.input ??= await Demuxer.open(this.inputUrl, this.inputOptions);
+    if (!this.input) {
+      if (!this.inputUrl) {
+        throw new Error('No input URL or Demuxer provided');
+      }
+      this.input = await Demuxer.open(this.inputUrl, this.inputOptions);
+    }
 
     const videoStream = this.input.video();
     const audioStream = this.input.audio();
