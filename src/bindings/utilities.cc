@@ -502,7 +502,7 @@ Napi::Value Utilities::ImageAlloc(const Napi::CallbackInfo& info) {
   result.Set("size", Napi::Number::New(env, ret));
   
   // Create buffer from allocated memory
-  Napi::Buffer<uint8_t> buffer = Napi::Buffer<uint8_t>::New(env, pointers[0], ret,
+  Napi::Buffer<uint8_t> buffer = Napi::Buffer<uint8_t>::NewOrCopy(env, pointers[0], ret,
     [](Napi::Env, uint8_t* data) {
       av_freep(&data);
     });
@@ -1340,7 +1340,7 @@ Napi::Value Utilities::SamplesAlloc(const Napi::CallbackInfo& info) {
       if (audio_data[i]) {
         // Only attach finalizer to first buffer
         if (i == 0) {
-          Napi::Buffer<uint8_t> buffer = Napi::Buffer<uint8_t>::New(env, audio_data[i], linesize,
+          Napi::Buffer<uint8_t> buffer = Napi::Buffer<uint8_t>::NewOrCopy(env, audio_data[i], linesize,
             [](Napi::Env, uint8_t* data) {
               av_freep(&data);
             });
@@ -1348,7 +1348,7 @@ Napi::Value Utilities::SamplesAlloc(const Napi::CallbackInfo& info) {
         } else {
           // For subsequent channels, create buffer without finalizer
           // as they point into the same allocation
-          Napi::Buffer<uint8_t> buffer = Napi::Buffer<uint8_t>::New(env, audio_data[i], linesize,
+          Napi::Buffer<uint8_t> buffer = Napi::Buffer<uint8_t>::NewOrCopy(env, audio_data[i], linesize,
             [](Napi::Env, uint8_t*) {
               // No-op - memory will be freed with first buffer
             });
@@ -1358,7 +1358,7 @@ Napi::Value Utilities::SamplesAlloc(const Napi::CallbackInfo& info) {
     }
   } else {
     // For packed formats, all data is in the first buffer
-    Napi::Buffer<uint8_t> buffer = Napi::Buffer<uint8_t>::New(env, audio_data[0], ret,
+    Napi::Buffer<uint8_t> buffer = Napi::Buffer<uint8_t>::NewOrCopy(env, audio_data[0], ret,
       [](Napi::Env, uint8_t* data) {
         av_freep(&data);
       });

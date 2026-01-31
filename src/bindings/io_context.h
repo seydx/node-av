@@ -74,7 +74,6 @@ private:
   friend class IOSkipWorker;
 
   AVIOContext* ctx_ = nullptr;
-  
   // Custom I/O callback support
   struct CallbackData {
     IOContext* io_context;

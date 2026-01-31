@@ -50,8 +50,8 @@ Napi::Object IOContext::Init(Napi::Env env, Napi::Object exports) {
   return exports;
 }
 
-IOContext::IOContext(const Napi::CallbackInfo& info) 
-  : Napi::ObjectWrap<IOContext>(info), 
+IOContext::IOContext(const Napi::CallbackInfo& info)
+  : Napi::ObjectWrap<IOContext>(info),
     ctx_(nullptr),
     buffer_(nullptr) {
   // Constructor does nothing - user must call allocContext() or open2()
@@ -559,17 +559,17 @@ Napi::Value IOContext::AllocContextWithCallbacks(const Napi::CallbackInfo& info)
 
 Napi::Value IOContext::FreeContext(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
-  
+
   // Clean up callbacks first if they exist
   CleanupCallbacks();
-  
+
   if (ctx_) {
     // avio_context_free will also free the buffer
     avio_context_free(&ctx_);
     ctx_ = nullptr;
     buffer_ = nullptr;  // Buffer was freed by avio_context_free
   }
-  
+
   return env.Undefined();
 }
 

@@ -250,7 +250,7 @@ Napi::Value Packet::NewSideData(const Napi::CallbackInfo& info) {
   
   // Return as Buffer that references the side data (not a copy)
   // Note: The buffer lifetime is tied to the packet
-  return Napi::Buffer<uint8_t>::New(env, data, size, [](Napi::Env, uint8_t*) {
+  return Napi::Buffer<uint8_t>::NewOrCopy(env, data, size, [](Napi::Env, uint8_t*) {
     // No-op finalizer since the data is owned by the packet
   });
 }

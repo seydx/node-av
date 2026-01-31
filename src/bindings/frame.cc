@@ -797,13 +797,13 @@ Napi::Value Frame::GetData(const Napi::CallbackInfo& info) {
       // Planar audio - one plane per channel
       for (int i = 0; i < nb_channels && f->data[i]; i++) {
         size_t plane_size = f->nb_samples * bytes_per_sample;
-        planes.Set(static_cast<uint32_t>(i), Napi::Buffer<uint8_t>::New(env, f->data[i], plane_size));
+        planes.Set(static_cast<uint32_t>(i), Napi::Buffer<uint8_t>::NewOrCopy(env, f->data[i], plane_size));
       }
     } else {
       // Interleaved audio - all channels in one plane
       if (f->data[0]) {
         size_t plane_size = f->nb_samples * nb_channels * bytes_per_sample;
-        planes.Set(static_cast<uint32_t>(0), Napi::Buffer<uint8_t>::New(env, f->data[0], plane_size));
+        planes.Set(static_cast<uint32_t>(0), Napi::Buffer<uint8_t>::NewOrCopy(env, f->data[0], plane_size));
       }
     }
   } else {
@@ -821,8 +821,8 @@ Napi::Value Frame::GetData(const Napi::CallbackInfo& info) {
         }
         size_t planeSize = f->linesize[i] * planeHeight;
         
-        // Create buffer view (not a copy)
-        planes.Set(static_cast<uint32_t>(i), Napi::Buffer<uint8_t>::New(env, f->data[i], planeSize));
+        // Create buffer view (copies in Electron where external buffers are not allowed)
+        planes.Set(static_cast<uint32_t>(i), Napi::Buffer<uint8_t>::NewOrCopy(env, f->data[i], planeSize));
       }
     }
   }
@@ -862,13 +862,13 @@ Napi::Value Frame::GetExtendedData(const Napi::CallbackInfo& info) {
         if (!f->extended_data[ch]) break;
         
         size_t channel_size = nb_samples * bytes_per_sample;
-        extData.Set(ch, Napi::Buffer<uint8_t>::New(env, f->extended_data[ch], channel_size));
+        extData.Set(ch, Napi::Buffer<uint8_t>::NewOrCopy(env, f->extended_data[ch], channel_size));
       }
     } else {
       // All channels interleaved in single buffer
       size_t total_size = nb_samples * nb_channels * bytes_per_sample;
       if (f->extended_data[0]) {
-        extData.Set(0u, Napi::Buffer<uint8_t>::New(env, f->extended_data[0], total_size));
+        extData.Set(0u, Napi::Buffer<uint8_t>::NewOrCopy(env, f->extended_data[0], total_size));
       }
     }
   } else {
@@ -887,7 +887,7 @@ Napi::Value Frame::GetExtendedData(const Napi::CallbackInfo& info) {
       }
       
       size_t planeSize = f->linesize[i] * planeHeight;
-      extData.Set(i, Napi::Buffer<uint8_t>::New(env, f->extended_data[i], planeSize));
+      extData.Set(i, Napi::Buffer<uint8_t>::NewOrCopy(env, f->extended_data[i], planeSize));
     }
   }
   
@@ -1022,7 +1022,7 @@ Napi::Value Frame::NewSideData(const Napi::CallbackInfo& info) {
   
   // Return as Buffer that references the side data (not a copy)
   // Note: The buffer lifetime is tied to the frame
-  return Napi::Buffer<uint8_t>::New(env, sd->data, sd->size, [](Napi::Env, uint8_t*) {
+  return Napi::Buffer<uint8_t>::NewOrCopy(env, sd->data, sd->size, [](Napi::Env, uint8_t*) {
     // No-op finalizer since the data is owned by the frame
   });
 }
