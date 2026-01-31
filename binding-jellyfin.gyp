@@ -442,6 +442,7 @@
                             "-lstrmiids",
                             "-lmfuuid",
                             "-lpsapi",
+                            "-lvfw32",
                         ],
                         "cflags_cc": [
                             "-std=c++17",
