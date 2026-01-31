@@ -25,6 +25,7 @@ export default [
       '**/projects/**',
       '**/testdata/**',
       '**/ffbuild/**',
+      '**/test_internal/**',
       'script.ts',
       'list.ts',
       '**/prebuildify/**',
