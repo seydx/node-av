@@ -22,7 +22,7 @@ import {
   AVSEEK_SET,
 } from '../constants/constants.js';
 import { Dictionary } from '../lib/dictionary.js';
-import { FFmpegError } from '../lib/error.js';
+import { AVERROR_EAGAIN, FFmpegError } from '../lib/error.js';
 import { FormatContext } from '../lib/format-context.js';
 import { InputFormat } from '../lib/input-format.js';
 import { IOContext } from '../lib/io-context.js';
@@ -388,8 +388,9 @@ export class Demuxer implements AsyncDisposable, Disposable {
    */
   static async open(input: string | Buffer, options?: DemuxerOptions): Promise<Demuxer>;
   static async open(input: IOInputCallbacks, options: (DemuxerOptions | undefined) & { format: string }): Promise<Demuxer>;
+  static async open(input: IOContext, options: (DemuxerOptions | undefined) & { format: string }): Promise<Demuxer>;
   static async open(rawData: RawData, options?: DemuxerOptions): Promise<Demuxer>;
-  static async open(input: string | Buffer | RawData | IOInputCallbacks, options: DemuxerOptions = {}): Promise<Demuxer> {
+  static async open(input: string | Buffer | RawData | IOInputCallbacks | IOContext, options: DemuxerOptions = {}): Promise<Demuxer> {
     // Check if input is raw data
     if (typeof input === 'object' && 'type' in input && ('width' in input || 'sampleRate' in input)) {
       // Build options for raw data
@@ -443,9 +444,10 @@ export class Demuxer implements AsyncDisposable, Disposable {
 
       if (typeof input === 'string') {
         // File path or URL - resolve relative paths to absolute
+        // Skip path resolution for device inputs
         // Check if it's a URL (starts with protocol://) or a file path
         const isUrl = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(input);
-        const resolvedInput = isUrl ? input : resolve(input);
+        const resolvedInput = isUrl || inputFormat ? input : resolve(input);
 
         const ret = await formatContext.openInput(resolvedInput, inputFormat, optionsDict);
         FFmpegError.throwIfError(ret, 'Failed to open input');
@@ -461,6 +463,18 @@ export class Demuxer implements AsyncDisposable, Disposable {
         formatContext.pb = ioContext;
         const ret = await formatContext.openInput('', inputFormat, optionsDict);
         FFmpegError.throwIfError(ret, 'Failed to open input from buffer');
+      } else if (input instanceof IOContext) {
+        if (!options.format) {
+          throw new Error('Format must be specified for native IOContext input');
+        }
+
+        formatContext.allocContext();
+        ioContext = input;
+        formatContext.pb = ioContext;
+        formatContext.setFlags(AVFMT_FLAG_CUSTOM_IO);
+
+        const ret = await formatContext.openInput('', inputFormat, optionsDict);
+        FFmpegError.throwIfError(ret, 'Failed to open input from native IOContext');
       } else if (typeof input === 'object' && 'read' in input) {
         // Custom I/O with callbacks - format is required
         if (!options.format) {
@@ -479,7 +493,7 @@ export class Demuxer implements AsyncDisposable, Disposable {
         const ret = await formatContext.openInput('', inputFormat, optionsDict);
         FFmpegError.throwIfError(ret, 'Failed to open input from custom I/O');
       } else {
-        throw new TypeError('Invalid input type. Expected file path, URL, Buffer, or IOInputCallbacks');
+        throw new TypeError('Invalid input type. Expected file path, URL, Buffer, IOContext, or IOInputCallbacks');
       }
 
       // Find stream information
@@ -614,8 +628,9 @@ export class Demuxer implements AsyncDisposable, Disposable {
    */
   static openSync(input: string | Buffer, options?: DemuxerOptions): Demuxer;
   static openSync(input: IOInputCallbacks, options: (DemuxerOptions | undefined) & { format: string }): Demuxer;
+  static openSync(input: IOContext, options: (DemuxerOptions | undefined) & { format: string }): Demuxer;
   static openSync(rawData: RawData, options?: DemuxerOptions): Demuxer;
-  static openSync(input: string | Buffer | RawData | IOInputCallbacks, options: DemuxerOptions = {}): Demuxer {
+  static openSync(input: string | Buffer | RawData | IOInputCallbacks | IOContext, options: DemuxerOptions = {}): Demuxer {
     // Check if input is raw data
     if (typeof input === 'object' && 'type' in input && ('width' in input || 'sampleRate' in input)) {
       // Build options for raw data
@@ -669,9 +684,10 @@ export class Demuxer implements AsyncDisposable, Disposable {
 
       if (typeof input === 'string') {
         // File path or URL - resolve relative paths to absolute
+        // Skip path resolution for device inputs
         // Check if it's a URL (starts with protocol://) or a file path
         const isUrl = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(input);
-        const resolvedInput = isUrl ? input : resolve(input);
+        const resolvedInput = isUrl || inputFormat ? input : resolve(input);
 
         const ret = formatContext.openInputSync(resolvedInput, inputFormat, optionsDict);
         FFmpegError.throwIfError(ret, 'Failed to open input');
@@ -687,6 +703,18 @@ export class Demuxer implements AsyncDisposable, Disposable {
         formatContext.pb = ioContext;
         const ret = formatContext.openInputSync('', inputFormat, optionsDict);
         FFmpegError.throwIfError(ret, 'Failed to open input from buffer');
+      } else if (input instanceof IOContext) {
+        if (!options.format) {
+          throw new Error('Format must be specified for native IOContext input');
+        }
+
+        formatContext.allocContext();
+        ioContext = input;
+        formatContext.pb = ioContext;
+        formatContext.setFlags(AVFMT_FLAG_CUSTOM_IO);
+
+        const ret = formatContext.openInputSync('', inputFormat, optionsDict);
+        FFmpegError.throwIfError(ret, 'Failed to open input from native IOContext');
       } else if (typeof input === 'object' && 'read' in input) {
         // Custom I/O with callbacks - format is required
         if (!options.format) {
@@ -705,7 +733,7 @@ export class Demuxer implements AsyncDisposable, Disposable {
         const ret = formatContext.openInputSync('', inputFormat, optionsDict);
         FFmpegError.throwIfError(ret, 'Failed to open input from custom I/O');
       } else {
-        throw new TypeError('Invalid input type. Expected file path, URL, Buffer, or IOInputCallbacks');
+        throw new TypeError('Invalid input type. Expected file path, URL, Buffer, IOContext, or IOInputCallbacks');
       }
 
       // Find stream information
@@ -1054,6 +1082,35 @@ export class Demuxer implements AsyncDisposable, Disposable {
 
     // Convert from AV_TIME_BASE (microseconds) to seconds
     return Number(duration) / 1000000;
+  }
+
+  /**
+   * Get media start time in seconds.
+   *
+   * For device inputs (e.g., avfoundation), this reflects the system uptime
+   * at capture start. Pass this value to `Muxer.open()` via the `startTime`
+   * option to produce correct output timestamps.
+   *
+   * Returns 0 if start time is unknown or not available or input is closed.
+   *
+   * @example
+   * ```typescript
+   * await using input = await Demuxer.open(source);
+   * await using output = await Muxer.open('output.mp4', { startTime: input.startTime });
+   * ```
+   */
+  get startTime(): number {
+    if (this.isClosed) {
+      return 0;
+    }
+
+    const startTime = this.formatContext.startTime;
+    if (!startTime || startTime <= 0n) {
+      return 0;
+    }
+
+    // Convert from AV_TIME_BASE (microseconds) to seconds
+    return Number(startTime) / 1000000;
   }
 
   /**
@@ -1675,7 +1732,14 @@ export class Demuxer implements AsyncDisposable, Disposable {
         }
 
         if (ret < 0) {
-          // End of stream - notify all waiting consumers
+          // EAGAIN means no data available yet (common with live device capture)
+          // Retry after a short delay instead of treating as EOF
+          // Matches FFmpeg CLI behavior: av_usleep(10000) in ffmpeg_demux.c
+          if (ret === AVERROR_EAGAIN) {
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            continue;
+          }
+          // Actual end of stream - notify all waiting consumers
           this.demuxEof = true;
           for (const resolve of this.queueResolvers.values()) {
             resolve();
@@ -1757,17 +1821,24 @@ export class Demuxer implements AsyncDisposable, Disposable {
    * @internal
    */
   private async stopDemuxThread(): Promise<void> {
-    if (!this.demuxThreadActive) {
-      return;
-    }
-
     this.demuxThreadActive = false;
+    this.demuxEof = true;
+
+    // Wake up any waiting generators
+    for (const resolve of this.queueResolvers.values()) {
+      resolve();
+    }
+    this.queueResolvers.clear();
+
+    // Wait for demux thread with timeout to avoid hanging on blocked reads
     if (this.demuxThread) {
-      await this.demuxThread;
+      const threadPromise = this.demuxThread;
+      const timeoutPromise = new Promise<void>((resolve) => setTimeout(resolve, 2000));
+      await Promise.race([threadPromise, timeoutPromise]);
       this.demuxThread = null;
     }
 
-    // Clear all queues and resolvers
+    // Clear all queues
     for (const queue of this.packetQueues.values()) {
       for (const packet of queue) {
         packet.free();
@@ -1775,8 +1846,6 @@ export class Demuxer implements AsyncDisposable, Disposable {
       queue.length = 0;
     }
     this.packetQueues.clear();
-    this.queueResolvers.clear();
-    this.demuxEof = false;
   }
 
   /**
@@ -2072,17 +2141,43 @@ export class Demuxer implements AsyncDisposable, Disposable {
 
     this.isClosed = true;
 
-    // Clear pb reference FIRST to prevent use-after-free
+    // Signal demux thread to stop FIRST
+    this.demuxThreadActive = false;
+
+    // Set EOF flag so generators know to exit
+    this.demuxEof = true;
+
+    // Wake up all waiting generators BEFORE closing format context
+    // This ensures generators can exit cleanly even if readFrame() is blocking
+    for (const resolve of this.queueResolvers.values()) {
+      resolve();
+    }
+    this.queueResolvers.clear();
+
+    // Clear pb reference to prevent use-after-free
     if (this.ioContext) {
       this.formatContext.pb = null;
     }
 
-    // IMPORTANT: Close FormatContext BEFORE stopping demux thread
-    // This interrupts any blocking read() calls in the demux loop
+    // Close FormatContext - this may interrupt blocking readFrame()
     await this.formatContext.closeInput();
 
-    // Safely stop the demux thread
-    await this.stopDemuxThread();
+    // Wait for demux thread with timeout to avoid hanging on blocked reads
+    if (this.demuxThread) {
+      const threadPromise = this.demuxThread;
+      const timeoutPromise = new Promise<void>((resolve) => setTimeout(resolve, 2000));
+      await Promise.race([threadPromise, timeoutPromise]);
+      this.demuxThread = null;
+    }
+
+    // Clean up packet queues
+    for (const queue of this.packetQueues.values()) {
+      for (const packet of queue) {
+        packet.free();
+      }
+      queue.length = 0;
+    }
+    this.packetQueues.clear();
 
     // NOW we can safely free the IOContext
     if (this.ioContext) {
