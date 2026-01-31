@@ -1901,7 +1901,7 @@ export class FilterAPI implements Disposable {
     } else {
       // For audio, create with args string
       const formatName = avGetSampleFmtName(frame.format as AVSampleFormat);
-      const channelLayout = frame.channelLayout.mask === 0n ? 'stereo' : frame.channelLayout.mask.toString();
+      const channelLayout = frame.channelLayout.mask === 0n ? `${frame.channelLayout.nbChannels}c` : frame.channelLayout.mask.toString();
       // eslint-disable-next-line @stylistic/max-len
       const args = `time_base=${this.calculatedTimeBase.num}/${this.calculatedTimeBase.den}:sample_rate=${frame.sampleRate}:sample_fmt=${formatName}:channel_layout=${channelLayout}`;
       this.buffersrcCtx = this.graph.createFilter(bufferFilter, 'in', args);
