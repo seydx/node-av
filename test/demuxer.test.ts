@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { after, describe, it } from 'node:test';
 
 import { Demuxer } from '../src/api/index.js';
+import { IOStream } from '../src/api/io-stream.js';
 import { StreamingUtils } from '../src/api/utilities/streaming.js';
 import { AV_CODEC_ID_H264, AV_CODEC_ID_OPUS } from '../src/constants/constants.js';
 import { AVMEDIA_TYPE_AUDIO, AVMEDIA_TYPE_VIDEO, AVSEEK_CUR, AVSEEK_END, AVSEEK_SET, AVSEEK_SIZE } from '../src/index.js';
@@ -185,6 +186,66 @@ describe('Demuxer', () => {
       assert.ok(packetCount > 0, 'Should have read packets');
 
       media.closeSync();
+    });
+
+    it('should open from native IOContext (async)', async () => {
+      const buffer = await readFile(inputFile);
+      const ioContext = IOStream.create(buffer);
+
+      const media = await Demuxer.open(ioContext, { format: 'mp4' });
+
+      assert.ok(media, 'Should create Demuxer from IOContext');
+      assert.ok(media.streams.length > 0, 'Should have streams');
+      assert.ok(media.duration > 0, 'Should have duration');
+
+      // Read some packets to verify it works
+      let packetCount = 0;
+      for await (using packet of media.packets()) {
+        assert.ok(packet, 'Should have packet');
+        packetCount++;
+        if (packetCount >= 5) break;
+      }
+      assert.ok(packetCount > 0, 'Should have read packets');
+
+      await media.close();
+    });
+
+    it('should open from native IOContext (sync)', () => {
+      const buffer = readFileSync(inputFile);
+      const ioContext = IOStream.create(buffer);
+
+      const media = Demuxer.openSync(ioContext, { format: 'mp4' });
+
+      assert.ok(media, 'Should create Demuxer from IOContext');
+      assert.ok(media.streams.length > 0, 'Should have streams');
+      assert.ok(media.duration > 0, 'Should have duration');
+
+      // Read some packets to verify it works
+      let packetCount = 0;
+      for (using packet of media.packetsSync()) {
+        assert.ok(packet, 'Should have packet');
+        packetCount++;
+        if (packetCount >= 5) break;
+      }
+      assert.ok(packetCount > 0, 'Should have read packets');
+
+      media.closeSync();
+    });
+
+    it('should require format for native IOContext (async)', async () => {
+      const buffer = await readFile(inputFile);
+      const ioContext = IOStream.create(buffer);
+
+      // @ts-expect-error Testing missing format
+      await assert.rejects(async () => await Demuxer.open(ioContext), /Format must be specified for native IOContext input/);
+    });
+
+    it('should require format for native IOContext (sync)', () => {
+      const buffer = readFileSync(inputFile);
+      const ioContext = IOStream.create(buffer);
+
+      // @ts-expect-error Testing missing format
+      assert.throws(() => Demuxer.openSync(ioContext), /Format must be specified for native IOContext input/);
     });
 
     it('should require format for IOInputCallbacks (async)', async () => {
@@ -410,6 +471,25 @@ describe('Demuxer', () => {
       console.log('Metadata:', metadata);
 
       await media.close();
+    });
+
+    it('should get start time', async () => {
+      const media = await Demuxer.open(inputFile);
+
+      const startTime = media.startTime;
+      assert.equal(typeof startTime, 'number', 'Start time should be a number');
+      assert.ok(startTime >= 0, 'Start time should be >= 0');
+
+      console.log('Start time:', startTime);
+
+      await media.close();
+    });
+
+    it('should return 0 start time after close', async () => {
+      const media = await Demuxer.open(inputFile);
+      await media.close();
+
+      assert.equal(media.startTime, 0, 'Start time should be 0 after close');
     });
 
     it('should get format info', async () => {
