@@ -1,4 +1,9 @@
 #include <napi.h>
+
+extern "C" {
+#include <libavdevice/avdevice.h>
+}
+
 #include "packet.h"
 #include "frame.h"
 #include "codec.h"
@@ -30,10 +35,14 @@
 #include "log.h"
 #include "option.h"
 #include "sync_queue.h"
+#include "device.h"
 
 namespace ffmpeg {
 
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
+  // Register all input/output devices (avfoundation, v4l2, dshow, etc.)
+  avdevice_register_all();
+
   // Core Types
   Packet::Init(env, exports);
   Frame::Init(env, exports);
@@ -88,6 +97,9 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
 
   // Sync Queue
   SyncQueue::Init(env, exports);
+
+  // Device
+  Device::Init(env, exports);
 
   return exports;
 }

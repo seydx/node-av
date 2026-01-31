@@ -61,6 +61,10 @@
                 "src/bindings/bitstream_filter_context_sync.cc",
                 "src/bindings/option.cc",
                 "src/bindings/sync_queue.cc",
+                "src/bindings/device.cc",
+                "src/bindings/device_sync.cc",
+                "src/bindings/device_async.cc",
+                "src/bindings/device_win32.cc",
                 "externals/jellyfin-ffmpeg/fftools/sync_queue.c",
             ],
             "include_dirs": [
@@ -149,6 +153,7 @@
                 "SPIRV-Tools-opt.lib",
                 "SPIRV-Tools.lib",
                 "ole32.lib",
+                "oleaut32.lib",
                 "shlwapi.lib",
                 "cfgmgr32.lib",
                 "ws2_32.lib",

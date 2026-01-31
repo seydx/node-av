@@ -61,8 +61,8 @@ export { SyncQueue, SyncQueueType } from './sync-queue.js';
 
 // Filter related classes
 export { FilterContext } from './filter-context.js';
-export { FilterGraph } from './filter-graph.js';
 export { FilterGraphSegment } from './filter-graph-segment.js';
+export { FilterGraph } from './filter-graph.js';
 export { FilterInOut } from './filter-inout.js';
 export { Filter } from './filter.js';
 
@@ -75,6 +75,9 @@ export { Rational } from './rational.js';
 
 // Logging
 export { Log } from './log.js';
+
+// Device
+export { Device, type DeviceInfo, type DeviceMode } from './device.js';
 
 // Error handling
 export { FFmpegError, PosixError } from './error.js';

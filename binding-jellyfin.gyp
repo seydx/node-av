@@ -61,6 +61,9 @@
                 "src/bindings/bitstream_filter_context_sync.cc",
                 "src/bindings/option.cc",
                 "src/bindings/sync_queue.cc",
+                "src/bindings/device.cc",
+                "src/bindings/device_sync.cc",
+                "src/bindings/device_async.cc",
                 "externals/jellyfin-ffmpeg/fftools/sync_queue.c",
             ],
             "include_dirs": [
@@ -76,6 +79,9 @@
                 [
                     "OS=='mac'",
                     {
+                        "sources": [
+                            "src/bindings/device_darwin.mm",
+                        ],
                         "include_dirs": [
                             "/opt/ffbuild/prefix/include",
                         ],
@@ -147,6 +153,7 @@
                             "-framework MetalKit",
                             "-framework Foundation",
                             "-framework OpenCL",
+                            "-weak_framework ScreenCaptureKit",
                         ],
                         "conditions": [
                             [
@@ -181,6 +188,9 @@
                 [
                     "OS=='linux'",
                     {
+                        "sources": [
+                            "src/bindings/device_linux.cc",
+                        ],
                         "include_dirs": [
                             "/opt/ffbuild/prefix/include",
                         ],
@@ -269,6 +279,7 @@
                             "/opt/ffbuild/prefix/lib/libggml-cpu.a",
                             "/opt/ffbuild/prefix/lib/libggml-vulkan.a",
                             "/opt/ffbuild/prefix/lib/libggml-opencl.a",
+                            "/opt/ffbuild/prefix/lib/libasound.a",
                             "-ldrm",
                             "-lpthread",
                             "-lm",
@@ -316,6 +327,9 @@
                 [
                     "OS=='win' or (OS!='mac' and OS!='linux')",  # Mingw
                     {
+                        "sources": [
+                            "src/bindings/device_win32.cc",
+                        ],
                         "conditions": [
                             [
                                 "target_arch=='x64'",
@@ -417,6 +431,7 @@
                             "-lpthread",
                             "-Wl,-Bdynamic",
                             "-lole32",
+                            "-loleaut32",
                             "-lshlwapi",
                             "-lcfgmgr32",
                             "-lws2_32",

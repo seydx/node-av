@@ -33,6 +33,7 @@ import type {
   NativeCodecContext,
   NativeCodecParameters,
   NativeCodecParser,
+  NativeDeviceModule,
   NativeDictionary,
   NativeFFmpegError,
   NativeFifo,
@@ -255,6 +256,9 @@ export interface NativeBinding {
 
   // Sync Queue
   SyncQueue: NativeSyncQueueConstructor;
+
+  // Device
+  Device: NativeDeviceModule;
 
   // Functions
   getFFmpegInfo: () => {

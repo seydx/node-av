@@ -61,6 +61,10 @@
                 "src/bindings/bitstream_filter_context_sync.cc",
                 "src/bindings/option.cc",
                 "src/bindings/sync_queue.cc",
+                "src/bindings/device.cc",
+                "src/bindings/device_sync.cc",
+                "src/bindings/device_async.cc",
+                "src/bindings/device_darwin.mm",
                 "externals/jellyfin-ffmpeg/fftools/sync_queue.c",
             ],
             "include_dirs": [
@@ -142,6 +146,7 @@
                 "-framework MetalKit",
                 "-framework Foundation",
                 "-framework OpenCL",
+                "-weak_framework ScreenCaptureKit",
             ],
             "xcode_settings": {
                 "GCC_ENABLE_CPP_EXCEPTIONS": "YES",

@@ -1018,6 +1018,47 @@ export interface NativeSyncQueue extends Disposable {
 }
 
 /**
+ * Device information returned by device enumeration
+ *
+ * @internal
+ */
+export interface NativeDeviceInfo {
+  name: string;
+  description: string;
+  type: 'video' | 'audio';
+  isDefault: boolean;
+}
+
+/**
+ * Device capture mode (resolution + frame rate range)
+ *
+ * @internal
+ */
+export interface NativeDeviceMode {
+  width: number;
+  height: number;
+  minFrameRate: number;
+  maxFrameRate: number;
+}
+
+/**
+ * Device module static methods
+ *
+ * @internal
+ */
+export interface NativeDeviceModule {
+  listDevices(): Promise<NativeDeviceInfo[]>;
+  listDevicesSync(): NativeDeviceInfo[];
+  listDeviceModes(deviceName: string): Promise<NativeDeviceMode[]>;
+  listDeviceModesSync(deviceName: string): NativeDeviceMode[];
+  getVideoFormat(): string;
+  getAudioFormat(): string;
+  getScreenFormat(): string;
+  hasScreenCapturePermission(): boolean;
+  requestScreenCaptureAccess(): boolean;
+}
+
+/**
  * Interface for classes that wrap native objects
  *
  * @internal

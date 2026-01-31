@@ -19,6 +19,9 @@ export { AudioFrameBuffer } from './audio-frame-buffer.js';
 // Hardware
 export { HardwareContext } from './hardware.js';
 
+// Device
+export { DeviceAPI, type DeviceInfo, type DeviceMode, type DeviceOptions, type ScreenCaptureOptions } from './device.js';
+
 // Filter
 export { FilterComplexAPI } from './filter-complex.js';
 export { FilterPreset, type FilterSupport } from './filter-presets.js';

@@ -154,6 +154,44 @@
         color: #fff;
         font-family: monospace;
       }
+
+      .input-mode {
+        display: flex;
+        gap: 4px;
+        margin-bottom: 10px;
+      }
+
+      .mode-btn {
+        padding: 6px 16px;
+        background: #2a2a2a;
+        border: 1px solid #444;
+        color: #888;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+      }
+
+      .mode-btn.active {
+        background: #3a3a3a;
+        color: #fff;
+        border-color: #666;
+      }
+
+      .device-controls {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 15px;
+      }
+
+      .device-controls select {
+        flex: 1;
+        padding: 10px;
+        background: #2a2a2a;
+        border: 1px solid #444;
+        border-radius: 4px;
+        color: #ccc;
+        font-family: monospace;
+      }
     </style>
   </head>
   <body>
@@ -166,7 +204,27 @@
         <button class="stop-button" id="stopButton" disabled>Stop</button>
       </div>
 
-      <input type="text" id="urlInput" placeholder="Enter RTSP URL, file path, HTTP URL, etc." value="rtsp://camera.local/stream" />
+      <div class="input-mode">
+        <button class="mode-btn active" id="urlMode">URL</button>
+        <button class="mode-btn" id="deviceMode">Device</button>
+      </div>
+
+      <div id="urlSection">
+        <input type="text" id="urlInput" placeholder="Enter RTSP URL, file path, HTTP URL, etc." value="rtsp://camera.local/stream" />
+      </div>
+
+      <div id="deviceSection" style="display: none">
+        <div class="device-controls">
+          <select id="deviceType">
+            <option value="screen">Screen Capture</option>
+            <option value="camera">Camera</option>
+            <option value="microphone">Microphone</option>
+          </select>
+          <select id="deviceSelect">
+            <option value="">No devices loaded</option>
+          </select>
+        </div>
+      </div>
 
       <div class="video-container">
         <video id="video" controls muted autoplay></video>
@@ -208,11 +266,19 @@
       const mediaSourceStateEl = document.getElementById('mediaSourceState');
       const resolutionEl = document.getElementById('resolution');
       const bufferStateEl = document.getElementById('bufferState');
+      const urlModeBtn = document.getElementById('urlMode');
+      const deviceModeBtn = document.getElementById('deviceMode');
+      const urlSection = document.getElementById('urlSection');
+      const deviceSection = document.getElementById('deviceSection');
+      const deviceTypeSelect = document.getElementById('deviceType');
+      const deviceSelect = document.getElementById('deviceSelect');
 
       let ws = null;
       let mediaSource = null;
       let sourceBuffer = null;
       let hasPlayed = false;
+      let currentMode = 'url';
+      let deviceList = null;
 
       // Simple buffer
       const buf = new Uint8Array(2 * 1024 * 1024);
@@ -429,15 +495,82 @@
         }
       }
 
-      async function startStream() {
-        console.log('Starting fMP4 stream...');
+      // Mode switching
+      urlModeBtn.addEventListener('click', () => {
+        currentMode = 'url';
+        urlModeBtn.classList.add('active');
+        deviceModeBtn.classList.remove('active');
+        urlSection.style.display = '';
+        deviceSection.style.display = 'none';
+      });
 
-        const url = urlInput.value.trim();
-        if (!url) {
-          console.error('No URL provided');
-          updateStatus(false, 'No URL provided');
+      deviceModeBtn.addEventListener('click', () => {
+        currentMode = 'device';
+        deviceModeBtn.classList.add('active');
+        urlModeBtn.classList.remove('active');
+        urlSection.style.display = 'none';
+        deviceSection.style.display = '';
+        if (!deviceList) {
+          loadDevices();
+        }
+      });
+
+      deviceTypeSelect.addEventListener('change', () => {
+        populateDeviceDropdown();
+      });
+
+      function loadDevices() {
+        const tmpWs = new WebSocket('ws://localhost:8080');
+        tmpWs.addEventListener('open', () => {
+          tmpWs.send(JSON.stringify({ type: 'list-devices' }));
+        });
+        tmpWs.addEventListener('message', (event) => {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'devices') {
+            deviceList = msg.value;
+            populateDeviceDropdown();
+            tmpWs.close();
+          }
+        });
+        tmpWs.addEventListener('error', () => {
+          console.error('Failed to load devices');
+          deviceSelect.innerHTML = '<option value="">Failed to load</option>';
+        });
+      }
+
+      function populateDeviceDropdown() {
+        if (!deviceList) return;
+        const type = deviceTypeSelect.value;
+        deviceSelect.innerHTML = '';
+
+        if (type === 'screen') {
+          const opt = document.createElement('option');
+          opt.value = '0';
+          opt.textContent = 'Screen 0 (Main Display)';
+          deviceSelect.appendChild(opt);
           return;
         }
+
+        const filterType = type === 'camera' ? 'video' : 'audio';
+        const filtered = deviceList.filter((d) => d.type === filterType);
+        if (filtered.length === 0) {
+          const opt = document.createElement('option');
+          opt.value = '';
+          opt.textContent = 'No devices found';
+          deviceSelect.appendChild(opt);
+          return;
+        }
+        filtered.forEach((d, i) => {
+          const opt = document.createElement('option');
+          opt.value = d.name || String(i);
+          opt.textContent = d.name || `Device ${i}`;
+          if (d.isDefault) opt.textContent += ' (Default)';
+          deviceSelect.appendChild(opt);
+        });
+      }
+
+      async function startStream() {
+        console.log('Starting fMP4 stream...');
 
         updateStatus(false, 'Connecting...');
 
@@ -455,14 +588,37 @@
           updateStatus(true, 'Connected');
 
           const supportedCodecs = detectSupportedCodecs();
-          console.log('Sending play request with URL and codecs:', url, supportedCodecs);
-          ws.send(
-            JSON.stringify({
-              type: 'play',
-              url,
-              supportedCodecs,
-            }),
-          );
+
+          if (currentMode === 'device') {
+            const deviceType = deviceTypeSelect.value;
+            const device = deviceSelect.value;
+            console.log('Sending device play request:', deviceType, device);
+            ws.send(
+              JSON.stringify({
+                type: 'play',
+                source: 'device',
+                deviceType,
+                device,
+                supportedCodecs,
+                framerate: 30,
+              }),
+            );
+          } else {
+            const url = urlInput.value.trim();
+            if (!url) {
+              console.error('No URL provided');
+              updateStatus(false, 'No URL provided');
+              return;
+            }
+            console.log('Sending play request with URL and codecs:', url, supportedCodecs);
+            ws.send(
+              JSON.stringify({
+                type: 'play',
+                url,
+                supportedCodecs,
+              }),
+            );
+          }
         });
 
         ws.addEventListener('message', async (event) => {
