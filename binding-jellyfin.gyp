@@ -170,13 +170,17 @@
                             "CLANG_CXX_LIBRARY": "libc++",
                             "CLANG_CXX_LANGUAGE_STANDARD": "c++17",
                             "MACOSX_DEPLOYMENT_TARGET": "12.0",
+                            "GCC_SYMBOLS_PRIVATE_EXTERN": "YES",
                             "OTHER_CPLUSPLUSFLAGS": [
                                 "-fexceptions",
+                                "-fvisibility=hidden",
+                                "-fvisibility-inlines-hidden",
                                 "-O3",
                             ],
                             "OTHER_LDFLAGS": [
                                 "-Wl,-dead_strip",
                                 "-Wl,-no_warn_duplicate_libraries",
+                                "-Wl,-exported_symbol,_napi_register_module_v1",
                             ],
                             "CONDITIONS": [
                                 ["target_arch=='x64'", {"ARCHS": ["x86_64"]}],
@@ -297,15 +301,21 @@
                             "-latomic",
                             "-lstdc++",
                         ],
+                        "cflags": [
+                            "-fvisibility=hidden",
+                        ],
                         "cflags_cc": [
                             "-std=c++17",
                             "-fexceptions",
+                            "-fvisibility=hidden",
+                            "-fvisibility-inlines-hidden",
                             "-O3",
                         ],
                         "ldflags": [
                             "-Wl,-Bsymbolic",
                             "-Wl,-rpath,'$$ORIGIN'",
                             "-Wl,--allow-multiple-definition",
+                            "-Wl,--exclude-libs,ALL",
                         ],
                         "conditions": [
                             [
@@ -452,15 +462,21 @@
                             "-lpsapi",
                             "-lvfw32",
                         ],
+                        "cflags": [
+                            "-fvisibility=hidden",
+                        ],
                         "cflags_cc": [
                             "-std=c++17",
                             "-fexceptions",
+                            "-fvisibility=hidden",
+                            "-fvisibility-inlines-hidden",
                             "-O3",
                         ],
                         "ldflags": [
                             "-static-libgcc",
                             "-static-libstdc++",
                             "-Wl,--gc-sections",
+                            "-Wl,--exclude-libs,ALL",
                         ],
                     },
                 ],
