@@ -476,7 +476,6 @@
                             "-static-libgcc",
                             "-static-libstdc++",
                             "-Wl,--gc-sections",
-                            "-Wl,--exclude-libs,ALL",
                         ],
                     },
                 ],
