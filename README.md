@@ -22,18 +22,17 @@ Native Node.js bindings for FFmpeg with full TypeScript support. Provides direct
   - [Low-Level API](#low-level-api)
   - [High-Level API](#high-level-api)
   - [Pipeline API](#pipeline-api)
-- [Key Features](#key-features)
 - [Hardware Acceleration](#hardware-acceleration)
   - [Auto-Detection](#auto-detection)
   - [Specific Hardware](#specific-hardware)
-- [Imports and Tree Shaking](#imports-and-tree-shaking)
 - [Stream Processing](#stream-processing)
-  - [From Files](#from-files)
-  - [From Network](#from-network)
+  - [From Files or Network](#from-files-or-network)
   - [From Buffers](#from-buffers)
   - [Raw Media Processing](#raw-media-processing)
-- [Resource Management](#resource-management)
 - [FFmpeg Binary Access](#ffmpeg-binary-access)
+- [Resource Management](#resource-management)
+- [Imports and Tree Shaking](#imports-and-tree-shaking)
+- [Key Features](#key-features)
 - [Performance](#performance)
   - [Benchmarks](#benchmarks)
   - [Sync vs Async Operations](#sync-vs-async-operations)
@@ -222,24 +221,6 @@ const control = pipeline(input, decoder, encoder, output);
 await control.completion;
 ```
 
-## Key Features
-
-Beyond basic transcoding, NodeAV provides advanced media processing capabilities:
-
-**Speech Recognition with Whisper**
-Integrate automatic speech-to-text transcription using OpenAI's Whisper model through the whisper.cpp implementation. The library handles automatic model downloading from HuggingFace, supports multiple model sizes (tiny, base, small, medium, large) for different accuracy/performance tradeoffs, and provides hardware-accelerated inference through Metal (macOS), Vulkan (cross-platform), or OpenCL backends. Transcription results include precise timestamps and can be processed in real-time from any audio source.
-
-**Advanced Video Filtering with FilterComplexAPI**
-Build sophisticated video processing pipelines using FFmpeg's complete filter ecosystem. The FilterComplexAPI provides direct access to complex filtergraphs with multiple inputs and outputs, enabling advanced operations like picture-in-picture overlays, multi-stream composition (side-by-side, grid layouts), real-time video effects, and custom processing chains. All filters support hardware acceleration where available, and filter configurations can be dynamically constructed based on runtime requirements.
-
-**Browser Streaming**
-Stream any media source directly to web browsers through fragmented MP4 (fMP4) or WebRTC protocols. The library can process inputs from RTSP cameras, local files, network streams, or custom sources and package them for browser consumption with minimal latency. Complete examples demonstrate both Media Source Extensions (MSE) based playback for on-demand content and WebRTC integration for real-time streaming scenarios.
-
-**RTSP Backchannel / Talkback**
-Implements bidirectional RTSP communication for IP camera integration. The library provides native support for RTSP backchannel streams, enabling audio transmission to camera devices. Transport is handled automatically with support for both TCP (interleaved mode) and UDP protocols, with proper RTP packet formatting and stream synchronization.
-
-See the [Examples](#examples) section for complete implementations.
-
 ## Hardware Acceleration
 
 The library supports all hardware acceleration methods available in FFmpeg. The specific hardware types available depend on your FFmpeg build and system configuration.
@@ -276,37 +257,16 @@ const cuda = HardwareContext.create(AV_HWDEVICE_TYPE_CUDA);
 const vaapi = HardwareContext.create(AV_HWDEVICE_TYPE_VAAPI, '/dev/dri/renderD128');
 ```
 
-## Imports and Tree Shaking
-
-The library provides multiple entry points for optimal tree shaking:
-
-```typescript
-// High-Level API only - Recommended for most use cases
-import { Muxer, Muxer, Decoder, Encoder } from 'node-av/api';
-
-// Low-Level API only - Direct FFmpeg bindings
-import { FormatContext, CodecContext, Frame, Packet } from 'node-av/lib';
-
-// Constants only - When you just need FFmpeg constants
-import { AV_PIX_FMT_YUV420P, AV_CODEC_ID_H264 } from 'node-av/constants';
-
-// Channel layouts only - For audio channel configurations
-import { AV_CHANNEL_LAYOUT_STEREO, AV_CHANNEL_LAYOUT_5POINT1 } from 'node-av/layouts';
-
-// Default export - Includes everything
-import * as ffmpeg from 'node-av';
-```
-
 ## Stream Processing
 
 ### From Files or Network
 
 ```typescript
-const media = await Muxer.open('input.mp4');
+const media = await Demuxer.open('input.mp4');
 
 // or
 
-const media = await Muxer.open('rtsp://example.com/stream');
+const media = await Demuxer.open('rtsp://example.com/stream');
 ```
 
 ### From Buffers
@@ -315,7 +275,7 @@ const media = await Muxer.open('rtsp://example.com/stream');
 import { readFile } from 'fs/promises';
 
 const buffer = await readFile('input.mp4');
-const media = await Muxer.open(buffer);
+const media = await Demuxer.open(buffer);
 ```
 
 ### Custom I/O Callbacks
@@ -335,7 +295,7 @@ const inputCallbacks: IOInputCallbacks = {
   }
 };
 
-await using input = await Muxer.open(inputCallbacks, {
+await using input = await Demuxer.open(inputCallbacks, {
   format: 'mp4'
 });
 ```
@@ -344,7 +304,7 @@ await using input = await Muxer.open(inputCallbacks, {
 
 ```typescript
 // Raw video input
-const rawVideo = await Muxer.open({
+const rawVideo = await Demuxer.open({
   type: 'video',
   input: 'input.yuv',
   width: 1280,
@@ -354,7 +314,7 @@ const rawVideo = await Muxer.open({
 });
 
 // Raw audio input
-const rawAudio = await Muxer.open({
+const rawAudio = await Demuxer.open({
   type: 'audio',
   input: 'input.pcm',
   sampleRate: 48000,
@@ -363,27 +323,6 @@ const rawAudio = await Muxer.open({
 }, {
   format: 's16le'
 });
-```
-
-## Resource Management
-
-The library supports automatic resource cleanup using the Disposable pattern:
-
-```typescript
-// Automatic cleanup with 'using'
-{
-  await using media = await Muxer.open('input.mp4');
-  using decoder = await Decoder.create(media.video());
-  // Resources automatically cleaned up at end of scope
-}
-
-// Manual cleanup
-const media = await Muxer.open('input.mp4');
-try {
-  // Process media
-} finally {
-  await media.close();
-}
 ```
 
 ## FFmpeg Binary Access
@@ -423,6 +362,66 @@ async function convertVideo(input: string, output: string) {
 ```
 
 The FFmpeg binary is automatically downloaded during installation from GitHub releases and matches the same build used by the native bindings.
+
+## Resource Management
+
+The library supports automatic resource cleanup using the Disposable pattern:
+
+```typescript
+// Automatic cleanup with 'using'
+{
+  await using media = await Demuxer.open('input.mp4');
+  using decoder = await Decoder.create(media.video());
+  // Resources automatically cleaned up at end of scope
+}
+
+// Manual cleanup
+const media = await Demuxer.open('input.mp4');
+try {
+  // Process media
+} finally {
+  await media.close();
+}
+```
+
+## Imports and Tree Shaking
+
+The library provides multiple entry points for optimal tree shaking:
+
+```typescript
+// High-Level API only - Recommended for most use cases
+import { Demuxer, Muxer, Decoder, Encoder } from 'node-av/api';
+
+// Low-Level API only - Direct FFmpeg bindings
+import { FormatContext, CodecContext, Frame, Packet } from 'node-av/lib';
+
+// Constants only - When you just need FFmpeg constants
+import { AV_PIX_FMT_YUV420P, AV_CODEC_ID_H264 } from 'node-av/constants';
+
+// Channel layouts only - For audio channel configurations
+import { AV_CHANNEL_LAYOUT_STEREO, AV_CHANNEL_LAYOUT_5POINT1 } from 'node-av/layouts';
+
+// Default export - Includes everything
+import * as ffmpeg from 'node-av';
+```
+
+## Key Features
+
+Beyond basic transcoding, NodeAV provides advanced media processing capabilities:
+
+**Speech Recognition with Whisper**
+Integrate automatic speech-to-text transcription using OpenAI's Whisper model through the whisper.cpp implementation. The library handles automatic model downloading from HuggingFace, supports multiple model sizes (tiny, base, small, medium, large) for different accuracy/performance tradeoffs, and provides hardware-accelerated inference through Metal (macOS), Vulkan (cross-platform), or OpenCL backends. Transcription results include precise timestamps and can be processed in real-time from any audio source.
+
+**Advanced Video Filtering with FilterComplexAPI**
+Build sophisticated video processing pipelines using FFmpeg's complete filter ecosystem. The FilterComplexAPI provides direct access to complex filtergraphs with multiple inputs and outputs, enabling advanced operations like picture-in-picture overlays, multi-stream composition (side-by-side, grid layouts), real-time video effects, and custom processing chains. All filters support hardware acceleration where available, and filter configurations can be dynamically constructed based on runtime requirements.
+
+**Browser Streaming**
+Stream any media source directly to web browsers through fragmented MP4 (fMP4) or WebRTC protocols. The library can process inputs from RTSP cameras, local files, network streams, or custom sources and package them for browser consumption with minimal latency. Complete examples demonstrate both Media Source Extensions (MSE) based playback for on-demand content and WebRTC integration for real-time streaming scenarios.
+
+**RTSP Backchannel / Talkback**
+Implements bidirectional RTSP communication for IP camera integration. The library provides native support for RTSP backchannel streams, enabling audio transmission to camera devices. Transport is handled automatically with support for both TCP (interleaved mode) and UDP protocols, with proper RTP packet formatting and stream synchronization.
+
+See the [Examples](#examples) section for complete implementations.
 
 ## Performance
 
