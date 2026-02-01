@@ -13,6 +13,15 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 console.log('fMP4 Streaming Server');
 console.log('================================');
 
+let OVERRIDE_RANDOM_PORT: number | undefined = undefined;
+if (process.env.SERVER_PORT) {
+  const port = Number(process.env.SERVER_PORT);
+  if (!isNaN(port) && port > 0 && port < 65536) {
+    console.log(`[Server] Using overridden port from SERVER_PORT: ${port}`);
+    OVERRIDE_RANDOM_PORT = port;
+  }
+}
+
 async function buildDeviceInput(
   message: Record<string, string | number | undefined>,
 ): Promise<{ demuxer: Demuxer } | { deviceName: string; format: string; formatOptions: Record<string, string> }> {
@@ -54,8 +63,8 @@ const httpServer = createServer((req, res) => {
     let html = readFileSync(htmlPath, 'utf-8');
     // Inject the actual WS port into the HTML
     const addr = wss.address();
-    const wsPort = typeof addr === 'object' && addr ? addr.port : 0;
-    html = html.replace(/ws:\/\/localhost:\d+/g, `ws://localhost:${wsPort}`);
+    const port = OVERRIDE_RANDOM_PORT ?? (typeof addr === 'object' ? addr!.port : 0);
+    html = html.replace(/ws:\/\/localhost:\d+/g, `ws://localhost:${port}`);
     res.writeHead(200, { 'Content-Type': 'text/html' });
     res.end(html);
   } else {
@@ -67,7 +76,7 @@ const httpServer = createServer((req, res) => {
 // Create WebSocket server on random port
 const wss = new WebSocketServer({ server: httpServer });
 
-httpServer.listen(0, () => {
+httpServer.listen(OVERRIDE_RANDOM_PORT ?? 0, () => {
   const addr = httpServer.address();
   const actualPort = typeof addr === 'object' ? addr!.port : 0;
   console.log(`\n[Server] Listening on http://localhost:${actualPort}`);
