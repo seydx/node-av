@@ -2,6 +2,7 @@ import assert from 'node:assert';
 import { describe, it } from 'node:test';
 
 import { DeviceAPI } from '../src/api/device.js';
+import { skipInCI } from './index.js';
 
 describe('Device', () => {
   describe('Device (Low-Level)', () => {
@@ -208,7 +209,8 @@ describe('Device', () => {
       });
     });
 
-    describe('openMicrophone()', () => {
+    // In CI environments, audio devices may be listed (alsa) but not accessible
+    describe('openMicrophone()', skipInCI, () => {
       it('should open microphone device', async () => {
         const devices = await DeviceAPI.list();
         const microphone = devices.find((d) => d.type === 'audio');
@@ -240,7 +242,7 @@ describe('Device', () => {
       });
     });
 
-    describe('openScreen()', () => {
+    describe('openScreen()', skipInCI, () => {
       it('should open screen capture if permission is granted', async function () {
         if (!DeviceAPI.hasScreenCapturePermission()) {
           console.log('Screen capture permission not granted, skipping test');
