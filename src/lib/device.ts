@@ -215,7 +215,7 @@ export class Device {
    * | Platform | Format |
    * |----------|--------|
    * | macOS    | avfoundation |
-   * | Linux    | xcbgrab |
+   * | Linux    | x11grab |
    * | Windows  | gdigrab |
    *
    * @example

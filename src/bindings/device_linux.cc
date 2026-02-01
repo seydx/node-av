@@ -197,7 +197,7 @@ std::string getAudioInputFormat() {
 }
 
 std::string getScreenInputFormat() {
-  return "xcbgrab";
+  return "x11grab";
 }
 
 bool hasScreenCapturePermission() {

@@ -47,7 +47,7 @@ export interface ScreenCaptureOptions {
   windowTitle?: string;
   /** Screen index (macOS avfoundation: 0 = main display) */
   screenIndex?: number;
-  /** Display identifier (Linux xcbgrab: e.g., ':0.0') */
+  /** Display identifier (Linux x11grab: e.g., ':0.0') */
   display?: string;
   /** Pixel format (e.g., 'nv12', 'uyvy422'). Defaults to 'nv12' on macOS */
   pixelFormat?: string;
@@ -468,12 +468,12 @@ export class DeviceAPI {
   /**
    * Get the platform-specific input format for screen capture.
    *
-   * @returns Format name (avfoundation/xcbgrab/gdigrab)
+   * @returns Format name (avfoundation/x11grab/gdigrab)
    *
    * @example
    * ```typescript
    * const format = DeviceAPI.getScreenFormat();
-   * // Returns 'avfoundation' on macOS, 'xcbgrab' on Linux, 'gdigrab' on Windows
+   * // Returns 'avfoundation' on macOS, 'x11grab' on Linux, 'gdigrab' on Windows
    * ```
    */
   static getScreenFormat(): string {
@@ -677,7 +677,7 @@ export class DeviceAPI {
         formatOptions.pixel_format = options.pixelFormat ?? 'nv12';
         break;
 
-      case 'xcbgrab':
+      case 'x11grab':
         // Linux: ":display.screen+x,y" (e.g., ":0.0+100,200")
         const display = options.display ?? ':0.0';
         const offset = options.x !== undefined || options.y !== undefined ? `+${options.x ?? 0},${options.y ?? 0}` : '';
