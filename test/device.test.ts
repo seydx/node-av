@@ -72,7 +72,7 @@ describe('Device', () => {
         const format = DeviceAPI.getScreenFormat();
         const expected: Record<string, string> = {
           darwin: 'avfoundation',
-          linux: 'xcbgrab',
+          linux: 'x11grab',
           win32: 'gdigrab',
         };
         assert.strictEqual(format, expected[process.platform]);
