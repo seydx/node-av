@@ -29,6 +29,11 @@ Native Node.js bindings for FFmpeg with full TypeScript support. Provides direct
   - [From Files or Network](#from-files-or-network)
   - [From Buffers](#from-buffers)
   - [Raw Media Processing](#raw-media-processing)
+- [Device Capture](#device-capture)
+  - [List Devices](#list-devices)
+  - [Camera Capture](#camera-capture)
+  - [Microphone Capture](#microphone-capture)
+  - [Screen Capture](#screen-capture)
 - [FFmpeg Binary Access](#ffmpeg-binary-access)
 - [Resource Management](#resource-management)
 - [Imports and Tree Shaking](#imports-and-tree-shaking)
@@ -325,6 +330,120 @@ const rawAudio = await Demuxer.open({
 });
 ```
 
+## Device Capture
+
+Capture video, audio, and screen content directly from system devices. The API automatically handles platform-specific input formats and device naming conventions across macOS, Linux, and Windows.
+
+### List Devices
+
+```typescript
+import { DeviceAPI } from 'node-av/api';
+
+// Enumerate available capture devices
+const devices = await DeviceAPI.list();
+
+const cameras = devices.filter(d => d.type === 'video');
+const microphones = devices.filter(d => d.type === 'audio');
+
+// Query supported capture modes for a camera
+const modes = await DeviceAPI.modes(cameras[0].name);
+for (const mode of modes) {
+  console.log(`${mode.width}x${mode.height} @ ${mode.minFrameRate}-${mode.maxFrameRate} fps`);
+}
+```
+
+### Camera Capture
+
+```typescript
+import { Decoder, DeviceAPI, Encoder, Muxer } from 'node-av/api';
+import { FF_ENCODER_LIBX264 } from 'node-av/constants';
+
+// Open webcam
+await using input = await DeviceAPI.openCamera({
+  videoDevice: 0,       // Device index or name
+  width: 1280,
+  height: 720,
+  frameRate: 30,
+});
+
+// Record to file
+const videoStream = input.video()!;
+using decoder = await Decoder.create(videoStream);
+await using output = await Muxer.open('camera.mp4', { startTime: input.startTime });
+using encoder = await Encoder.create(FF_ENCODER_LIBX264, { decoder });
+const outIndex = output.addStream(encoder);
+
+for await (using packet of input.packets(videoStream.index)) {
+  for await (using frame of decoder.frames(packet)) {
+    for await (using outPacket of encoder.packets(frame)) {
+      await output.writePacket(outPacket, outIndex);
+    }
+  }
+}
+```
+
+### Microphone Capture
+
+```typescript
+import { Decoder, DeviceAPI, Encoder, Muxer } from 'node-av/api';
+import { FF_ENCODER_AAC } from 'node-av/constants';
+
+// Open microphone
+await using input = await DeviceAPI.openMicrophone({
+  audioDevice: 0,       // Device index or name
+  sampleRate: 48000,
+  channels: 2,
+});
+
+// Record to file
+const audioStream = input.audio()!;
+using decoder = await Decoder.create(audioStream);
+await using output = await Muxer.open('microphone.m4a', { startTime: input.startTime });
+using encoder = await Encoder.create(FF_ENCODER_AAC, { decoder });
+const outIndex = output.addStream(encoder);
+
+for await (using packet of input.packets(audioStream.index)) {
+  for await (using frame of decoder.frames(packet)) {
+    for await (using outPacket of encoder.packets(frame)) {
+      await output.writePacket(outPacket, outIndex);
+    }
+  }
+}
+```
+
+### Screen Capture
+
+```typescript
+import { DeviceAPI } from 'node-av/api';
+
+// Capture entire screen
+await using input = await DeviceAPI.openScreen({
+  frameRate: 30,
+  drawMouse: true,
+});
+
+// Capture specific region
+await using input = await DeviceAPI.openScreen({
+  x: 100, y: 100,
+  width: 800, height: 600,
+  frameRate: 30,
+});
+
+// macOS: Capture screen with system audio (macOS 13.0+)
+await using input = await DeviceAPI.openScreen({
+  frameRate: 30,
+  captureSystemAudio: true,
+  audioSampleRate: 48000,
+  audioChannels: 2,
+});
+```
+
+| Platform | Video | Audio | Screen |
+|----------|-------|-------|--------|
+| macOS | AVFoundation | AVFoundation | AVFoundation (ScreenCaptureKit) |
+| Linux | V4L2 | ALSA | x11grab |
+| Windows | DirectShow | DirectShow | GDIGrab |
+
 ## FFmpeg Binary Access
 
 Need direct access to the FFmpeg binary? The library provides an easy way to get FFmpeg binaries that automatically downloads and manages platform-specific builds.
@@ -483,6 +602,7 @@ If you encounter module resolution errors like `Cannot find module 'lib/binary-s
 | `browser-fmp4` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/browser/fmp4) |
 | `browser-webrtc` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/browser/webrtc) |
 | `api-dash` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-dash.ts) |
+| `api-device-capture` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-device-capture.ts) |
 | `api-encode-decode` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-encode-decode.ts) |
 | `api-filter-complex` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-filter-complex.ts) |
 | `api-filter-complex-grid` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-filter-complex-grid.ts) |
