@@ -6,25 +6,69 @@ import type { DeviceInfo, DeviceMode } from '../lib/device.js';
 export type { DeviceInfo, DeviceMode };
 
 /**
- * Options for opening a camera or microphone device.
+ * Options for opening a camera device.
  */
-export interface DeviceOptions {
+export interface CameraOptions {
   /** Video device name or index (0-based) */
   videoDevice?: string | number;
-  /** Audio device name or index (0-based) */
-  audioDevice?: string | number;
   /** Video frame rate */
   frameRate?: number;
   /** Video resolution width */
   width?: number;
   /** Video resolution height */
   height?: number;
-  /** Pixel format (e.g., 'yuyv422', 'nv12') */
+  /** Pixel format (e.g., 'nv12', 'yuyv422'). Only sent when explicitly set. */
   pixelFormat?: string;
+
+  /** macOS AVFoundation-specific options */
+  avfoundation?: {
+    /** Capture raw device data (e.g., DV from tape-based camcorders) */
+    captureRawData?: boolean;
+  };
+
+  /** Linux V4L2-specific options */
+  v4l2?: {
+    /** Preferred input format/codec (e.g., 'mjpeg', 'h264') */
+    inputFormat?: string;
+  };
+
+  /** Windows DirectShow-specific options */
+  dshow?: {
+    /** Device number for devices with the same name (starts at 0) */
+    videoDeviceNumber?: number;
+    /** Select video capture pin by name */
+    videoPinName?: string;
+  };
+
+  /** Additional FFmpeg format options passed directly */
+  formatOptions?: Record<string, string>;
+}
+
+/**
+ * Options for opening a microphone device.
+ */
+export interface MicrophoneOptions {
+  /** Audio device name or index (0-based) */
+  audioDevice?: string | number;
   /** Audio sample rate in Hz */
   sampleRate?: number;
   /** Number of audio channels */
   channels?: number;
+
+  /** Windows DirectShow-specific options */
+  dshow?: {
+    /** Audio sample size in bits (8 or 16) */
+    sampleSize?: number;
+    /** Device number for devices with the same name (starts at 0) */
+    audioDeviceNumber?: number;
+    /** Select audio capture pin by name */
+    audioPinName?: string;
+    /** Audio buffer size in milliseconds */
+    audioBufferSize?: number;
+  };
+
+  /** Additional FFmpeg format options passed directly */
+  formatOptions?: Record<string, string>;
 }
 
 /**
@@ -43,24 +87,96 @@ export interface ScreenCaptureOptions {
   frameRate?: number;
   /** Whether to draw the mouse cursor */
   drawMouse?: boolean;
-  /** Window title (Windows gdigrab only) */
-  windowTitle?: string;
-  /** Screen index (macOS avfoundation: 0 = main display) */
-  screenIndex?: number;
-  /** Display identifier (Linux x11grab: e.g., ':0.0') */
-  display?: string;
-  /** Pixel format (e.g., 'nv12', 'uyvy422'). Defaults to 'nv12' on macOS */
+  /** Pixel format */
   pixelFormat?: string;
-  /** Capture system/desktop audio via ScreenCaptureKit (macOS 13.0+) */
-  captureSystemAudio?: boolean;
-  /** Exclude current process audio from system audio capture (macOS 13.0+) */
-  excludeProcessAudio?: boolean;
-  /** System audio sample rate in Hz (8000, 16000, 24000, 48000). Default: 48000 (macOS 13.0+) */
-  audioSampleRate?: 8000 | 16000 | 24000 | 48000;
-  /** System audio channel count (1=mono, 2=stereo). Default: 2 (macOS 13.0+) */
-  audioChannels?: 1 | 2;
-  /** Capture mouse click animations (macOS 15.0+) */
-  captureMouseClicks?: boolean;
+
+  /** macOS AVFoundation-specific options */
+  avfoundation?: {
+    /** Screen index (0 = main display) */
+    screenIndex?: number;
+    /** Capture mouse click animations (macOS 15.0+) */
+    captureMouseClicks?: boolean;
+    /** Capture system/desktop audio via ScreenCaptureKit (macOS 13.0+) */
+    captureSystemAudio?: boolean;
+    /** Exclude current process audio from system audio capture */
+    excludeProcessAudio?: boolean;
+    /** System audio sample rate (8000, 16000, 24000, 48000). Default: 48000 */
+    audioSampleRate?: 8000 | 16000 | 24000 | 48000;
+    /** System audio channels (1=mono, 2=stereo). Default: 2 */
+    audioChannels?: 1 | 2;
+  };
+
+  /** Linux X11-specific options */
+  x11grab?: {
+    /** Display identifier (e.g., ':0.0') */
+    display?: string;
+    /** Capture specific window by X11 window ID */
+    windowId?: number;
+    /** Follow mouse ('centered' or pixel distance from edge) */
+    followMouse?: 'centered' | number;
+    /** Show grabbed region border on screen */
+    showRegion?: boolean;
+    /** Prompt user to graphically select capture region */
+    selectRegion?: boolean;
+  };
+
+  /** Windows GDI-specific options */
+  gdigrab?: {
+    /** Window title to capture instead of desktop */
+    windowTitle?: string;
+    /** Window handle (HWND) to capture */
+    windowHandle?: number;
+    /** Show grabbed region border on screen */
+    showRegion?: boolean;
+  };
+
+  /** Additional FFmpeg format options passed directly */
+  formatOptions?: Record<string, string>;
+}
+
+/**
+ * Options for combined video + audio device capture.
+ */
+export interface DeviceOptions {
+  /** Video device name or index */
+  videoDevice?: string | number;
+  /** Audio device name or index */
+  audioDevice?: string | number;
+  /** Video frame rate */
+  frameRate?: number;
+  /** Video resolution width */
+  width?: number;
+  /** Video resolution height */
+  height?: number;
+  /** Pixel format */
+  pixelFormat?: string;
+  /** Audio sample rate in Hz */
+  sampleRate?: number;
+  /** Number of audio channels */
+  channels?: number;
+
+  /** macOS AVFoundation-specific options */
+  avfoundation?: {
+    /** Capture raw device data */
+    captureRawData?: boolean;
+  };
+
+  /** Windows DirectShow-specific options */
+  dshow?: {
+    /** Video device number for devices with same name */
+    videoDeviceNumber?: number;
+    /** Audio device number for devices with same name */
+    audioDeviceNumber?: number;
+    /** Select video capture pin by name */
+    videoPinName?: string;
+    /** Select audio capture pin by name */
+    audioPinName?: string;
+    /** Audio buffer size in milliseconds */
+    audioBufferSize?: number;
+  };
+
+  /** Additional FFmpeg format options passed directly */
+  formatOptions?: Record<string, string>;
 }
 
 /**
@@ -99,10 +215,21 @@ export interface ScreenCaptureOptions {
  *   height: 1080,
  *   frameRate: 30,
  * });
+ *
+ * // Combined video + audio capture
+ * await using input = await DeviceAPI.openDevice({
+ *   videoDevice: 0,
+ *   audioDevice: 0,
+ *   width: 1280,
+ *   height: 720,
+ *   frameRate: 30,
+ * });
  * ```
  *
- * @see {@link DeviceOptions} For camera/microphone options
+ * @see {@link CameraOptions} For camera options
+ * @see {@link MicrophoneOptions} For microphone options
  * @see {@link ScreenCaptureOptions} For screen capture options
+ * @see {@link DeviceOptions} For combined video+audio capture options
  * @see {@link Demuxer} For processing captured streams
  */
 export class DeviceAPI {
@@ -231,7 +358,7 @@ export class DeviceAPI {
    * });
    * ```
    */
-  static async openCamera(options: DeviceOptions = {}): Promise<Demuxer> {
+  static async openCamera(options: CameraOptions = {}): Promise<Demuxer> {
     const format = Device.getVideoFormat();
     const deviceName = DeviceAPI.buildVideoDeviceName(options);
     const formatOptions = DeviceAPI.buildVideoFormatOptions(options);
@@ -256,7 +383,7 @@ export class DeviceAPI {
    *
    * @see {@link openCamera} For async version
    */
-  static openCameraSync(options: DeviceOptions = {}): Demuxer {
+  static openCameraSync(options: CameraOptions = {}): Demuxer {
     const format = Device.getVideoFormat();
     const deviceName = DeviceAPI.buildVideoDeviceName(options);
     const formatOptions = DeviceAPI.buildVideoFormatOptions(options);
@@ -292,7 +419,7 @@ export class DeviceAPI {
    * });
    * ```
    */
-  static async openMicrophone(options: DeviceOptions = {}): Promise<Demuxer> {
+  static async openMicrophone(options: MicrophoneOptions = {}): Promise<Demuxer> {
     const format = Device.getAudioFormat();
     const deviceName = DeviceAPI.buildAudioDeviceName(options);
     const formatOptions = DeviceAPI.buildAudioFormatOptions(options);
@@ -317,7 +444,7 @@ export class DeviceAPI {
    *
    * @see {@link openMicrophone} For async version
    */
-  static openMicrophoneSync(options: DeviceOptions = {}): Demuxer {
+  static openMicrophoneSync(options: MicrophoneOptions = {}): Demuxer {
     const format = Device.getAudioFormat();
     const deviceName = DeviceAPI.buildAudioDeviceName(options);
     const formatOptions = DeviceAPI.buildAudioFormatOptions(options);
@@ -358,7 +485,7 @@ export class DeviceAPI {
    *
    * // macOS: Capture specific screen
    * await using input = await DeviceAPI.openScreen({
-   *   screenIndex: 1,  // Secondary display
+   *   avfoundation: { screenIndex: 1 },
    *   frameRate: 30,
    * });
    * ```
@@ -366,25 +493,6 @@ export class DeviceAPI {
   static async openScreen(options: ScreenCaptureOptions = {}): Promise<Demuxer> {
     const format = Device.getScreenFormat();
     const { deviceName, formatOptions } = DeviceAPI.buildScreenCaptureParams(options);
-
-    // Pass SCK options on macOS (handled natively in avfoundation.m)
-    if (process.platform === 'darwin') {
-      if (options.captureSystemAudio) {
-        formatOptions.capture_system_audio = '1';
-      }
-      if (options.excludeProcessAudio) {
-        formatOptions.exclude_process_audio = '1';
-      }
-      if (options.audioSampleRate) {
-        formatOptions.sck_audio_sample_rate = String(options.audioSampleRate);
-      }
-      if (options.audioChannels) {
-        formatOptions.sck_audio_channels = String(options.audioChannels);
-      }
-      if (options.captureMouseClicks) {
-        formatOptions.capture_mouse_clicks = '1';
-      }
-    }
 
     return Demuxer.open(deviceName, {
       format,
@@ -410,24 +518,70 @@ export class DeviceAPI {
     const format = Device.getScreenFormat();
     const { deviceName, formatOptions } = DeviceAPI.buildScreenCaptureParams(options);
 
-    // Pass SCK options on macOS (handled natively in avfoundation.m)
-    if (process.platform === 'darwin') {
-      if (options.captureSystemAudio) {
-        formatOptions.capture_system_audio = '1';
-      }
-      if (options.excludeProcessAudio) {
-        formatOptions.exclude_process_audio = '1';
-      }
-      if (options.audioSampleRate) {
-        formatOptions.sck_audio_sample_rate = String(options.audioSampleRate);
-      }
-      if (options.audioChannels) {
-        formatOptions.sck_audio_channels = String(options.audioChannels);
-      }
-      if (options.captureMouseClicks) {
-        formatOptions.capture_mouse_clicks = '1';
-      }
-    }
+    return Demuxer.openSync(deviceName, {
+      format,
+      options: formatOptions,
+    });
+  }
+
+  /**
+   * Open a combined video + audio device for capture.
+   *
+   * Creates a single Demuxer that captures both video and audio simultaneously.
+   * Supported on macOS (AVFoundation) and Windows (DirectShow).
+   * Not supported on Linux — use separate `openCamera()` and `openMicrophone()` calls instead.
+   *
+   * @param options - Combined device capture options
+   *
+   * @returns Demuxer for the combined video + audio stream
+   *
+   * @throws {Error} If devices cannot be opened or platform does not support combined capture
+   *
+   * @example
+   * ```typescript
+   * await using input = await DeviceAPI.openDevice({
+   *   videoDevice: 0,
+   *   audioDevice: 0,
+   *   width: 1280,
+   *   height: 720,
+   *   frameRate: 30,
+   *   sampleRate: 48000,
+   *   channels: 2,
+   * });
+   * ```
+   */
+  static async openDevice(options: DeviceOptions): Promise<Demuxer> {
+    const format = Device.getVideoFormat();
+    const deviceName = DeviceAPI.buildCombinedDeviceName(options);
+    const formatOptions = DeviceAPI.buildDeviceFormatOptions(options);
+
+    return Demuxer.open(deviceName, {
+      format,
+      options: formatOptions,
+    });
+  }
+
+  /**
+   * Open a combined video + audio device for capture synchronously.
+   *
+   * @param options - Combined device capture options
+   *
+   * @returns Demuxer for the combined video + audio stream
+   *
+   * @example
+   * ```typescript
+   * using input = DeviceAPI.openDeviceSync({
+   *   videoDevice: 0,
+   *   audioDevice: 0,
+   * });
+   * ```
+   *
+   * @see {@link openDevice} For async version
+   */
+  static openDeviceSync(options: DeviceOptions): Demuxer {
+    const format = Device.getVideoFormat();
+    const deviceName = DeviceAPI.buildCombinedDeviceName(options);
+    const formatOptions = DeviceAPI.buildDeviceFormatOptions(options);
 
     return Demuxer.openSync(deviceName, {
       format,
@@ -534,13 +688,13 @@ export class DeviceAPI {
   /**
    * Build platform-specific video device name.
    *
-   * @param options - Device options containing videoDevice
+   * @param options - Camera options containing videoDevice
    *
    * @returns Platform-specific device name string
    *
    * @internal
    */
-  private static buildVideoDeviceName(options: DeviceOptions): string {
+  private static buildVideoDeviceName(options: CameraOptions): string {
     const device = options.videoDevice ?? 0;
     const format = Device.getVideoFormat();
 
@@ -565,13 +719,13 @@ export class DeviceAPI {
   /**
    * Build platform-specific audio device name.
    *
-   * @param options - Device options containing audioDevice
+   * @param options - Microphone options containing audioDevice
    *
    * @returns Platform-specific device name string
    *
    * @internal
    */
-  private static buildAudioDeviceName(options: DeviceOptions): string {
+  private static buildAudioDeviceName(options: MicrophoneOptions): string {
     const device = options.audioDevice ?? 0;
     const format = Device.getAudioFormat();
 
@@ -597,16 +751,43 @@ export class DeviceAPI {
   }
 
   /**
+   * Build platform-specific combined video + audio device name.
+   *
+   * @param options - Device options containing videoDevice and audioDevice
+   *
+   * @returns Platform-specific combined device name string
+   *
+   * @internal
+   */
+  private static buildCombinedDeviceName(options: DeviceOptions): string {
+    const video = options.videoDevice ?? 0;
+    const audio = options.audioDevice ?? 0;
+    const format = Device.getVideoFormat();
+
+    switch (format) {
+      case 'avfoundation':
+        return `${video}:${audio}`;
+
+      case 'dshow':
+        return `video=${video}:audio=${audio}`;
+
+      default:
+        throw new Error('Combined video+audio capture is not supported on Linux. ' + 'Use separate openCamera() and openMicrophone() calls.');
+    }
+  }
+
+  /**
    * Build video format options.
    *
-   * @param options - Device options containing video parameters
+   * @param options - Camera options containing video parameters
    *
    * @returns FFmpeg format options dictionary
    *
    * @internal
    */
-  private static buildVideoFormatOptions(options: DeviceOptions): Record<string, string> {
+  private static buildVideoFormatOptions(options: CameraOptions): Record<string, string> {
     const formatOptions: Record<string, string> = {};
+    const format = Device.getVideoFormat();
 
     if (options.frameRate) {
       formatOptions.framerate = String(options.frameRate);
@@ -614,9 +795,36 @@ export class DeviceAPI {
     if (options.width && options.height) {
       formatOptions.video_size = `${options.width}x${options.height}`;
     }
-    // Default to nv12 on macOS avfoundation to ensure compatibility with common encoders
-    const format = Device.getVideoFormat();
-    formatOptions.pixel_format = options.pixelFormat ?? (format === 'avfoundation' ? 'nv12' : 'yuv420p');
+    if (options.pixelFormat) {
+      formatOptions.pixel_format = options.pixelFormat;
+    } else if (format === 'avfoundation') {
+      formatOptions.pixel_format = 'nv12';
+    }
+
+    // Platform-specific
+    if (format === 'avfoundation' && options.avfoundation) {
+      if (options.avfoundation.captureRawData) {
+        formatOptions.capture_raw_data = 'true';
+      }
+    }
+    if (format === 'v4l2' && options.v4l2) {
+      if (options.v4l2.inputFormat) {
+        formatOptions.input_format = options.v4l2.inputFormat;
+      }
+    }
+    if (format === 'dshow' && options.dshow) {
+      if (options.dshow.videoDeviceNumber !== undefined) {
+        formatOptions.video_device_number = String(options.dshow.videoDeviceNumber);
+      }
+      if (options.dshow.videoPinName) {
+        formatOptions.video_pin_name = options.dshow.videoPinName;
+      }
+    }
+
+    // Escape hatch
+    if (options.formatOptions) {
+      Object.assign(formatOptions, options.formatOptions);
+    }
 
     return formatOptions;
   }
@@ -624,20 +832,106 @@ export class DeviceAPI {
   /**
    * Build audio format options.
    *
-   * @param options - Device options containing audio parameters
+   * @param options - Microphone options containing audio parameters
    *
    * @returns FFmpeg format options dictionary
    *
    * @internal
    */
-  private static buildAudioFormatOptions(options: DeviceOptions): Record<string, string> {
+  private static buildAudioFormatOptions(options: MicrophoneOptions): Record<string, string> {
     const formatOptions: Record<string, string> = {};
+    const format = Device.getAudioFormat();
 
     if (options.sampleRate) {
       formatOptions.sample_rate = String(options.sampleRate);
     }
     if (options.channels) {
       formatOptions.channels = String(options.channels);
+    }
+
+    // Platform-specific (dshow)
+    if (format === 'dshow' && options.dshow) {
+      if (options.dshow.sampleSize) {
+        formatOptions.sample_size = String(options.dshow.sampleSize);
+      }
+      if (options.dshow.audioDeviceNumber !== undefined) {
+        formatOptions.audio_device_number = String(options.dshow.audioDeviceNumber);
+      }
+      if (options.dshow.audioPinName) {
+        formatOptions.audio_pin_name = options.dshow.audioPinName;
+      }
+      if (options.dshow.audioBufferSize) {
+        formatOptions.audio_buffer_size = String(options.dshow.audioBufferSize);
+      }
+    }
+
+    // Escape hatch
+    if (options.formatOptions) {
+      Object.assign(formatOptions, options.formatOptions);
+    }
+
+    return formatOptions;
+  }
+
+  /**
+   * Build combined video + audio format options.
+   *
+   * @param options - Device options containing both video and audio parameters
+   *
+   * @returns FFmpeg format options dictionary
+   *
+   * @internal
+   */
+  private static buildDeviceFormatOptions(options: DeviceOptions): Record<string, string> {
+    const formatOptions: Record<string, string> = {};
+    const format = Device.getVideoFormat();
+
+    // Video
+    if (options.frameRate) {
+      formatOptions.framerate = String(options.frameRate);
+    }
+    if (options.width && options.height) {
+      formatOptions.video_size = `${options.width}x${options.height}`;
+    }
+    if (options.pixelFormat) {
+      formatOptions.pixel_format = options.pixelFormat;
+    } else if (format === 'avfoundation') {
+      formatOptions.pixel_format = 'nv12';
+    }
+
+    // Audio
+    if (options.sampleRate) {
+      formatOptions.sample_rate = String(options.sampleRate);
+    }
+    if (options.channels) {
+      formatOptions.channels = String(options.channels);
+    }
+
+    // Platform-specific
+    if (format === 'avfoundation' && options.avfoundation?.captureRawData) {
+      formatOptions.capture_raw_data = 'true';
+    }
+    if (format === 'dshow' && options.dshow) {
+      if (options.dshow.videoDeviceNumber !== undefined) {
+        formatOptions.video_device_number = String(options.dshow.videoDeviceNumber);
+      }
+      if (options.dshow.audioDeviceNumber !== undefined) {
+        formatOptions.audio_device_number = String(options.dshow.audioDeviceNumber);
+      }
+      if (options.dshow.videoPinName) {
+        formatOptions.video_pin_name = options.dshow.videoPinName;
+      }
+      if (options.dshow.audioPinName) {
+        formatOptions.audio_pin_name = options.dshow.audioPinName;
+      }
+      if (options.dshow.audioBufferSize) {
+        formatOptions.audio_buffer_size = String(options.dshow.audioBufferSize);
+      }
+    }
+
+    // Escape hatch
+    if (options.formatOptions) {
+      Object.assign(formatOptions, options.formatOptions);
     }
 
     return formatOptions;
@@ -661,9 +955,8 @@ export class DeviceAPI {
     let deviceName: string;
 
     switch (format) {
-      case 'avfoundation':
-        // macOS: "Capture screen 0", "Capture screen 1", etc.
-        deviceName = `Capture screen ${options.screenIndex ?? 0}`;
+      case 'avfoundation': {
+        deviceName = `Capture screen ${options.avfoundation?.screenIndex ?? 0}`;
         if (options.frameRate) {
           formatOptions.framerate = String(options.frameRate);
         }
@@ -673,13 +966,30 @@ export class DeviceAPI {
         if (options.drawMouse !== undefined) {
           formatOptions.capture_cursor = options.drawMouse ? '1' : '0';
         }
-        // Default to nv12 pixel format which is supported by both avfoundation and common encoders
-        formatOptions.pixel_format = options.pixelFormat ?? 'nv12';
+        if (options.pixelFormat) {
+          formatOptions.pixel_format = options.pixelFormat;
+        }
+        // AVFoundation-specific
+        if (options.avfoundation?.captureMouseClicks) {
+          formatOptions.capture_mouse_clicks = '1';
+        }
+        if (options.avfoundation?.captureSystemAudio) {
+          formatOptions.capture_system_audio = '1';
+        }
+        if (options.avfoundation?.excludeProcessAudio) {
+          formatOptions.exclude_process_audio = '1';
+        }
+        if (options.avfoundation?.audioSampleRate) {
+          formatOptions.sck_audio_sample_rate = String(options.avfoundation.audioSampleRate);
+        }
+        if (options.avfoundation?.audioChannels) {
+          formatOptions.sck_audio_channels = String(options.avfoundation.audioChannels);
+        }
         break;
+      }
 
-      case 'x11grab':
-        // Linux: ":display.screen+x,y" (e.g., ":0.0+100,200")
-        const display = options.display ?? ':0.0';
+      case 'x11grab': {
+        const display = options.x11grab?.display ?? ':0.0';
         const offset = options.x !== undefined || options.y !== undefined ? `+${options.x ?? 0},${options.y ?? 0}` : '';
         deviceName = `${display}${offset}`;
         if (options.frameRate) {
@@ -691,12 +1001,27 @@ export class DeviceAPI {
         if (options.drawMouse !== undefined) {
           formatOptions.draw_mouse = options.drawMouse ? '1' : '0';
         }
+        // X11-specific
+        if (options.x11grab?.windowId !== undefined) {
+          formatOptions.window_id = String(options.x11grab.windowId);
+        }
+        if (options.x11grab?.followMouse !== undefined) {
+          formatOptions.follow_mouse = typeof options.x11grab.followMouse === 'number' ? String(options.x11grab.followMouse) : options.x11grab.followMouse;
+        }
+        if (options.x11grab?.showRegion) {
+          formatOptions.show_region = '1';
+        }
+        if (options.x11grab?.selectRegion) {
+          formatOptions.select_region = '1';
+        }
         break;
+      }
 
-      case 'gdigrab':
-        // Windows: "desktop" or "title=Window Title"
-        if (options.windowTitle) {
-          deviceName = `title=${options.windowTitle}`;
+      case 'gdigrab': {
+        if (options.gdigrab?.windowTitle) {
+          deviceName = `title=${options.gdigrab.windowTitle}`;
+        } else if (options.gdigrab?.windowHandle !== undefined) {
+          deviceName = `hwnd=${options.gdigrab.windowHandle}`;
         } else {
           deviceName = 'desktop';
         }
@@ -715,10 +1040,19 @@ export class DeviceAPI {
         if (options.drawMouse !== undefined) {
           formatOptions.draw_mouse = options.drawMouse ? '1' : '0';
         }
+        if (options.gdigrab?.showRegion) {
+          formatOptions.show_region = '1';
+        }
         break;
+      }
 
       default:
         deviceName = 'desktop';
+    }
+
+    // Escape hatch
+    if (options.formatOptions) {
+      Object.assign(formatOptions, options.formatOptions);
     }
 
     return { deviceName, formatOptions };

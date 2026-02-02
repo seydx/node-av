@@ -20,7 +20,7 @@ export { AudioFrameBuffer } from './audio-frame-buffer.js';
 export { HardwareContext } from './hardware.js';
 
 // Device
-export { DeviceAPI, type DeviceInfo, type DeviceMode, type DeviceOptions, type ScreenCaptureOptions } from './device.js';
+export { DeviceAPI, type CameraOptions, type DeviceInfo, type DeviceMode, type DeviceOptions, type MicrophoneOptions, type ScreenCaptureOptions } from './device.js';
 
 // Filter
 export { FilterComplexAPI } from './filter-complex.js';
