@@ -27,8 +27,8 @@ std::vector<DeviceInfo> enumerateDevices() {
     bool isFirstVideo = true;
     for (AVCaptureDevice* device in videoDiscoverySession.devices) {
       DeviceInfo info;
-      info.name = std::string([[device uniqueID] UTF8String]);
-      info.description = std::string([[device localizedName] UTF8String]);
+      info.name = std::string([[device localizedName] UTF8String]);
+      info.description = std::string([[device uniqueID] UTF8String]);
       info.type = "video";
       info.isDefault = isFirstVideo;
       isFirstVideo = false;
@@ -49,8 +49,8 @@ std::vector<DeviceInfo> enumerateDevices() {
     bool isFirstAudio = true;
     for (AVCaptureDevice* device in audioDiscoverySession.devices) {
       DeviceInfo info;
-      info.name = std::string([[device uniqueID] UTF8String]);
-      info.description = std::string([[device localizedName] UTF8String]);
+      info.name = std::string([[device localizedName] UTF8String]);
+      info.description = std::string([[device uniqueID] UTF8String]);
       info.type = "audio";
       info.isDefault = isFirstAudio;
       isFirstAudio = false;
@@ -64,12 +64,12 @@ std::vector<DeviceInfo> enumerateDevices() {
                                                               position:AVCaptureDevicePositionUnspecified];
 
     for (AVCaptureDevice* device in muxedDiscoverySession.devices) {
-      std::string deviceId = std::string([[device uniqueID] UTF8String]);
+      std::string deviceName = std::string([[device localizedName] UTF8String]);
 
       // Check if already added
       bool alreadyAdded = false;
       for (const auto& d : devices) {
-        if (d.name == deviceId) {
+        if (d.name == deviceName) {
           alreadyAdded = true;
           break;
         }
@@ -77,8 +77,8 @@ std::vector<DeviceInfo> enumerateDevices() {
 
       if (!alreadyAdded) {
         DeviceInfo info;
-        info.name = deviceId;
-        info.description = std::string([[device localizedName] UTF8String]);
+        info.name = deviceName;
+        info.description = std::string([[device uniqueID] UTF8String]);
         info.type = "video";
         info.isDefault = false;
         devices.push_back(info);
@@ -93,8 +93,32 @@ std::vector<DeviceMode> enumerateDeviceModes(const std::string& deviceName) {
   std::vector<DeviceMode> modes;
 
   @autoreleasepool {
-    NSString* targetId = [NSString stringWithUTF8String:deviceName.c_str()];
-    AVCaptureDevice* device = [AVCaptureDevice deviceWithUniqueID:targetId];
+    NSString* targetName = [NSString stringWithUTF8String:deviceName.c_str()];
+
+    // First try uniqueID lookup (for backwards compatibility with description field)
+    AVCaptureDevice* device = [AVCaptureDevice deviceWithUniqueID:targetName];
+
+    // If not found, search by localizedName
+    if (!device) {
+      NSArray<AVCaptureDeviceType>* deviceTypes = @[
+        AVCaptureDeviceTypeBuiltInWideAngleCamera,
+        AVCaptureDeviceTypeBuiltInMicrophone,
+        AVCaptureDeviceTypeExternalUnknown
+      ];
+      for (AVMediaType mediaType in @[AVMediaTypeVideo, AVMediaTypeAudio, AVMediaTypeMuxed]) {
+        AVCaptureDeviceDiscoverySession* session =
+          [AVCaptureDeviceDiscoverySession discoverySessionWithDeviceTypes:deviceTypes
+                                                                 mediaType:mediaType
+                                                                  position:AVCaptureDevicePositionUnspecified];
+        for (AVCaptureDevice* d in session.devices) {
+          if ([[d localizedName] isEqualToString:targetName]) {
+            device = d;
+            break;
+          }
+        }
+        if (device) break;
+      }
+    }
 
     if (!device) {
       throw std::runtime_error("Device not found: " + deviceName);

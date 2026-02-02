@@ -66,17 +66,16 @@ static void enumerateDeviceCategory(
       if (SUCCEEDED(hr)) {
         DeviceInfo info;
         info.name = WideToUTF8(varName.bstrVal);
-        info.description = info.name;  // DirectShow doesn't have separate description
+        info.description = info.name;
         info.type = type;
         info.isDefault = isFirst;
         isFirst = false;
 
-        // Get device path if available (for unique identification)
+        // Store device path in description for unique identification
         VARIANT varPath;
         VariantInit(&varPath);
         if (SUCCEEDED(propBag->Read(L"DevicePath", &varPath, nullptr))) {
-          // Use device path as name for uniqueness
-          info.name = WideToUTF8(varPath.bstrVal);
+          info.description = WideToUTF8(varPath.bstrVal);
           VariantClear(&varPath);
         }
 
@@ -167,21 +166,14 @@ std::vector<DeviceMode> enumerateDeviceModes(const std::string& deviceName) {
     hr = moniker->BindToStorage(nullptr, nullptr, IID_IPropertyBag, reinterpret_cast<void**>(&propBag));
 
     if (SUCCEEDED(hr) && propBag) {
-      // Check if this is the device we're looking for
-      VARIANT varPath;
-      VariantInit(&varPath);
+      // Check if this is the device we're looking for (by FriendlyName)
+      VARIANT varName;
+      VariantInit(&varName);
       std::string thisDeviceName;
 
-      if (SUCCEEDED(propBag->Read(L"DevicePath", &varPath, nullptr))) {
-        thisDeviceName = WideToUTF8(varPath.bstrVal);
-        VariantClear(&varPath);
-      } else {
-        VARIANT varName;
-        VariantInit(&varName);
-        if (SUCCEEDED(propBag->Read(L"FriendlyName", &varName, nullptr))) {
-          thisDeviceName = WideToUTF8(varName.bstrVal);
-          VariantClear(&varName);
-        }
+      if (SUCCEEDED(propBag->Read(L"FriendlyName", &varName, nullptr))) {
+        thisDeviceName = WideToUTF8(varName.bstrVal);
+        VariantClear(&varName);
       }
 
       propBag->Release();
