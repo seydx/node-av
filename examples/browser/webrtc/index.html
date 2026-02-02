@@ -265,9 +265,13 @@
             <option value="screen">Screen Capture</option>
             <option value="camera">Camera</option>
             <option value="microphone">Microphone</option>
+            <option value="device">Camera + Microphone</option>
           </select>
           <select id="deviceSelect">
             <option value="">No devices loaded</option>
+          </select>
+          <select id="audioDeviceSelect" style="display: none">
+            <option value="">No audio devices</option>
           </select>
         </div>
       </div>
@@ -331,6 +335,7 @@
       const deviceSection = document.getElementById('deviceSection');
       const deviceTypeSelect = document.getElementById('deviceType');
       const deviceSelect = document.getElementById('deviceSelect');
+      const audioDeviceSelect = document.getElementById('audioDeviceSelect');
 
       let ws = null;
       let pc = null;
@@ -444,6 +449,7 @@
         if (!deviceList) return;
         const type = deviceTypeSelect.value;
         deviceSelect.innerHTML = '';
+        audioDeviceSelect.style.display = 'none';
 
         if (type === 'screen') {
           const opt = document.createElement('option');
@@ -453,21 +459,35 @@
           return;
         }
 
-        const filterType = type === 'camera' ? 'video' : 'audio';
-        const filtered = deviceList.filter((d) => d.type === filterType);
-        if (filtered.length === 0) {
-          const opt = document.createElement('option');
-          opt.value = '';
-          opt.textContent = 'No devices found';
-          deviceSelect.appendChild(opt);
+        if (type === 'device') {
+          const videos = deviceList.filter((d) => d.type === 'video');
+          const audios = deviceList.filter((d) => d.type === 'audio');
+          populateSelect(deviceSelect, videos, 'video');
+          audioDeviceSelect.innerHTML = '';
+          populateSelect(audioDeviceSelect, audios, 'audio');
+          audioDeviceSelect.style.display = '';
           return;
         }
-        filtered.forEach((d, i) => {
+
+        const filterType = type === 'camera' ? 'video' : 'audio';
+        const filtered = deviceList.filter((d) => d.type === filterType);
+        populateSelect(deviceSelect, filtered, filterType);
+      }
+
+      function populateSelect(select, devices, label) {
+        if (devices.length === 0) {
+          const opt = document.createElement('option');
+          opt.value = '';
+          opt.textContent = `No ${label} devices found`;
+          select.appendChild(opt);
+          return;
+        }
+        devices.forEach((d, i) => {
           const opt = document.createElement('option');
           opt.value = d.name || String(i);
           opt.textContent = d.name || `Device ${i}`;
           if (d.isDefault) opt.textContent += ' (Default)';
-          deviceSelect.appendChild(opt);
+          select.appendChild(opt);
         });
       }
 
@@ -523,6 +543,9 @@
                 offerMsg.deviceType = deviceType;
                 offerMsg.device = device;
                 offerMsg.framerate = 30;
+                if (deviceType === 'device') {
+                  offerMsg.audioDevice = audioDeviceSelect.value;
+                }
               } else {
                 const url = urlInput.value.trim();
                 if (!url) {

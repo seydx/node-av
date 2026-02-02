@@ -4,9 +4,7 @@ import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { WebSocket, WebSocketServer } from 'ws';
 
-import { Device, DeviceAPI, WebRTCStream } from '../../../src/index.js';
-
-import type { Demuxer } from '../../../src/index.js';
+import { type Demuxer, DeviceAPI, WebRTCStream } from '../../../src/index.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -22,38 +20,44 @@ if (process.env.SERVER_PORT) {
   }
 }
 
-async function buildDeviceInput(
-  message: Record<string, string | number | undefined>,
-): Promise<{ demuxer: Demuxer } | { deviceName: string; format: string; formatOptions: Record<string, string> }> {
-  if (message.deviceType === 'screen') {
-    const demuxer = await DeviceAPI.openScreen({
-      screenIndex: Number(message.screenIndex ?? 0),
-      frameRate: Number(message.framerate ?? 30),
-      captureSystemAudio: true,
-    });
-    return { demuxer };
-  }
+async function buildDeviceInput(message: Record<string, string | number | undefined>): Promise<Demuxer> {
+  const framerate = Number(message.framerate ?? 30);
+  const width = message.width ? Number(message.width) : undefined;
+  const height = message.height ? Number(message.height) : undefined;
 
-  if (message.deviceType === 'camera') {
-    const format = Device.getVideoFormat();
-    const deviceName = String(message.device ?? '0');
-    const formatOptions: Record<string, string> = {
-      pixel_format: format === 'avfoundation' ? 'nv12' : 'yuv420p',
-      framerate: String(message.framerate ?? 30),
-    };
-    if (message.width && message.height) {
-      formatOptions.video_size = `${message.width}x${message.height}`;
-    }
-    return { deviceName, format, formatOptions };
-  }
+  switch (message.deviceType) {
+    case 'screen':
+      return DeviceAPI.openScreen({
+        frameRate: framerate,
+        avfoundation: {
+          screenIndex: Number(message.screenIndex ?? 0),
+          captureSystemAudio: true,
+        },
+      });
 
-  // microphone
-  const format = Device.getAudioFormat();
-  let deviceName = String(message.device ?? '0');
-  if (format === 'avfoundation') {
-    deviceName = `:${deviceName}`;
+    case 'camera':
+      return DeviceAPI.openCamera({
+        videoDevice: String(message.device ?? '0'),
+        frameRate: framerate,
+        ...(width && height ? { width, height } : {}),
+      });
+
+    case 'device':
+      return DeviceAPI.openDevice({
+        videoDevice: String(message.device ?? '0'),
+        audioDevice: String(message.audioDevice ?? '0'),
+        frameRate: framerate,
+        ...(width && height ? { width, height } : {}),
+      });
+
+    case 'microphone':
+      return DeviceAPI.openMicrophone({
+        audioDevice: String(message.device ?? '0'),
+      });
+
+    default:
+      throw new Error(`Unknown device type: ${message.deviceType}`);
   }
-  return { deviceName, format, formatOptions: {} };
 }
 
 // Create HTTP server that serves the HTML page
@@ -94,15 +98,15 @@ wss.on('connection', async (ws: WebSocket) => {
       const message = JSON.parse(data.toString());
 
       if (message.type === 'list-devices') {
-        const devices = await Device.list();
+        const devices = await DeviceAPI.list();
         ws.send(
           JSON.stringify({
             type: 'devices',
             value: devices,
             formats: {
-              video: Device.getVideoFormat(),
-              audio: Device.getAudioFormat(),
-              screen: Device.getScreenFormat(),
+              video: DeviceAPI.getVideoFormat(),
+              audio: DeviceAPI.getAudioFormat(),
+              screen: DeviceAPI.getScreenFormat(),
             },
           }),
         );
@@ -116,18 +120,10 @@ wss.on('connection', async (ws: WebSocket) => {
         }
 
         let input: string | Demuxer;
-        let inputOptions: Record<string, unknown> | undefined;
 
         if (message.source === 'device') {
-          const result = await buildDeviceInput(message);
-          if ('demuxer' in result) {
-            input = result.demuxer;
-            console.log('[WebSocket] Received SDP offer with device from client:', message.deviceType, '(using Device.openScreen)');
-          } else {
-            input = result.deviceName;
-            inputOptions = { format: result.format, options: { ...result.formatOptions, probesize: 5000000, analyzeduration: 2000000 } };
-            console.log('[WebSocket] Received SDP offer with device from client:', message.deviceType, result.deviceName);
-          }
+          input = await buildDeviceInput(message);
+          console.log('[WebSocket] Received SDP offer with device from client:', message.deviceType);
         } else {
           if (!message.url) {
             ws.send(JSON.stringify({ type: 'error', value: 'No URL provided' }));
@@ -142,7 +138,6 @@ wss.on('connection', async (ws: WebSocket) => {
         // Create WebRTC session
         session = WebRTCStream.create(input, {
           hardware: 'auto',
-          ...(inputOptions ? { inputOptions } : {}),
           onIceCandidate: (candidate) => {
             if (ws.readyState === WebSocket.OPEN) {
               ws.send(JSON.stringify({ type: 'webrtc/candidate', value: candidate }));
