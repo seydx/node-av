@@ -227,6 +227,37 @@ describe('Device', () => {
         assert(demuxer.streams.length > 0);
       });
     });
+
+    describe('openDevice()', skipInCI, () => {
+      it('should open combined video + audio device', async () => {
+        if (process.platform === 'linux') {
+          console.log('Combined capture not supported on Linux, skipping test');
+          return;
+        }
+
+        const devices = await DeviceAPI.list();
+        const camera = devices.find((d) => d.type === 'video');
+        const microphone = devices.find((d) => d.type === 'audio');
+
+        if (!camera || !microphone) {
+          console.log('No camera or microphone device available, skipping test');
+          return;
+        }
+
+        const modes = await DeviceAPI.modes(camera.name);
+        const mode = modes.length > 0 ? modes[modes.length - 1] : null;
+
+        await using demuxer = await DeviceAPI.openDevice({
+          videoDevice: 0,
+          audioDevice: 0,
+          width: mode?.width ?? 640,
+          height: mode?.height ?? 480,
+          frameRate: mode?.maxFrameRate ?? 30,
+        });
+
+        assert(demuxer.streams.length > 1, 'Expected both video and audio streams');
+      });
+    });
   });
 
   describe('Screen Capture', () => {
