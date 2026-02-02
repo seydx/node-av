@@ -5,6 +5,84 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.2.0] - XXX
+
+### Added
+
+#### Device API - Native Camera, Microphone & Screen Capture
+
+New high-level `DeviceAPI` for cross-platform device capture with native bindings for macOS, Linux, and Windows.
+
+**Example:**
+```typescript
+import { DeviceAPI } from 'node-av/api';
+
+// List devices
+const devices = await DeviceAPI.list();
+
+// Camera capture
+await using camera = await DeviceAPI.openCamera({
+  width: 1280, height: 720, frameRate: 30,
+});
+
+// Combined video + audio capture (macOS/Windows)
+await using device = await DeviceAPI.openDevice({
+  videoDevice: 0, audioDevice: 0,
+  width: 1280, height: 720, frameRate: 30,
+});
+
+// Screen capture with system audio (macOS 13.0+)
+await using screen = await DeviceAPI.openScreen({
+  frameRate: 30, drawMouse: true,
+  avfoundation: { captureSystemAudio: true, audioSampleRate: 48000 },
+});
+```
+
+**Platform support:**
+
+| Feature | macOS | Linux | Windows |
+|---------|-------|-------|---------|
+| Camera | AVFoundation | V4L2 | DirectShow |
+| Microphone | AVFoundation | ALSA | DirectShow |
+| Combined | AVFoundation | — | DirectShow |
+| Screen | ScreenCaptureKit | x11grab | GDI grab |
+
+#### IOContext Input Support
+
+`Demuxer.open()` and `Demuxer.openSync()` now accept a pre-created `IOContext` as input, enabling advanced custom I/O scenarios with more control over buffering and seeking.
+
+#### Muxer - Start Time Offset
+
+New `startTime` option in `Muxer` stream options for controlling packet timestamp offsets.
+
+### Changed
+
+#### Demuxer Input Support
+
+`FMP4Stream.create()`, `WebRTCStream.create()`, and `RTPStream.create()` now accept a pre-opened `Demuxer` instance as input in addition to URL strings. This enables using device capture or custom I/O as input for streaming.
+
+```typescript
+await using screen = await DeviceAPI.openScreen({ frameRate: 30 });
+const session = await WebRTCSession.create(screen, { hardware: 'auto' });
+```
+
+#### Build Configuration
+
+- Enhanced symbol visibility flags and exports for native bindings
+- Updated linker flags for improved compatibility
+- Updated Linux screen capture format from `xcbgrab` to `x11grab`
+
+### Fixed
+
+#### Electron Compatibility
+
+- Fixed external buffer access in Electron environment by refactoring native buffer creation to use `NewOrCopy`
+- Ensures safe buffer handling when Node.js buffers are accessed from native code in Electron's process model
+
+#### Audio Channel Layout
+
+Fixed channel layout formatting for audio frames in filter graphs.
+
 ## [5.1.0] - 2026-01-27
 
 ### Added
