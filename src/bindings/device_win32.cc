@@ -13,6 +13,14 @@
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "oleaut32.lib")
 
+// MEDIASUBTYPE_I420 is not defined in standard DirectShow headers
+#ifndef MEDIASUBTYPE_I420_DEFINED
+static const GUID MEDIASUBTYPE_I420 = {
+  0x30323449, 0x0000, 0x0010, {0x80, 0x00, 0x00, 0xAA, 0x00, 0x38, 0x9B, 0x71}
+};
+#define MEDIASUBTYPE_I420_DEFINED
+#endif
+
 namespace ffmpeg {
 
 // Helper function to convert wide string to UTF-8
