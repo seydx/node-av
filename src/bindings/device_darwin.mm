@@ -127,6 +127,14 @@ std::vector<DeviceInfo> enumerateDevices() {
           }
         }
         info.description = screenName ? [screenName UTF8String] : ("Display " + std::to_string(i));
+
+        // Screen bounds from CoreGraphics
+        CGRect bounds = CGDisplayBounds(displays[i]);
+        info.screenX = static_cast<int>(bounds.origin.x);
+        info.screenY = static_cast<int>(bounds.origin.y);
+        info.screenWidth = static_cast<int>(bounds.size.width);
+        info.screenHeight = static_cast<int>(bounds.size.height);
+
         devices.push_back(info);
       }
     }

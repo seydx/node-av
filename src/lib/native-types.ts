@@ -1021,6 +1021,10 @@ export interface NativeDeviceInfo {
   description: string;
   type: 'video' | 'audio' | 'screen';
   isDefault: boolean;
+  screenX?: number;
+  screenY?: number;
+  screenWidth?: number;
+  screenHeight?: number;
 }
 
 /**

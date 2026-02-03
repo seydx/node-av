@@ -13,12 +13,9 @@
 #include <fstream>
 #include <linux/videodev2.h>
 
-#ifdef __has_include
-#if __has_include(<alsa/asoundlib.h>)
 #include <alsa/asoundlib.h>
-#define HAS_ALSA 1
-#endif
-#endif
+#include <X11/Xlib.h>
+#include <X11/extensions/Xrandr.h>
 
 namespace ffmpeg {
 
@@ -132,10 +129,54 @@ std::vector<DeviceInfo> enumerateDevices() {
   // Enumerate screen/display devices
   const char* waylandDisplay = getenv("WAYLAND_DISPLAY");
   const char* x11Display = getenv("DISPLAY");
-  if (waylandDisplay || x11Display) {
+
+  if (x11Display) {
+    Display* dpy = XOpenDisplay(x11Display);
+    if (dpy) {
+      int screen = DefaultScreen(dpy);
+      XRRScreenResources* res = XRRGetScreenResources(dpy, RootWindow(dpy, screen));
+      if (res) {
+        bool isFirst = true;
+        for (int c = 0; c < res->ncrtc; c++) {
+          XRRCrtcInfo* crtc = XRRGetCrtcInfo(dpy, res, res->crtcs[c]);
+          if (crtc && crtc->width > 0 && crtc->height > 0) {
+            DeviceInfo info;
+            info.type = "screen";
+            info.isDefault = isFirst;
+            isFirst = false;
+            info.name = std::string(x11Display);
+
+            // Try to get output name for description
+            std::string outputName = "Display " + std::to_string(c);
+            if (crtc->noutput > 0) {
+              XRROutputInfo* output = XRRGetOutputInfo(dpy, res, crtc->outputs[0]);
+              if (output) {
+                if (output->name) {
+                  outputName = std::string(output->name);
+                }
+                XRRFreeOutputInfo(output);
+              }
+            }
+            info.description = outputName;
+
+            info.screenX = crtc->x;
+            info.screenY = crtc->y;
+            info.screenWidth = static_cast<int>(crtc->width);
+            info.screenHeight = static_cast<int>(crtc->height);
+
+            devices.push_back(info);
+          }
+          if (crtc) XRRFreeCrtcInfo(crtc);
+        }
+        XRRFreeScreenResources(res);
+      }
+      XCloseDisplay(dpy);
+    }
+  } else if (waylandDisplay) {
+    // Wayland fallback: single display without bounds
     DeviceInfo info;
-    info.name = x11Display ? std::string(x11Display) : "default";
-    info.description = waylandDisplay ? "Wayland Display" : "X11 Display";
+    info.name = "default";
+    info.description = "Wayland Display";
     info.type = "screen";
     info.isDefault = true;
     devices.push_back(info);
@@ -241,7 +282,6 @@ std::vector<DeviceMode> enumerateDeviceModes(const std::string& deviceName) {
 std::vector<AudioDeviceMode> enumerateAudioDeviceModes(const std::string& deviceName) {
   std::vector<AudioDeviceMode> modes;
 
-#ifdef HAS_ALSA
   snd_pcm_t* pcm = nullptr;
   snd_pcm_hw_params_t* params = nullptr;
 
@@ -316,9 +356,6 @@ std::vector<AudioDeviceMode> enumerateAudioDeviceModes(const std::string& device
     if (a.sampleRate != b.sampleRate) return a.sampleRate > b.sampleRate;
     return a.channels > b.channels;
   });
-#else
-  (void)deviceName;
-#endif
 
   return modes;
 }

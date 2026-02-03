@@ -1,188 +1,109 @@
 import { existsSync } from 'fs';
 
 import { Device } from '../lib/device.js';
+import { avGetPixFmtName } from '../lib/utilities.js';
 import { Demuxer } from './demuxer.js';
 
-import type { AudioDeviceMode, DeviceInfo, DeviceMode } from '../lib/device.js';
+import type { AVPixelFormat } from '../constants/constants.js';
+import type { FFVideoDecoder } from '../constants/decoders.js';
+import type { AudioDeviceMode, DeviceInfo, DeviceMode, ScreenBounds } from '../lib/device.js';
 
 /**
  * Options for opening a camera device.
  */
 export interface CameraOptions {
-  /** Video device name or index (0-based) */
   videoDevice?: string | number;
-  /** Video frame rate */
   frameRate?: number;
-  /** Video resolution width */
   width?: number;
-  /** Video resolution height */
   height?: number;
-  /** Pixel format (e.g., 'nv12', 'yuyv422'). Only sent when explicitly set. */
-  pixelFormat?: string;
-
-  /** macOS AVFoundation-specific options */
+  pixelFormat?: AVPixelFormat;
   avfoundation?: {
-    /** Capture raw device data (e.g., DV from tape-based camcorders) */
     captureRawData?: boolean;
   };
-
-  /** Linux V4L2-specific options */
   v4l2?: {
-    /** Preferred input format/codec (e.g., 'mjpeg', 'h264') */
-    inputFormat?: string;
+    inputFormat?: FFVideoDecoder;
   };
-
-  /** Windows DirectShow-specific options */
   dshow?: {
-    /** Device number for devices with the same name (starts at 0) */
     videoDeviceNumber?: number;
-    /** Select video capture pin by name */
     videoPinName?: string;
   };
-
-  /** Additional FFmpeg format options passed directly */
-  formatOptions?: Record<string, string>;
+  formatOptions?: Record<string, string | number | boolean | undefined | null>;
 }
 
 /**
  * Options for opening a microphone device.
  */
 export interface MicrophoneOptions {
-  /** Audio device name or index (0-based) */
   audioDevice?: string | number;
-  /** Audio sample rate in Hz */
   sampleRate?: number;
-  /** Number of audio channels */
   channels?: number;
-
-  /** Linux ALSA-specific options */
   alsa?: {
-    /** Path to ALSA configuration file (overrides auto-detection) */
     configPath?: string;
   };
-
-  /** Windows DirectShow-specific options */
   dshow?: {
-    /** Audio sample size in bits (8 or 16) */
     sampleSize?: number;
-    /** Device number for devices with the same name (starts at 0) */
     audioDeviceNumber?: number;
-    /** Select audio capture pin by name */
     audioPinName?: string;
-    /** Audio buffer size in milliseconds */
     audioBufferSize?: number;
   };
-
-  /** Additional FFmpeg format options passed directly */
-  formatOptions?: Record<string, string>;
+  formatOptions?: Record<string, string | number | boolean | undefined | null>;
 }
 
 /**
  * Options for screen capture.
  */
 export interface ScreenCaptureOptions {
-  /** Capture region: x offset */
+  screenIndex?: number;
+  windowId?: number;
   x?: number;
-  /** Capture region: y offset */
   y?: number;
-  /** Capture region width */
   width?: number;
-  /** Capture region height */
   height?: number;
-  /** Frame rate for capture */
   frameRate?: number;
-  /** Whether to draw the mouse cursor */
   drawMouse?: boolean;
-  /** Pixel format */
-  pixelFormat?: string;
-
-  /** macOS AVFoundation-specific options */
+  pixelFormat?: AVPixelFormat;
   avfoundation?: {
-    /** Screen index (0 = main display) */
-    screenIndex?: number;
-    /** Capture mouse click animations (macOS 15.0+) */
     captureMouseClicks?: boolean;
-    /** Capture system/desktop audio via ScreenCaptureKit (macOS 13.0+) */
     captureSystemAudio?: boolean;
-    /** Exclude current process audio from system audio capture */
     excludeProcessAudio?: boolean;
-    /** System audio sample rate (8000, 16000, 24000, 48000). Default: 48000 */
     audioSampleRate?: 8000 | 16000 | 24000 | 48000;
-    /** System audio channels (1=mono, 2=stereo). Default: 2 */
     audioChannels?: 1 | 2;
   };
-
-  /** Linux X11-specific options */
   x11grab?: {
-    /** Display identifier (e.g., ':0.0') */
     display?: string;
-    /** Capture specific window by X11 window ID */
-    windowId?: number;
-    /** Follow mouse ('centered' or pixel distance from edge) */
     followMouse?: 'centered' | number;
-    /** Show grabbed region border on screen */
     showRegion?: boolean;
-    /** Prompt user to graphically select capture region */
-    selectRegion?: boolean;
   };
-
-  /** Windows GDI-specific options */
   gdigrab?: {
-    /** Window title to capture instead of desktop */
     windowTitle?: string;
-    /** Window handle (HWND) to capture */
-    windowHandle?: number;
-    /** Show grabbed region border on screen */
     showRegion?: boolean;
   };
-
-  /** Additional FFmpeg format options passed directly */
-  formatOptions?: Record<string, string>;
+  formatOptions?: Record<string, string | number | boolean | undefined | null>;
 }
 
 /**
  * Options for combined video + audio device capture.
  */
 export interface DeviceOptions {
-  /** Video device name or index */
   videoDevice?: string | number;
-  /** Audio device name or index */
   audioDevice?: string | number;
-  /** Video frame rate */
   frameRate?: number;
-  /** Video resolution width */
   width?: number;
-  /** Video resolution height */
   height?: number;
-  /** Pixel format */
-  pixelFormat?: string;
-  /** Audio sample rate in Hz */
+  pixelFormat?: AVPixelFormat;
   sampleRate?: number;
-  /** Number of audio channels */
   channels?: number;
-
-  /** macOS AVFoundation-specific options */
   avfoundation?: {
-    /** Capture raw device data */
     captureRawData?: boolean;
   };
-
-  /** Windows DirectShow-specific options */
   dshow?: {
-    /** Video device number for devices with same name */
     videoDeviceNumber?: number;
-    /** Audio device number for devices with same name */
     audioDeviceNumber?: number;
-    /** Select video capture pin by name */
     videoPinName?: string;
-    /** Select audio capture pin by name */
     audioPinName?: string;
-    /** Audio buffer size in milliseconds */
     audioBufferSize?: number;
   };
-
-  /** Additional FFmpeg format options passed directly */
-  formatOptions?: Record<string, string>;
+  formatOptions?: Record<string, string | number | boolean | undefined | null>;
 }
 
 /**
@@ -555,9 +476,9 @@ export class DeviceAPI {
    *   frameRate: 30,
    * });
    *
-   * // macOS: Capture specific screen
+   * // Capture specific screen (works cross-platform)
    * await using input = await DeviceAPI.openScreen({
-   *   avfoundation: { screenIndex: 1 },
+   *   screenIndex: 1,
    *   frameRate: 30,
    * });
    * ```
@@ -867,8 +788,9 @@ export class DeviceAPI {
     if (options.width && options.height) {
       formatOptions.video_size = `${options.width}x${options.height}`;
     }
-    if (options.pixelFormat) {
-      formatOptions.pixel_format = options.pixelFormat;
+    if (options.pixelFormat !== undefined) {
+      const name = avGetPixFmtName(options.pixelFormat);
+      if (name) formatOptions.pixel_format = name;
     } else if (format === 'avfoundation') {
       formatOptions.pixel_format = 'nv12';
     }
@@ -881,7 +803,7 @@ export class DeviceAPI {
     }
     if (format === 'v4l2' && options.v4l2) {
       if (options.v4l2.inputFormat) {
-        formatOptions.input_format = options.v4l2.inputFormat;
+        formatOptions.input_format = options.v4l2.inputFormat as string;
       }
     }
     if (format === 'dshow' && options.dshow) {
@@ -965,8 +887,9 @@ export class DeviceAPI {
     if (options.width && options.height) {
       formatOptions.video_size = `${options.width}x${options.height}`;
     }
-    if (options.pixelFormat) {
-      formatOptions.pixel_format = options.pixelFormat;
+    if (options.pixelFormat !== undefined) {
+      const name = avGetPixFmtName(options.pixelFormat);
+      if (name) formatOptions.pixel_format = name;
     } else if (format === 'avfoundation') {
       formatOptions.pixel_format = 'nv12';
     }
@@ -1026,9 +949,13 @@ export class DeviceAPI {
     const formatOptions: Record<string, string> = {};
     let deviceName: string;
 
+    // Resolve screen bounds from screenIndex if provided
+    const screenBounds = DeviceAPI.resolveScreenBounds(options.screenIndex);
+
     switch (format) {
       case 'avfoundation': {
-        deviceName = `Capture screen ${options.avfoundation?.screenIndex ?? 0}`;
+        const screenIdx = options.screenIndex ?? 0;
+        deviceName = `Capture screen ${screenIdx}`;
         if (options.frameRate) {
           formatOptions.framerate = String(options.frameRate);
         }
@@ -1038,8 +965,13 @@ export class DeviceAPI {
         if (options.drawMouse !== undefined) {
           formatOptions.capture_cursor = options.drawMouse ? '1' : '0';
         }
-        if (options.pixelFormat) {
-          formatOptions.pixel_format = options.pixelFormat;
+        if (options.pixelFormat !== undefined) {
+          const name = avGetPixFmtName(options.pixelFormat);
+          if (name) formatOptions.pixel_format = name;
+        }
+        // Window capture via ScreenCaptureKit
+        if (options.windowId !== undefined) {
+          formatOptions.capture_window_id = String(options.windowId);
         }
         // AVFoundation-specific
         if (options.avfoundation?.captureMouseClicks) {
@@ -1062,49 +994,63 @@ export class DeviceAPI {
 
       case 'x11grab': {
         const display = options.x11grab?.display ?? ':0.0';
-        const offset = options.x !== undefined || options.y !== undefined ? `+${options.x ?? 0},${options.y ?? 0}` : '';
+        // Use screen bounds offset if screenIndex is set, otherwise use manual x/y
+        const offsetX = screenBounds ? screenBounds.x : (options.x ?? 0);
+        const offsetY = screenBounds ? screenBounds.y : (options.y ?? 0);
+        const hasOffset = screenBounds !== undefined || options.x !== undefined || options.y !== undefined;
+        const offset = hasOffset ? `+${offsetX},${offsetY}` : '';
         deviceName = `${display}${offset}`;
         if (options.frameRate) {
           formatOptions.framerate = String(options.frameRate);
         }
+        // Use screen bounds for video_size if screenIndex is set and no explicit size
         if (options.width && options.height) {
           formatOptions.video_size = `${options.width}x${options.height}`;
+        } else if (screenBounds && screenBounds.width > 0 && screenBounds.height > 0) {
+          formatOptions.video_size = `${screenBounds.width}x${screenBounds.height}`;
         }
         if (options.drawMouse !== undefined) {
           formatOptions.draw_mouse = options.drawMouse ? '1' : '0';
         }
-        // X11-specific
-        if (options.x11grab?.windowId !== undefined) {
-          formatOptions.window_id = String(options.x11grab.windowId);
-        }
-        if (options.x11grab?.followMouse !== undefined) {
-          formatOptions.follow_mouse = typeof options.x11grab.followMouse === 'number' ? String(options.x11grab.followMouse) : options.x11grab.followMouse;
+        // Window capture
+        if (options.windowId !== undefined) {
+          formatOptions.window_id = String(options.windowId);
         }
         if (options.x11grab?.showRegion) {
           formatOptions.show_region = '1';
         }
-        if (options.x11grab?.selectRegion) {
-          formatOptions.select_region = '1';
+        // X11-specific
+        if (options.x11grab?.followMouse !== undefined) {
+          formatOptions.follow_mouse = typeof options.x11grab.followMouse === 'number' ? String(options.x11grab.followMouse) : options.x11grab.followMouse;
         }
         break;
       }
 
       case 'gdigrab': {
-        if (options.gdigrab?.windowTitle) {
+        if (options.windowId !== undefined) {
+          deviceName = `hwnd=${options.windowId}`;
+        } else if (options.gdigrab?.windowTitle) {
           deviceName = `title=${options.gdigrab.windowTitle}`;
-        } else if (options.gdigrab?.windowHandle !== undefined) {
-          deviceName = `hwnd=${options.gdigrab.windowHandle}`;
         } else {
           deviceName = 'desktop';
         }
         if (options.frameRate) {
           formatOptions.framerate = String(options.frameRate);
         }
-        if (options.x !== undefined) {
-          formatOptions.offset_x = String(options.x);
-        }
-        if (options.y !== undefined) {
-          formatOptions.offset_y = String(options.y);
+        // Use screen bounds for offset/size if screenIndex is set
+        if (screenBounds) {
+          formatOptions.offset_x = String(screenBounds.x);
+          formatOptions.offset_y = String(screenBounds.y);
+          if (!options.width && !options.height && screenBounds.width > 0 && screenBounds.height > 0) {
+            formatOptions.video_size = `${screenBounds.width}x${screenBounds.height}`;
+          }
+        } else {
+          if (options.x !== undefined) {
+            formatOptions.offset_x = String(options.x);
+          }
+          if (options.y !== undefined) {
+            formatOptions.offset_y = String(options.y);
+          }
         }
         if (options.width && options.height) {
           formatOptions.video_size = `${options.width}x${options.height}`;
@@ -1128,6 +1074,25 @@ export class DeviceAPI {
     }
 
     return { deviceName, formatOptions };
+  }
+
+  /**
+   * Resolve screen bounds for a given screen index.
+   *
+   * @param screenIndex - 0-based screen index
+   *
+   * @returns Screen bounds or undefined if not found
+   *
+   * @internal
+   */
+  private static resolveScreenBounds(screenIndex: number | undefined): ScreenBounds | undefined {
+    if (screenIndex === undefined) return undefined;
+
+    const devices = Device.listSync();
+    const screens = devices.filter((d) => d.type === 'screen');
+    if (screenIndex < 0 || screenIndex >= screens.length) return undefined;
+
+    return screens[screenIndex].bounds;
   }
 
   /**

@@ -4,6 +4,16 @@ import type { AVPixelFormat, AVSampleFormat } from '../constants/constants.js';
 import type { NativeAudioDeviceMode, NativeDeviceInfo, NativeDeviceMode } from './native-types.js';
 
 /**
+ * Screen bounds rectangle
+ */
+export interface ScreenBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
  * Device information for capture devices
  */
 export interface DeviceInfo {
@@ -11,6 +21,7 @@ export interface DeviceInfo {
   description: string;
   type: 'video' | 'audio' | 'screen';
   isDefault: boolean;
+  bounds?: ScreenBounds;
 }
 
 /**
@@ -85,6 +96,16 @@ export class Device {
       description: d.description,
       type: d.type,
       isDefault: d.isDefault,
+      ...(d.type === 'screen'
+        ? {
+            bounds: {
+              x: d.screenX ?? 0,
+              y: d.screenY ?? 0,
+              width: d.screenWidth ?? 0,
+              height: d.screenHeight ?? 0,
+            },
+          }
+        : {}),
     }));
   }
 
@@ -107,6 +128,16 @@ export class Device {
       description: d.description,
       type: d.type,
       isDefault: d.isDefault,
+      ...(d.type === 'screen'
+        ? {
+            bounds: {
+              x: d.screenX ?? 0,
+              y: d.screenY ?? 0,
+              width: d.screenWidth ?? 0,
+              height: d.screenHeight ?? 0,
+            },
+          }
+        : {}),
     }));
   }
 

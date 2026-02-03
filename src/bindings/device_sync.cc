@@ -11,6 +11,12 @@ static Napi::Array DevicesToJS(Napi::Env env, const std::vector<DeviceInfo>& dev
     deviceObj.Set("description", Napi::String::New(env, devices[i].description));
     deviceObj.Set("type", Napi::String::New(env, devices[i].type));
     deviceObj.Set("isDefault", Napi::Boolean::New(env, devices[i].isDefault));
+    if (devices[i].type == "screen") {
+      deviceObj.Set("screenX", Napi::Number::New(env, devices[i].screenX));
+      deviceObj.Set("screenY", Napi::Number::New(env, devices[i].screenY));
+      deviceObj.Set("screenWidth", Napi::Number::New(env, devices[i].screenWidth));
+      deviceObj.Set("screenHeight", Napi::Number::New(env, devices[i].screenHeight));
+    }
     result[i] = deviceObj;
   }
 

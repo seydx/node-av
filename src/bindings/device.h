@@ -17,6 +17,11 @@ struct DeviceInfo {
   std::string description;
   std::string type;  // "video", "audio", or "screen"
   bool isDefault;
+  // Screen bounds (only meaningful for type == "screen")
+  int screenX = 0;
+  int screenY = 0;
+  int screenWidth = 0;
+  int screenHeight = 0;
 };
 
 struct DeviceMode {

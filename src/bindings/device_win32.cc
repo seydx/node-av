@@ -135,6 +135,12 @@ static BOOL CALLBACK MonitorEnumProc(HMONITOR hMonitor, HDC, LPRECT, LPARAM dwDa
   WideCharToMultiByte(CP_UTF8, 0, miex.szDevice, -1, &deviceName[0], len, nullptr, nullptr);
   info.description = deviceName;
 
+  // Screen bounds from MONITORINFOEX
+  info.screenX = miex.rcMonitor.left;
+  info.screenY = miex.rcMonitor.top;
+  info.screenWidth = miex.rcMonitor.right - miex.rcMonitor.left;
+  info.screenHeight = miex.rcMonitor.bottom - miex.rcMonitor.top;
+
   devices->push_back(info);
   return TRUE;
 }
