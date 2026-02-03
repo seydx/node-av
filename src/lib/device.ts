@@ -14,15 +14,40 @@ export interface ScreenBounds {
 }
 
 /**
- * Device information for capture devices
+ * Base device information
  */
-export interface DeviceInfo {
+export interface BaseDeviceInfo {
   name: string;
   description: string;
-  type: 'video' | 'audio' | 'screen';
   isDefault: boolean;
-  bounds?: ScreenBounds;
 }
+
+/**
+ * Device information for video capture devices
+ */
+export interface VideoDeviceInfo extends BaseDeviceInfo {
+  type: 'video';
+}
+
+/**
+ * Device information for audio capture devices
+ */
+export interface AudioDeviceInfo extends BaseDeviceInfo {
+  type: 'audio';
+}
+
+/**
+ * Device information for screen capture devices
+ */
+export interface ScreenDeviceInfo extends BaseDeviceInfo {
+  type: 'screen';
+  bounds: ScreenBounds;
+}
+
+/**
+ * Device information for capture devices
+ */
+export type DeviceInfo = VideoDeviceInfo | AudioDeviceInfo | ScreenDeviceInfo;
 
 /**
  * Device capture mode
@@ -91,22 +116,28 @@ export class Device {
    */
   static async list(): Promise<DeviceInfo[]> {
     const nativeDevices = await bindings.Device.listDevices();
-    return nativeDevices.map((d: NativeDeviceInfo) => ({
-      name: d.name,
-      description: d.description,
-      type: d.type,
-      isDefault: d.isDefault,
-      ...(d.type === 'screen'
-        ? {
-            bounds: {
-              x: d.screenX ?? 0,
-              y: d.screenY ?? 0,
-              width: d.screenWidth ?? 0,
-              height: d.screenHeight ?? 0,
-            },
-          }
-        : {}),
-    }));
+    return nativeDevices.map((d: NativeDeviceInfo): DeviceInfo => {
+      if (d.type === 'screen') {
+        return {
+          name: d.name,
+          description: d.description,
+          type: 'screen',
+          isDefault: d.isDefault,
+          bounds: {
+            x: d.screenX ?? 0,
+            y: d.screenY ?? 0,
+            width: d.screenWidth ?? 0,
+            height: d.screenHeight ?? 0,
+          },
+        };
+      }
+      return {
+        name: d.name,
+        description: d.description,
+        type: d.type,
+        isDefault: d.isDefault,
+      };
+    });
   }
 
   /**
@@ -123,22 +154,28 @@ export class Device {
    */
   static listSync(): DeviceInfo[] {
     const nativeDevices = bindings.Device.listDevicesSync();
-    return nativeDevices.map((d: NativeDeviceInfo) => ({
-      name: d.name,
-      description: d.description,
-      type: d.type,
-      isDefault: d.isDefault,
-      ...(d.type === 'screen'
-        ? {
-            bounds: {
-              x: d.screenX ?? 0,
-              y: d.screenY ?? 0,
-              width: d.screenWidth ?? 0,
-              height: d.screenHeight ?? 0,
-            },
-          }
-        : {}),
-    }));
+    return nativeDevices.map((d: NativeDeviceInfo): DeviceInfo => {
+      if (d.type === 'screen') {
+        return {
+          name: d.name,
+          description: d.description,
+          type: 'screen',
+          isDefault: d.isDefault,
+          bounds: {
+            x: d.screenX ?? 0,
+            y: d.screenY ?? 0,
+            width: d.screenWidth ?? 0,
+            height: d.screenHeight ?? 0,
+          },
+        };
+      }
+      return {
+        name: d.name,
+        description: d.description,
+        type: d.type,
+        isDefault: d.isDefault,
+      };
+    });
   }
 
   /**
