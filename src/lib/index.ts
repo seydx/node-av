@@ -77,7 +77,7 @@ export { Rational } from './rational.js';
 export { Log } from './log.js';
 
 // Device
-export { Device, type DeviceInfo, type DeviceMode } from './device.js';
+export { Device, type AudioDeviceMode, type DeviceInfo, type DeviceMode } from './device.js';
 
 // Error handling
 export { FFmpegError, PosixError } from './error.js';

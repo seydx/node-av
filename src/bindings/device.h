@@ -5,12 +5,17 @@
 #include <vector>
 #include <string>
 
+extern "C" {
+#include <libavutil/pixfmt.h>
+#include <libavutil/samplefmt.h>
+}
+
 namespace ffmpeg {
 
 struct DeviceInfo {
   std::string name;
   std::string description;
-  std::string type;  // "video" or "audio"
+  std::string type;  // "video", "audio", or "screen"
   bool isDefault;
 };
 
@@ -19,11 +24,19 @@ struct DeviceMode {
   int height;
   double minFrameRate;
   double maxFrameRate;
+  AVPixelFormat pixelFormat = AV_PIX_FMT_NONE;  // FFmpeg AVPixelFormat enum value
+};
+
+struct AudioDeviceMode {
+  int sampleRate;
+  int channels;
+  AVSampleFormat sampleFormat = AV_SAMPLE_FMT_NONE;
 };
 
 // Platform-specific implementations
 std::vector<DeviceInfo> enumerateDevices();
 std::vector<DeviceMode> enumerateDeviceModes(const std::string& deviceName);
+std::vector<AudioDeviceMode> enumerateAudioDeviceModes(const std::string& deviceName);
 std::string getVideoInputFormat();
 std::string getAudioInputFormat();
 std::string getScreenInputFormat();
@@ -55,6 +68,19 @@ private:
   std::vector<DeviceMode> modes_;
 };
 
+class ListAudioDeviceModesWorker : public Napi::AsyncWorker {
+public:
+  ListAudioDeviceModesWorker(Napi::Env env, Napi::Promise::Deferred deferred, const std::string& deviceName);
+  void Execute() override;
+  void OnOK() override;
+  void OnError(const Napi::Error& error) override;
+
+private:
+  Napi::Promise::Deferred deferred_;
+  std::string deviceName_;
+  std::vector<AudioDeviceMode> modes_;
+};
+
 class Device : public Napi::ObjectWrap<Device> {
 public:
   static Napi::Object Init(Napi::Env env, Napi::Object exports);
@@ -68,6 +94,8 @@ private:
   static Napi::Value ListDevicesSync(const Napi::CallbackInfo& info);
   static Napi::Value ListDeviceModes(const Napi::CallbackInfo& info);
   static Napi::Value ListDeviceModesSync(const Napi::CallbackInfo& info);
+  static Napi::Value ListAudioDeviceModes(const Napi::CallbackInfo& info);
+  static Napi::Value ListAudioDeviceModesSync(const Napi::CallbackInfo& info);
   static Napi::Value GetVideoFormat(const Napi::CallbackInfo& info);
   static Napi::Value GetAudioFormat(const Napi::CallbackInfo& info);
   static Napi::Value GetScreenFormat(const Napi::CallbackInfo& info);

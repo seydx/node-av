@@ -1025,7 +1025,7 @@ export interface NativeSyncQueue extends Disposable {
 export interface NativeDeviceInfo {
   name: string;
   description: string;
-  type: 'video' | 'audio';
+  type: 'video' | 'audio' | 'screen';
   isDefault: boolean;
 }
 
@@ -1039,6 +1039,18 @@ export interface NativeDeviceMode {
   height: number;
   minFrameRate: number;
   maxFrameRate: number;
+  pixelFormat: AVPixelFormat;
+}
+
+/**
+ * Audio device capture mode (sample rate + channels + sample format)
+ *
+ * @internal
+ */
+export interface NativeAudioDeviceMode {
+  sampleRate: number;
+  channels: number;
+  sampleFormat: AVSampleFormat;
 }
 
 /**
@@ -1051,6 +1063,8 @@ export interface NativeDeviceModule {
   listDevicesSync(): NativeDeviceInfo[];
   listDeviceModes(deviceName: string): Promise<NativeDeviceMode[]>;
   listDeviceModesSync(deviceName: string): NativeDeviceMode[];
+  listAudioDeviceModes(deviceName: string): Promise<NativeAudioDeviceMode[]>;
+  listAudioDeviceModesSync(deviceName: string): NativeAudioDeviceMode[];
   getVideoFormat(): string;
   getAudioFormat(): string;
   getScreenFormat(): string;

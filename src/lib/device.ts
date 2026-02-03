@@ -1,6 +1,7 @@
 import { bindings } from './binding.js';
 
-import type { NativeDeviceInfo, NativeDeviceMode } from './native-types.js';
+import type { AVPixelFormat, AVSampleFormat } from '../constants/constants.js';
+import type { NativeAudioDeviceMode, NativeDeviceInfo, NativeDeviceMode } from './native-types.js';
 
 /**
  * Device information for capture devices.
@@ -11,7 +12,7 @@ export interface DeviceInfo {
   /** Device description or friendly name */
   description: string;
   /** Device type */
-  type: 'video' | 'audio';
+  type: 'video' | 'audio' | 'screen';
   /** Whether this is the default device */
   isDefault: boolean;
 }
@@ -28,6 +29,20 @@ export interface DeviceMode {
   minFrameRate: number;
   /** Maximum supported frame rate */
   maxFrameRate: number;
+  /** FFmpeg pixel format (AVPixelFormat enum value, e.g. AV_PIX_FMT_NV12) */
+  pixelFormat: AVPixelFormat;
+}
+
+/**
+ * Audio device capture mode (sample rate + channels + sample format).
+ */
+export interface AudioDeviceMode {
+  /** Audio sample rate in Hz (e.g. 44100, 48000) */
+  sampleRate: number;
+  /** Number of audio channels (e.g. 1 for mono, 2 for stereo) */
+  channels: number;
+  /** FFmpeg sample format (AVSampleFormat enum value, e.g. AV_SAMPLE_FMT_S16) */
+  sampleFormat: AVSampleFormat;
 }
 
 /**
@@ -134,6 +149,7 @@ export class Device {
       height: m.height,
       minFrameRate: m.minFrameRate,
       maxFrameRate: m.maxFrameRate,
+      pixelFormat: m.pixelFormat,
     }));
   }
 
@@ -163,6 +179,64 @@ export class Device {
       height: m.height,
       minFrameRate: m.minFrameRate,
       maxFrameRate: m.maxFrameRate,
+      pixelFormat: m.pixelFormat,
+    }));
+  }
+
+  /**
+   * Query supported audio capture modes for an audio device.
+   *
+   * Returns supported sample rates, channel counts and sample formats for the specified device.
+   * Modes are sorted descending by sample rate, then by channel count.
+   *
+   * @param deviceName - Device name as returned by `list()` (e.g. uniqueID on macOS, hw:0 on Linux)
+   *
+   * @returns Array of supported audio device modes
+   *
+   * @example
+   * ```typescript
+   * const devices = await Device.list();
+   * const mic = devices.find(d => d.type === 'audio');
+   * if (mic) {
+   *   const modes = await Device.audioModes(mic.name);
+   *   console.log('Supported audio modes:', modes);
+   * }
+   * ```
+   */
+  static async audioModes(deviceName: string): Promise<AudioDeviceMode[]> {
+    const nativeModes = await bindings.Device.listAudioDeviceModes(deviceName);
+    return nativeModes.map((m: NativeAudioDeviceMode) => ({
+      sampleRate: m.sampleRate,
+      channels: m.channels,
+      sampleFormat: m.sampleFormat,
+    }));
+  }
+
+  /**
+   * Query supported audio capture modes for an audio device synchronously.
+   *
+   * @param deviceName - Device name as returned by `listSync()`
+   *
+   * @returns Array of supported audio device modes
+   *
+   * @example
+   * ```typescript
+   * const devices = Device.listSync();
+   * const mic = devices.find(d => d.type === 'audio');
+   * if (mic) {
+   *   const modes = Device.audioModesSync(mic.name);
+   *   console.log('Supported audio modes:', modes);
+   * }
+   * ```
+   *
+   * @see {@link audioModes} For async version
+   */
+  static audioModesSync(deviceName: string): AudioDeviceMode[] {
+    const nativeModes = bindings.Device.listAudioDeviceModesSync(deviceName);
+    return nativeModes.map((m: NativeAudioDeviceMode) => ({
+      sampleRate: m.sampleRate,
+      channels: m.channels,
+      sampleFormat: m.sampleFormat,
     }));
   }
 

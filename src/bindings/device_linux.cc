@@ -3,6 +3,8 @@
 #include "device.h"
 #include <algorithm>
 #include <map>
+#include <set>
+#include <tuple>
 #include <dirent.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
@@ -11,7 +13,32 @@
 #include <fstream>
 #include <linux/videodev2.h>
 
+#ifdef __has_include
+#if __has_include(<alsa/asoundlib.h>)
+#include <alsa/asoundlib.h>
+#define HAS_ALSA 1
+#endif
+#endif
+
 namespace ffmpeg {
+
+// V4L2 fourcc → FFmpeg AVPixelFormat
+static AVPixelFormat v4l2FormatToAV(uint32_t fourcc) {
+  switch (fourcc) {
+    case V4L2_PIX_FMT_YUYV:    return AV_PIX_FMT_YUYV422;
+    case V4L2_PIX_FMT_UYVY:    return AV_PIX_FMT_UYVY422;
+    case V4L2_PIX_FMT_YUV420:  return AV_PIX_FMT_YUV420P;
+    case V4L2_PIX_FMT_YVU420:  return AV_PIX_FMT_YUV420P;
+    case V4L2_PIX_FMT_NV12:    return AV_PIX_FMT_NV12;
+    case V4L2_PIX_FMT_NV21:    return AV_PIX_FMT_NV21;
+    case V4L2_PIX_FMT_RGB24:   return AV_PIX_FMT_RGB24;
+    case V4L2_PIX_FMT_BGR24:   return AV_PIX_FMT_BGR24;
+    case V4L2_PIX_FMT_RGB32:   return AV_PIX_FMT_RGBA;
+    case V4L2_PIX_FMT_BGR32:   return AV_PIX_FMT_BGRA;
+    case V4L2_PIX_FMT_GREY:    return AV_PIX_FMT_GRAY8;
+    default:                   return AV_PIX_FMT_NONE;
+  }
+}
 
 std::vector<DeviceInfo> enumerateDevices() {
   std::vector<DeviceInfo> devices;
@@ -64,6 +91,23 @@ std::vector<DeviceInfo> enumerateDevices() {
 
         std::string cardNum = line.substr(1, pos - 1);
 
+        // Check if this card has capture capability (pcm*c entries)
+        bool hasCapture = false;
+        std::string cardDir = "/proc/asound/card" + cardNum;
+        DIR* cardDirHandle = opendir(cardDir.c_str());
+        if (cardDirHandle) {
+          struct dirent* cardEntry;
+          while ((cardEntry = readdir(cardDirHandle)) != nullptr) {
+            std::string entryName(cardEntry->d_name);
+            if (entryName.size() >= 4 && entryName.substr(0, 3) == "pcm" && entryName.back() == 'c') {
+              hasCapture = true;
+              break;
+            }
+          }
+          closedir(cardDirHandle);
+        }
+        if (!hasCapture) continue;
+
         // Find the description (after the colon)
         size_t colonPos = line.find(':');
         std::string description;
@@ -85,23 +129,16 @@ std::vector<DeviceInfo> enumerateDevices() {
     cardsFile.close();
   }
 
-  // Also add default audio device if we found any cards
-  bool hasAudioDevices = false;
-  for (const auto& d : devices) {
-    if (d.type == "audio") {
-      hasAudioDevices = true;
-      break;
-    }
-  }
-
-  if (!hasAudioDevices) {
-    // Add default as fallback
-    DeviceInfo defaultAudio;
-    defaultAudio.name = "default";
-    defaultAudio.description = "Default Audio Device";
-    defaultAudio.type = "audio";
-    defaultAudio.isDefault = true;
-    devices.push_back(defaultAudio);
+  // Enumerate screen/display devices
+  const char* waylandDisplay = getenv("WAYLAND_DISPLAY");
+  const char* x11Display = getenv("DISPLAY");
+  if (waylandDisplay || x11Display) {
+    DeviceInfo info;
+    info.name = x11Display ? std::string(x11Display) : "default";
+    info.description = waylandDisplay ? "Wayland Display" : "X11 Display";
+    info.type = "screen";
+    info.isDefault = true;
+    devices.push_back(info);
   }
 
   return devices;
@@ -115,53 +152,65 @@ std::vector<DeviceMode> enumerateDeviceModes(const std::string& deviceName) {
     throw std::runtime_error("Failed to open device: " + deviceName);
   }
 
-  struct ResKey {
+  struct ModeKey {
     int w, h;
-    bool operator<(const ResKey& o) const {
-      return w != o.w ? w < o.w : h < o.h;
+    AVPixelFormat pixelFormat;
+    bool operator<(const ModeKey& o) const {
+      if (w != o.w) return w < o.w;
+      if (h != o.h) return h < o.h;
+      return pixelFormat < o.pixelFormat;
     }
   };
-  std::map<ResKey, std::pair<double, double>> resMap;
+  std::map<ModeKey, std::pair<double, double>> modeMap;
 
-  struct v4l2_frmsizeenum frmsize;
-  memset(&frmsize, 0, sizeof(frmsize));
-  frmsize.pixel_format = V4L2_PIX_FMT_YUYV;
+  // Iterate over all supported pixel formats
+  struct v4l2_fmtdesc fmt;
+  memset(&fmt, 0, sizeof(fmt));
+  fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
-  for (frmsize.index = 0; ioctl(fd, VIDIOC_ENUM_FRAMESIZES, &frmsize) == 0; frmsize.index++) {
-    if (frmsize.type == V4L2_FRMSIZE_TYPE_DISCRETE) {
-      int w = frmsize.discrete.width;
-      int h = frmsize.discrete.height;
+  for (fmt.index = 0; ioctl(fd, VIDIOC_ENUM_FMT, &fmt) == 0; fmt.index++) {
+    AVPixelFormat pixFmt = v4l2FormatToAV(fmt.pixelformat);
 
-      struct v4l2_frmivalenum frmival;
-      memset(&frmival, 0, sizeof(frmival));
-      frmival.pixel_format = V4L2_PIX_FMT_YUYV;
-      frmival.width = w;
-      frmival.height = h;
+    struct v4l2_frmsizeenum frmsize;
+    memset(&frmsize, 0, sizeof(frmsize));
+    frmsize.pixel_format = fmt.pixelformat;
 
-      double minFps = 1e9, maxFps = 0;
+    for (frmsize.index = 0; ioctl(fd, VIDIOC_ENUM_FRAMESIZES, &frmsize) == 0; frmsize.index++) {
+      if (frmsize.type == V4L2_FRMSIZE_TYPE_DISCRETE) {
+        int w = frmsize.discrete.width;
+        int h = frmsize.discrete.height;
 
-      for (frmival.index = 0; ioctl(fd, VIDIOC_ENUM_FRAMEINTERVALS, &frmival) == 0; frmival.index++) {
-        if (frmival.type == V4L2_FRMIVAL_TYPE_DISCRETE) {
-          double fps = (double)frmival.discrete.denominator / (double)frmival.discrete.numerator;
-          if (fps < minFps) minFps = fps;
-          if (fps > maxFps) maxFps = fps;
-        } else if (frmival.type == V4L2_FRMIVAL_TYPE_STEPWISE || frmival.type == V4L2_FRMIVAL_TYPE_CONTINUOUS) {
-          double fpsMin = (double)frmival.stepwise.max.denominator / (double)frmival.stepwise.max.numerator;
-          double fpsMax = (double)frmival.stepwise.min.denominator / (double)frmival.stepwise.min.numerator;
-          if (fpsMin < minFps) minFps = fpsMin;
-          if (fpsMax > maxFps) maxFps = fpsMax;
-          break;
+        struct v4l2_frmivalenum frmival;
+        memset(&frmival, 0, sizeof(frmival));
+        frmival.pixel_format = fmt.pixelformat;
+        frmival.width = w;
+        frmival.height = h;
+
+        double minFps = 1e9, maxFps = 0;
+
+        for (frmival.index = 0; ioctl(fd, VIDIOC_ENUM_FRAMEINTERVALS, &frmival) == 0; frmival.index++) {
+          if (frmival.type == V4L2_FRMIVAL_TYPE_DISCRETE) {
+            double fps = (double)frmival.discrete.denominator / (double)frmival.discrete.numerator;
+            if (fps < minFps) minFps = fps;
+            if (fps > maxFps) maxFps = fps;
+          } else if (frmival.type == V4L2_FRMIVAL_TYPE_STEPWISE || frmival.type == V4L2_FRMIVAL_TYPE_CONTINUOUS) {
+            double fpsMin = (double)frmival.stepwise.max.denominator / (double)frmival.stepwise.max.numerator;
+            double fpsMax = (double)frmival.stepwise.min.denominator / (double)frmival.stepwise.min.numerator;
+            if (fpsMin < minFps) minFps = fpsMin;
+            if (fpsMax > maxFps) maxFps = fpsMax;
+            break;
+          }
         }
-      }
 
-      if (maxFps > 0) {
-        ResKey key{w, h};
-        auto it = resMap.find(key);
-        if (it == resMap.end()) {
-          resMap[key] = {minFps, maxFps};
-        } else {
-          if (minFps < it->second.first) it->second.first = minFps;
-          if (maxFps > it->second.second) it->second.second = maxFps;
+        if (maxFps > 0) {
+          ModeKey key{w, h, pixFmt};
+          auto it = modeMap.find(key);
+          if (it == modeMap.end()) {
+            modeMap[key] = {minFps, maxFps};
+          } else {
+            if (minFps < it->second.first) it->second.first = minFps;
+            if (maxFps > it->second.second) it->second.second = maxFps;
+          }
         }
       }
     }
@@ -169,12 +218,13 @@ std::vector<DeviceMode> enumerateDeviceModes(const std::string& deviceName) {
 
   close(fd);
 
-  for (auto& [key, fps] : resMap) {
+  for (auto& [key, fps] : modeMap) {
     DeviceMode mode;
     mode.width = key.w;
     mode.height = key.h;
     mode.minFrameRate = fps.first;
     mode.maxFrameRate = fps.second;
+    mode.pixelFormat = key.pixelFormat;
     modes.push_back(mode);
   }
 
@@ -184,6 +234,91 @@ std::vector<DeviceMode> enumerateDeviceModes(const std::string& deviceName) {
     if (areaA != areaB) return areaA > areaB;
     return a.maxFrameRate > b.maxFrameRate;
   });
+
+  return modes;
+}
+
+std::vector<AudioDeviceMode> enumerateAudioDeviceModes(const std::string& deviceName) {
+  std::vector<AudioDeviceMode> modes;
+
+#ifdef HAS_ALSA
+  snd_pcm_t* pcm = nullptr;
+  snd_pcm_hw_params_t* params = nullptr;
+
+  int err = snd_pcm_open(&pcm, deviceName.c_str(), SND_PCM_STREAM_CAPTURE, SND_PCM_NONBLOCK);
+  if (err < 0) {
+    throw std::runtime_error("Failed to open ALSA device: " + deviceName + " (" + snd_strerror(err) + ")");
+  }
+
+  snd_pcm_hw_params_malloc(&params);
+  snd_pcm_hw_params_any(pcm, params);
+
+  // Collect supported sample rates
+  static const unsigned testRates[] = {8000, 11025, 16000, 22050, 44100, 48000, 88200, 96000, 176400, 192000};
+  std::vector<int> supportedRates;
+  for (unsigned rate : testRates) {
+    if (snd_pcm_hw_params_test_rate(pcm, params, rate, 0) == 0) {
+      supportedRates.push_back(static_cast<int>(rate));
+    }
+  }
+
+  // Collect supported channel counts
+  static const unsigned testChannels[] = {1, 2, 4, 6, 8};
+  std::vector<int> supportedChannels;
+  for (unsigned ch : testChannels) {
+    if (snd_pcm_hw_params_test_channels(pcm, params, ch) == 0) {
+      supportedChannels.push_back(static_cast<int>(ch));
+    }
+  }
+
+  // ALSA format → AVSampleFormat mapping
+  struct FormatMapping {
+    snd_pcm_format_t alsaFormat;
+    AVSampleFormat avFormat;
+  };
+  static const FormatMapping formatMap[] = {
+    {SND_PCM_FORMAT_U8, AV_SAMPLE_FMT_U8},
+    {SND_PCM_FORMAT_S16_LE, AV_SAMPLE_FMT_S16},
+    {SND_PCM_FORMAT_S32_LE, AV_SAMPLE_FMT_S32},
+    {SND_PCM_FORMAT_FLOAT_LE, AV_SAMPLE_FMT_FLT},
+    {SND_PCM_FORMAT_FLOAT64_LE, AV_SAMPLE_FMT_DBL},
+  };
+
+  std::vector<AVSampleFormat> supportedFormats;
+  for (const auto& fm : formatMap) {
+    if (snd_pcm_hw_params_test_format(pcm, params, fm.alsaFormat) == 0) {
+      supportedFormats.push_back(fm.avFormat);
+    }
+  }
+
+  snd_pcm_hw_params_free(params);
+  snd_pcm_close(pcm);
+
+  // Build all (rate, channels, format) combinations
+  std::set<std::tuple<int, int, int>> seen;
+  for (int rate : supportedRates) {
+    for (int ch : supportedChannels) {
+      for (AVSampleFormat fmt : supportedFormats) {
+        auto key = std::make_tuple(rate, ch, static_cast<int>(fmt));
+        if (seen.insert(key).second) {
+          AudioDeviceMode mode;
+          mode.sampleRate = rate;
+          mode.channels = ch;
+          mode.sampleFormat = fmt;
+          modes.push_back(mode);
+        }
+      }
+    }
+  }
+
+  // Sort: sampleRate desc, then channels desc
+  std::sort(modes.begin(), modes.end(), [](const AudioDeviceMode& a, const AudioDeviceMode& b) {
+    if (a.sampleRate != b.sampleRate) return a.sampleRate > b.sampleRate;
+    return a.channels > b.channels;
+  });
+#else
+  (void)deviceName;
+#endif
 
   return modes;
 }

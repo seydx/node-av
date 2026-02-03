@@ -39,6 +39,7 @@ static Napi::Array DeviceModesToJS(Napi::Env env, const std::vector<DeviceMode>&
     modeObj.Set("height", Napi::Number::New(env, modes[i].height));
     modeObj.Set("minFrameRate", Napi::Number::New(env, modes[i].minFrameRate));
     modeObj.Set("maxFrameRate", Napi::Number::New(env, modes[i].maxFrameRate));
+    modeObj.Set("pixelFormat", Napi::Number::New(env, static_cast<int>(modes[i].pixelFormat)));
     result[i] = modeObj;
   }
 
@@ -60,6 +61,40 @@ Napi::Value Device::ListDeviceModesSync(const Napi::CallbackInfo& info) {
     return DeviceModesToJS(env, modes);
   } catch (const std::exception& e) {
     Napi::Error::New(env, std::string("Failed to enumerate device modes: ") + e.what())
+      .ThrowAsJavaScriptException();
+    return env.Null();
+  }
+}
+
+static Napi::Array AudioDeviceModesToJS(Napi::Env env, const std::vector<AudioDeviceMode>& modes) {
+  Napi::Array result = Napi::Array::New(env, modes.size());
+
+  for (size_t i = 0; i < modes.size(); i++) {
+    Napi::Object modeObj = Napi::Object::New(env);
+    modeObj.Set("sampleRate", Napi::Number::New(env, modes[i].sampleRate));
+    modeObj.Set("channels", Napi::Number::New(env, modes[i].channels));
+    modeObj.Set("sampleFormat", Napi::Number::New(env, static_cast<int>(modes[i].sampleFormat)));
+    result[i] = modeObj;
+  }
+
+  return result;
+}
+
+Napi::Value Device::ListAudioDeviceModesSync(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+  if (info.Length() < 1 || !info[0].IsString()) {
+    Napi::TypeError::New(env, "Expected string argument for device name").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  std::string deviceName = info[0].As<Napi::String>().Utf8Value();
+
+  try {
+    std::vector<AudioDeviceMode> modes = enumerateAudioDeviceModes(deviceName);
+    return AudioDeviceModesToJS(env, modes);
+  } catch (const std::exception& e) {
+    Napi::Error::New(env, std::string("Failed to enumerate audio device modes: ") + e.what())
       .ThrowAsJavaScriptException();
     return env.Null();
   }

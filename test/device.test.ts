@@ -18,7 +18,7 @@ describe('Device', () => {
           assert(typeof device.name === 'string');
           assert(typeof device.description === 'string');
           assert(typeof device.type === 'string');
-          assert(['video', 'audio'].includes(device.type));
+          assert(['video', 'audio', 'screen'].includes(device.type));
           assert(typeof device.isDefault === 'boolean');
         }
       });
@@ -102,6 +102,24 @@ describe('Device', () => {
           assert.strictEqual(device.type, 'audio');
         }
       });
+
+      it('should filter screen devices correctly', async () => {
+        const devices = await DeviceAPI.list();
+        const screenDevices = devices.filter((d) => d.type === 'screen');
+        for (const device of screenDevices) {
+          assert.strictEqual(device.type, 'screen');
+        }
+      });
+
+      it('should include screen devices on supported platforms', async () => {
+        const devices = await DeviceAPI.list();
+        const screenDevices = devices.filter((d) => d.type === 'screen');
+
+        if (process.platform === 'darwin') {
+          assert(screenDevices.length > 0, 'Expected at least one screen device on macOS');
+          assert(screenDevices[0].name.startsWith('Capture screen '), 'Expected macOS screen name to start with "Capture screen "');
+        }
+      });
     });
 
     describe('listSync()', () => {
@@ -156,6 +174,7 @@ describe('Device', () => {
           assert(typeof mode.height === 'number');
           assert(typeof mode.minFrameRate === 'number');
           assert(typeof mode.maxFrameRate === 'number');
+          assert(typeof mode.pixelFormat === 'number');
           assert(mode.width > 0);
           assert(mode.height > 0);
           assert(mode.minFrameRate > 0);
@@ -181,6 +200,69 @@ describe('Device', () => {
             prevArea > currArea || (prevArea === currArea && modes[i - 1].maxFrameRate >= modes[i].maxFrameRate),
             `Modes not sorted descending: ${modes[i - 1].width}x${modes[i - 1].height} should come before ${modes[i].width}x${modes[i].height}`,
           );
+        }
+      });
+    });
+
+    describe('audioModes()', () => {
+      it('should return an array of modes for an audio device', async () => {
+        const devices = await DeviceAPI.list();
+        const mic = devices.find((d) => d.type === 'audio');
+
+        if (!mic) {
+          console.log('No audio device available, skipping test');
+          return;
+        }
+
+        const modes = await DeviceAPI.audioModes(mic.name);
+        assert(Array.isArray(modes));
+
+        for (const mode of modes) {
+          assert(typeof mode.sampleRate === 'number');
+          assert(typeof mode.channels === 'number');
+          assert(typeof mode.sampleFormat === 'number');
+          assert(mode.sampleRate > 0);
+          assert(mode.channels > 0);
+        }
+      });
+
+      it('should return audio modes sorted descending by sample rate', async () => {
+        const devices = await DeviceAPI.list();
+        const mic = devices.find((d) => d.type === 'audio');
+
+        if (!mic) {
+          console.log('No audio device available, skipping test');
+          return;
+        }
+
+        const modes = await DeviceAPI.audioModes(mic.name);
+
+        for (let i = 1; i < modes.length; i++) {
+          const prev = modes[i - 1];
+          const curr = modes[i];
+          const sorted = prev.sampleRate > curr.sampleRate || (prev.sampleRate === curr.sampleRate && prev.channels >= curr.channels);
+          assert(sorted, `Audio modes not sorted: ${prev.sampleRate}Hz/${prev.channels}ch before ${curr.sampleRate}Hz/${curr.channels}ch`);
+        }
+      });
+
+      it('should return same result as sync version', async () => {
+        const devices = await DeviceAPI.list();
+        const mic = devices.find((d) => d.type === 'audio');
+
+        if (!mic) {
+          console.log('No audio device available, skipping test');
+          return;
+        }
+
+        const asyncModes = await DeviceAPI.audioModes(mic.name);
+        const syncModes = DeviceAPI.audioModesSync(mic.name);
+
+        assert.strictEqual(syncModes.length, asyncModes.length);
+
+        for (let i = 0; i < syncModes.length; i++) {
+          assert.strictEqual(syncModes[i].sampleRate, asyncModes[i].sampleRate);
+          assert.strictEqual(syncModes[i].channels, asyncModes[i].channels);
+          assert.strictEqual(syncModes[i].sampleFormat, asyncModes[i].sampleFormat);
         }
       });
     });

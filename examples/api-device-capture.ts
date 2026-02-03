@@ -15,6 +15,8 @@
 import { parseArgs } from 'node:util';
 
 import { Decoder, DeviceAPI, Encoder, FF_ENCODER_AAC, FF_ENCODER_LIBX264, Muxer } from '../src/index.js';
+import { PixelFormatUtils } from '../src/api/utilities/pixel-format.js';
+import { SampleFormatUtils } from '../src/api/utilities/sample-format.js';
 import { prepareTestEnvironment } from './index.js';
 
 const args = parseArgs({
@@ -57,7 +59,9 @@ async function listDevices() {
       if (modes.length > 0) {
         for (const mode of modes) {
           const fps = mode.minFrameRate === mode.maxFrameRate ? `${mode.maxFrameRate}` : `${mode.minFrameRate}-${mode.maxFrameRate}`;
-          console.log(`    ${mode.width}x${mode.height} @ ${fps} fps`);
+          const fmtName = PixelFormatUtils.getName(mode.pixelFormat);
+          const fmt = fmtName ? ` [${fmtName}]` : '';
+          console.log(`    ${mode.width}x${mode.height} @ ${fps} fps${fmt}`);
         }
       }
     }
@@ -69,6 +73,26 @@ async function listDevices() {
     console.log('  (none)');
   } else {
     for (const device of audioDevices) {
+      const defaultTag = device.isDefault ? ' (default)' : '';
+      console.log(`  [${device.name}] ${device.description}${defaultTag}`);
+
+      const audioModes = await DeviceAPI.audioModes(device.name);
+      if (audioModes.length > 0) {
+        for (const mode of audioModes) {
+          const fmtName = SampleFormatUtils.getName(mode.sampleFormat);
+          const fmt = fmtName ? ` [${fmtName}]` : '';
+          console.log(`    ${mode.sampleRate}Hz ${mode.channels}ch${fmt}`);
+        }
+      }
+    }
+  }
+
+  console.log('\nScreen Devices:');
+  const screenDevices = devices.filter((d) => d.type === 'screen');
+  if (screenDevices.length === 0) {
+    console.log('  (none)');
+  } else {
+    for (const device of screenDevices) {
       const defaultTag = device.isDefault ? ' (default)' : '';
       console.log(`  [${device.name}] ${device.description}${defaultTag}`);
     }
@@ -117,13 +141,14 @@ async function listModes(input: string) {
   }
 
   console.log(`Found ${modes.length} mode(s):\n`);
-  console.log('  Resolution      Frame Rate');
-  console.log('  ──────────────  ──────────────────');
+  console.log('  Resolution      Frame Rate          Pixel Format');
+  console.log('  ──────────────  ──────────────────  ────────────');
 
   for (const mode of modes) {
     const res = `${mode.width}x${mode.height}`.padEnd(14);
-    const fps = mode.minFrameRate === mode.maxFrameRate ? `${mode.maxFrameRate} fps` : `${mode.minFrameRate}-${mode.maxFrameRate} fps`;
-    console.log(`  ${res}  ${fps}`);
+    const fps = (mode.minFrameRate === mode.maxFrameRate ? `${mode.maxFrameRate} fps` : `${mode.minFrameRate}-${mode.maxFrameRate} fps`).padEnd(18);
+    const fmt = PixelFormatUtils.getName(mode.pixelFormat) ?? '(unknown)';
+    console.log(`  ${res}  ${fps}  ${fmt}`);
   }
 }
 

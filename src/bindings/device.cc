@@ -10,6 +10,8 @@ Napi::Object Device::Init(Napi::Env env, Napi::Object exports) {
     StaticMethod<&Device::ListDevicesSync>("listDevicesSync"),
     StaticMethod<&Device::ListDeviceModes>("listDeviceModes"),
     StaticMethod<&Device::ListDeviceModesSync>("listDeviceModesSync"),
+    StaticMethod<&Device::ListAudioDeviceModes>("listAudioDeviceModes"),
+    StaticMethod<&Device::ListAudioDeviceModesSync>("listAudioDeviceModesSync"),
     StaticMethod<&Device::GetVideoFormat>("getVideoFormat"),
     StaticMethod<&Device::GetAudioFormat>("getAudioFormat"),
     StaticMethod<&Device::GetScreenFormat>("getScreenFormat"),
