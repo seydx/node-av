@@ -120,6 +120,21 @@ describe('Device', () => {
           assert(screenDevices[0].name.startsWith('Capture screen '), 'Expected macOS screen name to start with "Capture screen "');
         }
       });
+
+      it('should include bounds for screen devices', async () => {
+        const devices = await DeviceAPI.list();
+        const screenDevices = devices.filter((d) => d.type === 'screen');
+
+        for (const device of screenDevices) {
+          assert(device.bounds, `Screen device "${device.name}" should have bounds`);
+          assert(typeof device.bounds.x === 'number', 'bounds.x should be a number');
+          assert(typeof device.bounds.y === 'number', 'bounds.y should be a number');
+          assert(typeof device.bounds.width === 'number', 'bounds.width should be a number');
+          assert(typeof device.bounds.height === 'number', 'bounds.height should be a number');
+          assert(device.bounds.width > 0, `Screen device "${device.name}" should have positive width`);
+          assert(device.bounds.height > 0, `Screen device "${device.name}" should have positive height`);
+        }
+      });
     });
 
     describe('listSync()', () => {
