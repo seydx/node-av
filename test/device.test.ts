@@ -372,6 +372,14 @@ describe('Device', () => {
 
     describe('openScreen()', skipInCI, () => {
       it('should open screen capture if permission is granted', async function () {
+        const devices = await DeviceAPI.list();
+        const screens = devices.filter((d) => d.type === 'screen');
+
+        if (screens.length === 0) {
+          console.log('No screen device available, skipping test');
+          return;
+        }
+
         if (!DeviceAPI.hasScreenCapturePermission()) {
           console.log('Screen capture permission not granted, skipping test');
           return;
