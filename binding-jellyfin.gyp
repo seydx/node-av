@@ -293,6 +293,8 @@
                             "/opt/ffbuild/prefix/lib/libxcb-shape.a",
                             "/opt/ffbuild/prefix/lib/libxcb-xfixes.a",
                             "/opt/ffbuild/prefix/lib/libXau.a",
+                            "/opt/ffbuild/prefix/lib/libXrandr.a",
+                            "/opt/ffbuild/prefix/lib/libXrender.a",
                             "-ldrm",
                             "-lpthread",
                             "-lm",
