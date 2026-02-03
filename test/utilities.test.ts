@@ -11,6 +11,8 @@ import {
   AV_CHANNEL_LAYOUT_7POINT1,
   AV_CHANNEL_LAYOUT_MONO,
   AV_CHANNEL_LAYOUT_STEREO,
+  AV_CHANNEL_LAYOUT_SURROUND,
+  AV_CHANNEL_ORDER_UNSPEC,
   AV_PIX_FMT_BGR24,
   AV_PIX_FMT_CUDA,
   AV_PIX_FMT_NONE,
@@ -151,20 +153,15 @@ describe('Utilities', () => {
     });
 
     it('should handle custom channel layouts', () => {
-      // Test with a custom layout (3 channels)
-      const customLayout = {
-        order: 0,
-        nbChannels: 3,
-        mask: 7n, // FL | FR | FC
-      };
-      const description = avChannelLayoutDescribe(customLayout);
+      // Test with a surround layout (3 channels: FL + FR + FC)
+      const description = avChannelLayoutDescribe(AV_CHANNEL_LAYOUT_SURROUND);
       assert.ok(description, 'Should describe custom layout');
       assert.ok(description.includes('3'), 'Should indicate 3 channels');
     });
 
     it('should handle empty channel layout', () => {
       const emptyLayout = {
-        order: 0,
+        order: AV_CHANNEL_ORDER_UNSPEC,
         nbChannels: 0,
         mask: 0n,
       };

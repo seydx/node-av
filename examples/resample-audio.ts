@@ -16,6 +16,8 @@ import { Buffer } from 'node:buffer';
 import { closeSync, openSync, writeSync } from 'node:fs';
 
 import {
+  AV_CHANNEL_LAYOUT_STEREO,
+  AV_CHANNEL_LAYOUT_SURROUND,
   AV_ROUND_UP,
   AV_SAMPLE_FMT_DBL,
   AV_SAMPLE_FMT_FLT,
@@ -29,7 +31,7 @@ import {
   avRescaleRnd,
 } from '../src/index.js';
 
-import type { AVSampleFormat, ChannelLayout } from '../src/index.js';
+import type { AVSampleFormat } from '../src/index.js';
 
 /**
  * Get format string from sample format for ffplay
@@ -87,8 +89,8 @@ async function resampleAudio(outputFile: string): Promise<void> {
 
   try {
     // Source and destination parameters
-    const srcChLayout: ChannelLayout = { nbChannels: 2, order: 0, mask: 3n }; // Stereo
-    const dstChLayout: ChannelLayout = { nbChannels: 3, order: 0, mask: 0x07n }; // 3.0(back) - L+R+BC
+    const srcChLayout = AV_CHANNEL_LAYOUT_STEREO;
+    const dstChLayout = AV_CHANNEL_LAYOUT_SURROUND;
     const srcRate = 48000;
     const dstRate = 44100;
     const srcSampleFmt = AV_SAMPLE_FMT_DBL;

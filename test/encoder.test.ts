@@ -1,7 +1,7 @@
 import assert from 'node:assert';
 import { describe, it } from 'node:test';
 
-import { AV_PIX_FMT_YUV420P, AV_SAMPLE_FMT_FLTP, Encoder, FF_ENCODER_AAC, FF_ENCODER_LIBX264, HardwareContext } from '../src/index.js';
+import { AV_CHANNEL_LAYOUT_STEREO, AV_PIX_FMT_YUV420P, AV_SAMPLE_FMT_FLTP, Encoder, FF_ENCODER_AAC, FF_ENCODER_LIBX264, HardwareContext } from '../src/index.js';
 import { Frame, Rational } from '../src/lib/index.js';
 import { encodeFrame, encodeFrameSync } from './index.js';
 
@@ -244,7 +244,7 @@ describe('Encoder', () => {
       frame.nbSamples = 1024; // Typical AAC frame size
       frame.sampleRate = 44100;
       frame.format = AV_SAMPLE_FMT_FLTP;
-      frame.channelLayout = { nbChannels: 2, order: 1, mask: 3n };
+      frame.channelLayout = AV_CHANNEL_LAYOUT_STEREO;
       frame.pts = 0n;
       frame.timeBase = new Rational(1, 44100);
 
@@ -270,7 +270,7 @@ describe('Encoder', () => {
       frame.nbSamples = 1024; // Typical AAC frame size
       frame.sampleRate = 44100;
       frame.format = AV_SAMPLE_FMT_FLTP;
-      frame.channelLayout = { nbChannels: 2, order: 1, mask: 3n };
+      frame.channelLayout = AV_CHANNEL_LAYOUT_STEREO;
       frame.pts = 0n;
       frame.timeBase = new Rational(1, 44100);
 

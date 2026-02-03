@@ -2,6 +2,7 @@ import assert from 'node:assert';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 
 import {
+  AV_CHANNEL_LAYOUT_STEREO,
   AV_CODEC_FLAG_PSNR,
   AV_CODEC_FLAG_QSCALE,
   AV_CODEC_ID_AAC,
@@ -518,7 +519,7 @@ describe('CodecContext', () => {
 
       ctx.allocContext3(codec);
       // PCM decoder requires channel layout to be set
-      ctx.channelLayout = { nbChannels: 2, order: 0, mask: 3n }; // Stereo
+      ctx.channelLayout = AV_CHANNEL_LAYOUT_STEREO; // Stereo
       ctx.sampleRate = 48000;
       ctx.sampleFormat = AV_SAMPLE_FMT_S16;
       assert.ok(!ctx.isOpen);
@@ -534,7 +535,7 @@ describe('CodecContext', () => {
 
       ctx.allocContext3(codec);
       // PCM decoder requires channel layout to be set
-      ctx.channelLayout = { nbChannels: 2, order: 0, mask: 3n }; // Stereo
+      ctx.channelLayout = AV_CHANNEL_LAYOUT_STEREO; // Stereo
       ctx.sampleRate = 48000;
       ctx.sampleFormat = AV_SAMPLE_FMT_S16;
       assert.ok(!ctx.isOpen);
@@ -550,7 +551,7 @@ describe('CodecContext', () => {
 
       ctx.allocContext3(codec);
       // PCM decoder requires channel layout to be set
-      ctx.channelLayout = { nbChannels: 2, order: 0, mask: 3n };
+      ctx.channelLayout = AV_CHANNEL_LAYOUT_STEREO;
       ctx.sampleRate = 48000;
       ctx.sampleFormat = AV_SAMPLE_FMT_S16;
 
@@ -571,7 +572,7 @@ describe('CodecContext', () => {
 
       ctx.allocContext3(codec);
       // PCM decoder requires channel layout to be set
-      ctx.channelLayout = { nbChannels: 2, order: 0, mask: 3n };
+      ctx.channelLayout = AV_CHANNEL_LAYOUT_STEREO;
       ctx.sampleRate = 48000;
       ctx.sampleFormat = AV_SAMPLE_FMT_S16;
 
@@ -591,7 +592,7 @@ describe('CodecContext', () => {
       assert.ok(codec);
 
       ctx.allocContext3(codec);
-      ctx.channelLayout = { nbChannels: 2, order: 0, mask: 3n };
+      ctx.channelLayout = AV_CHANNEL_LAYOUT_STEREO;
       ctx.sampleRate = 48000;
       ctx.sampleFormat = AV_SAMPLE_FMT_S16;
       await ctx.open2(codec, null);
@@ -606,7 +607,7 @@ describe('CodecContext', () => {
       assert.ok(codec);
 
       ctx.allocContext3(codec);
-      ctx.channelLayout = { nbChannels: 2, order: 0, mask: 3n };
+      ctx.channelLayout = AV_CHANNEL_LAYOUT_STEREO;
       ctx.sampleRate = 48000;
       ctx.sampleFormat = AV_SAMPLE_FMT_S16;
       ctx.open2Sync(codec, null);
@@ -623,7 +624,7 @@ describe('CodecContext', () => {
       assert.ok(codec);
 
       ctx.allocContext3(codec);
-      ctx.channelLayout = { nbChannels: 2, order: 0, mask: 3n };
+      ctx.channelLayout = AV_CHANNEL_LAYOUT_STEREO;
       ctx.sampleRate = 48000;
       ctx.sampleFormat = AV_SAMPLE_FMT_S16;
       await ctx.open2(codec, null);
@@ -642,7 +643,7 @@ describe('CodecContext', () => {
       ctx.allocContext3(codec);
       ctx.sampleFormat = AV_SAMPLE_FMT_S16;
       ctx.sampleRate = 48000;
-      ctx.channelLayout = { nbChannels: 2, order: 0, mask: 3n };
+      ctx.channelLayout = AV_CHANNEL_LAYOUT_STEREO;
 
       await ctx.open2(codec, null);
 
@@ -680,7 +681,7 @@ describe('CodecContext', () => {
       ctx.allocContext3(codec);
       ctx.sampleFormat = AV_SAMPLE_FMT_S16;
       ctx.sampleRate = 48000;
-      ctx.channelLayout = { nbChannels: 2, order: 0, mask: 3n };
+      ctx.channelLayout = AV_CHANNEL_LAYOUT_STEREO;
 
       await ctx.open2(codec, null);
 
@@ -689,7 +690,7 @@ describe('CodecContext', () => {
       frame.format = AV_SAMPLE_FMT_S16;
       frame.sampleRate = 48000;
       frame.nbSamples = 1024;
-      frame.channelLayout = { nbChannels: 2, order: 0, mask: 3n };
+      frame.channelLayout = AV_CHANNEL_LAYOUT_STEREO;
 
       // Allocate buffer for the frame
       const bufRet = frame.getBuffer();
@@ -737,7 +738,7 @@ describe('CodecContext', () => {
       assert.ok(codec);
 
       ctx.allocContext3(codec);
-      ctx.channelLayout = { nbChannels: 2, order: 0, mask: 3n };
+      ctx.channelLayout = AV_CHANNEL_LAYOUT_STEREO;
       ctx.sampleRate = 48000;
       ctx.sampleFormat = AV_SAMPLE_FMT_S16;
       await ctx.open2(codec, null);
@@ -753,7 +754,7 @@ describe('CodecContext', () => {
       assert.ok(codec);
 
       ctx.allocContext3(codec);
-      ctx.channelLayout = { nbChannels: 2, order: 0, mask: 3n };
+      ctx.channelLayout = AV_CHANNEL_LAYOUT_STEREO;
       ctx.sampleRate = 48000;
       ctx.sampleFormat = AV_SAMPLE_FMT_S16;
       ctx.open2Sync(codec, null);

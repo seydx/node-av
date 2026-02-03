@@ -2,6 +2,7 @@ import assert from 'node:assert';
 import { describe, it } from 'node:test';
 
 import {
+  AV_CHANNEL_LAYOUT_STEREO,
   AV_PIX_FMT_RGB24,
   AV_PIX_FMT_YUV420P,
   AV_SAMPLE_FMT_FLTP,
@@ -425,7 +426,7 @@ describe('High-Level Filter API', () => {
       frame.alloc();
       frame.sampleRate = 48000;
       frame.format = AV_SAMPLE_FMT_FLTP;
-      frame.channelLayout = { nbChannels: 2, order: 1, mask: 3n };
+      frame.channelLayout = AV_CHANNEL_LAYOUT_STEREO;
       frame.nbSamples = 1024;
       frame.pts = 0n;
       frame.timeBase = new Rational(1, 48000);
@@ -452,7 +453,7 @@ describe('High-Level Filter API', () => {
       frame.alloc();
       frame.sampleRate = 48000;
       frame.format = AV_SAMPLE_FMT_FLTP;
-      frame.channelLayout = { nbChannels: 2, order: 1, mask: 3n };
+      frame.channelLayout = AV_CHANNEL_LAYOUT_STEREO;
       frame.nbSamples = 1024;
       frame.pts = 0n;
       frame.timeBase = new Rational(1, 48000);
@@ -551,7 +552,7 @@ describe('High-Level Filter API', () => {
       frame.alloc();
       frame.sampleRate = 0; // Invalid sample rate
       frame.format = AV_SAMPLE_FMT_FLTP;
-      frame.channelLayout = { nbChannels: 2, order: 1, mask: 3n };
+      frame.channelLayout = AV_CHANNEL_LAYOUT_STEREO;
       frame.nbSamples = 1024;
       frame.timeBase = new Rational(1, 48000);
 
@@ -570,7 +571,7 @@ describe('High-Level Filter API', () => {
       frame.alloc();
       frame.sampleRate = 0; // Invalid sample rate
       frame.format = AV_SAMPLE_FMT_FLTP;
-      frame.channelLayout = { nbChannels: 2, order: 1, mask: 3n };
+      frame.channelLayout = AV_CHANNEL_LAYOUT_STEREO;
       frame.nbSamples = 1024;
       frame.timeBase = new Rational(1, 48000);
 
@@ -590,7 +591,7 @@ describe('High-Level Filter API', () => {
       frame.nbSamples = 1024;
       frame.format = AV_SAMPLE_FMT_FLTP;
       frame.sampleRate = 48000;
-      frame.channelLayout = { nbChannels: 2, order: 1, mask: 3n };
+      frame.channelLayout = AV_CHANNEL_LAYOUT_STEREO;
       frame.timeBase = new Rational(1, 48000);
       frame.getBuffer();
 
@@ -608,7 +609,7 @@ describe('High-Level Filter API', () => {
       frame.nbSamples = 1024;
       frame.format = AV_SAMPLE_FMT_FLTP;
       frame.sampleRate = 48000;
-      frame.channelLayout = { nbChannels: 2, order: 1, mask: 3n };
+      frame.channelLayout = AV_CHANNEL_LAYOUT_STEREO;
       frame.timeBase = new Rational(1, 48000);
       frame.getBuffer();
 
@@ -869,7 +870,7 @@ describe('High-Level Filter API', () => {
       frame.alloc();
       frame.sampleRate = 48000;
       frame.format = AV_SAMPLE_FMT_FLTP;
-      frame.channelLayout = { nbChannels: 2, order: 1, mask: 3n };
+      frame.channelLayout = AV_CHANNEL_LAYOUT_STEREO;
       frame.nbSamples = 1024;
       frame.pts = 0n;
       frame.timeBase = new Rational(1, 48000);

@@ -5,8 +5,7 @@ import { describe, it } from 'node:test';
 import { AVSEEK_CUR, AVSEEK_END, AVSEEK_SET, AVSEEK_SIZE, Decoder, Demuxer, Encoder, FF_ENCODER_AAC, FF_ENCODER_LIBX264, Muxer, Packet } from '../src/index.js';
 import { decodePacket, decodePacketSync, encodeFrame, encodeFrameSync, getInputFile, getOutputFile, prepareTestEnvironment } from './index.js';
 
-import type { IOOutputCallbacks } from '../src/api/types.js';
-import type { AVSeekWhence } from '../src/index.js';
+import type { AVSeekWhence, IOOutputCallbacks } from '../src/index.js';
 
 prepareTestEnvironment();
 

@@ -17,6 +17,7 @@ import {
   AVFMT_NOFILE,
   AVMEDIA_TYPE_AUDIO,
   AVMEDIA_TYPE_VIDEO,
+  AV_CHANNEL_LAYOUT_STEREO,
   AV_CODEC_CAP_VARIABLE_FRAME_SIZE,
   AV_CODEC_FLAG_GLOBAL_HEADER,
   AV_CODEC_ID_MPEG1VIDEO,
@@ -163,11 +164,7 @@ function addStream(ost: OutputStream, oc: FormatContext, codecId: AVCodecID): Co
       }
 
       // Set stereo channel layout
-      c.channelLayout = {
-        order: 1, // AV_CHANNEL_ORDER_NATIVE
-        nbChannels: 2,
-        mask: 3n, // AV_CH_LAYOUT_STEREO = 3
-      };
+      c.channelLayout = AV_CHANNEL_LAYOUT_STEREO;
 
       ost.st.timeBase = new Rational(1, c.sampleRate);
       break;

@@ -13,7 +13,18 @@
 
 import { closeSync, openSync, writeSync } from 'node:fs';
 
-import { AV_CODEC_ID_MP2, AV_SAMPLE_FMT_S16, AVERROR_EAGAIN, AVERROR_EOF, Codec, CodecContext, FFmpegError, Frame, Packet } from '../src/index.js';
+import {
+  AV_CHANNEL_LAYOUT_STEREO,
+  AV_CODEC_ID_MP2,
+  AV_SAMPLE_FMT_S16,
+  AVERROR_EAGAIN,
+  AVERROR_EOF,
+  Codec,
+  CodecContext,
+  FFmpegError,
+  Frame,
+  Packet,
+} from '../src/index.js';
 
 import type { AVSampleFormat, ChannelLayout } from '../src/index.js';
 
@@ -59,7 +70,7 @@ function selectChannelLayout(codec: Codec): ChannelLayout {
   const supportedLayouts = codec.channelLayouts;
   if (!supportedLayouts || supportedLayouts.length === 0) {
     // Default to stereo
-    return { nbChannels: 2, order: 0, mask: 3n };
+    return AV_CHANNEL_LAYOUT_STEREO;
   }
 
   let bestLayout = supportedLayouts[0];

@@ -17,6 +17,8 @@ import {
   AVMEDIA_TYPE_AUDIO,
   AVMEDIA_TYPE_UNKNOWN,
   AVMEDIA_TYPE_VIDEO,
+  AV_CHANNEL_LAYOUT_MONO,
+  AV_CHANNEL_LAYOUT_STEREO,
   AV_CODEC_FLAG_GLOBAL_HEADER,
   AV_NOPTS_VALUE,
   AV_OPT_TYPE_BINARY_INT_ARRAY,
@@ -323,11 +325,7 @@ async function init_filter(fctx: FilteringContext, dec_ctx: CodecContext, enc_ct
     const ch_layout = dec_ctx.channelLayout;
     if (ch_layout?.order === undefined) {
       // Default channel layout for mono/stereo
-      dec_ctx.channelLayout = {
-        order: 0,
-        nbChannels: ch_layout?.nbChannels || 2,
-        mask: ch_layout?.nbChannels === 1 ? 4n : 3n, // mono: 0x4, stereo: 0x3
-      };
+      dec_ctx.channelLayout = ch_layout?.nbChannels === 1 ? AV_CHANNEL_LAYOUT_MONO : AV_CHANNEL_LAYOUT_STEREO;
     }
 
     const tb = dec_ctx.pktTimebase || new Rational(1, dec_ctx.sampleRate);

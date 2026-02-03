@@ -2,6 +2,8 @@ import assert from 'node:assert';
 import { describe, it } from 'node:test';
 
 import {
+  AV_CHANNEL_LAYOUT_5POINT1_BACK,
+  AV_CHANNEL_LAYOUT_STEREO,
   AV_HWDEVICE_TYPE_VIDEOTOOLBOX,
   AV_OPT_TYPE_BINARY_INT_ARRAY,
   AV_PIX_FMT_RGB24,
@@ -762,11 +764,7 @@ describe('FilterContext', () => {
       audioFrame.sampleRate = 44100;
       audioFrame.nbSamples = 1024;
       audioFrame.pts = 0n;
-      audioFrame.channelLayout = {
-        order: 0,
-        nbChannels: 2,
-        mask: 3n,
-      };
+      audioFrame.channelLayout = AV_CHANNEL_LAYOUT_STEREO;
       audioFrame.allocBuffer();
 
       // Add and get audio frame
@@ -897,11 +895,7 @@ describe('FilterContext', () => {
       audioFrame.sampleRate = 44100;
       audioFrame.nbSamples = 1024;
       audioFrame.pts = 0n;
-      audioFrame.channelLayout = {
-        nbChannels: 2,
-        order: 1,
-        mask: 3n,
-      };
+      audioFrame.channelLayout = AV_CHANNEL_LAYOUT_STEREO;
       audioFrame.allocBuffer();
 
       // Add frame synchronously
@@ -1285,11 +1279,7 @@ describe('FilterContext', () => {
       audioFrame.sampleRate = 44100;
       audioFrame.nbSamples = 1024;
       audioFrame.pts = 0n;
-      audioFrame.channelLayout = {
-        order: 0,
-        nbChannels: 2,
-        mask: 3n,
-      };
+      audioFrame.channelLayout = AV_CHANNEL_LAYOUT_STEREO;
       audioFrame.allocBuffer();
 
       await abufferCtx.buffersrcAddFrame(audioFrame);
@@ -1389,11 +1379,7 @@ describe('FilterContext', () => {
       audioFrame.sampleRate = 48000;
       audioFrame.nbSamples = 1024;
       audioFrame.pts = 0n;
-      audioFrame.channelLayout = {
-        order: 0,
-        nbChannels: 6,
-        mask: 0x3fn,
-      };
+      audioFrame.channelLayout = AV_CHANNEL_LAYOUT_5POINT1_BACK;
       audioFrame.allocBuffer();
 
       await abufferCtx.buffersrcAddFrame(audioFrame);

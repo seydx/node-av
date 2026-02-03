@@ -10,8 +10,7 @@ import { AV_CODEC_ID_H264, AV_CODEC_ID_OPUS } from '../src/constants/constants.j
 import { AVMEDIA_TYPE_AUDIO, AVMEDIA_TYPE_VIDEO, AVSEEK_CUR, AVSEEK_END, AVSEEK_SET, AVSEEK_SIZE } from '../src/index.js';
 import { getInputFile, prepareTestEnvironment } from './index.js';
 
-import type { IOInputCallbacks } from '../src/api/types.js';
-import type { AVSeekWhence } from '../src/index.js';
+import type { AVSeekWhence, IOInputCallbacks } from '../src/index.js';
 
 prepareTestEnvironment();
 

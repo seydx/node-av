@@ -2,6 +2,8 @@ import assert from 'node:assert';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 
 import {
+  AV_CHANNEL_LAYOUT_5POINT1_BACK,
+  AV_CHANNEL_LAYOUT_7POINT1,
   AV_CHANNEL_LAYOUT_STEREO,
   AV_FRAME_DATA_A53_CC,
   AV_FRAME_DATA_MASTERING_DISPLAY_METADATA,
@@ -255,11 +257,7 @@ describe('Frame', () => {
       frame.format = AV_SAMPLE_FMT_FLTP;
       frame.sampleRate = 48000;
       frame.nbSamples = 1024;
-      frame.channelLayout = {
-        order: 0,
-        nbChannels: 2,
-        mask: 3n, // Stereo
-      };
+      frame.channelLayout = AV_CHANNEL_LAYOUT_STEREO;
 
       assert.equal(frame.format, AV_SAMPLE_FMT_FLTP);
       assert.equal(frame.sampleRate, 48000);
@@ -271,11 +269,7 @@ describe('Frame', () => {
       frame.format = AV_SAMPLE_FMT_FLTP;
       frame.sampleRate = 44100;
       frame.nbSamples = 1024;
-      frame.channelLayout = {
-        order: 0,
-        nbChannels: 2,
-        mask: 3n,
-      };
+      frame.channelLayout = AV_CHANNEL_LAYOUT_STEREO;
 
       const ret = frame.getBuffer();
       assert.equal(ret, 0);
@@ -292,11 +286,7 @@ describe('Frame', () => {
       frame.format = AV_SAMPLE_FMT_S16;
       frame.sampleRate = 48000;
       frame.nbSamples = 512;
-      frame.channelLayout = {
-        order: 0,
-        nbChannels: 2,
-        mask: 3n,
-      };
+      frame.channelLayout = AV_CHANNEL_LAYOUT_STEREO;
 
       const ret = frame.allocBuffer();
       assert.equal(ret, 0);
@@ -307,11 +297,7 @@ describe('Frame', () => {
     });
 
     it('should get number of channels', () => {
-      frame.channelLayout = {
-        order: 0,
-        nbChannels: 6,
-        mask: 0x3fn, // 5.1 surround
-      };
+      frame.channelLayout = AV_CHANNEL_LAYOUT_5POINT1_BACK;
 
       assert.equal(frame.channels, 6);
     });
@@ -321,11 +307,7 @@ describe('Frame', () => {
       frame.format = AV_SAMPLE_FMT_S16;
       frame.sampleRate = 44100;
       frame.nbSamples = 1024;
-      frame.channelLayout = {
-        order: 0,
-        nbChannels: 2,
-        mask: 3n, // Stereo
-      };
+      frame.channelLayout = AV_CHANNEL_LAYOUT_STEREO;
 
       const ret = frame.allocBuffer();
       assert.equal(ret, 0);
@@ -562,11 +544,7 @@ describe('Frame', () => {
       frame.format = AV_SAMPLE_FMT_FLTP;
       frame.sampleRate = 48000;
       frame.nbSamples = 1024;
-      frame.channelLayout = {
-        order: 0,
-        nbChannels: 8, // 7.1 surround
-        mask: 0x3ffn,
-      };
+      frame.channelLayout = AV_CHANNEL_LAYOUT_7POINT1;
 
       const ret = frame.getBuffer();
       assert.equal(ret, 0);
@@ -605,11 +583,7 @@ describe('Frame', () => {
 
     it('should fail to allocate audio buffer without samples', () => {
       frame.format = AV_SAMPLE_FMT_FLTP;
-      frame.channelLayout = {
-        order: 0,
-        nbChannels: 2,
-        mask: 3n,
-      };
+      frame.channelLayout = AV_CHANNEL_LAYOUT_STEREO;
       // No nbSamples set
 
       const ret = frame.getBuffer();
@@ -841,7 +815,7 @@ describe('Frame', () => {
       frame.alloc();
       frame.format = AV_SAMPLE_FMT_FLT;
       frame.nbSamples = 1024;
-      frame.channelLayout = { order: 0, nbChannels: 2, mask: 3n }; // stereo
+      frame.channelLayout = AV_CHANNEL_LAYOUT_STEREO;
       frame.allocBuffer();
 
       // Float32 stereo: 1024 samples * 2 channels * 4 bytes

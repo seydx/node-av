@@ -2,6 +2,11 @@ import assert from 'node:assert';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 
 import {
+  AV_CH_LAYOUT_MONO,
+  AV_CH_LAYOUT_STEREO,
+  AV_CHANNEL_LAYOUT_MONO,
+  AV_CHANNEL_LAYOUT_STEREO,
+  AV_CHANNEL_ORDER_NATIVE,
   AV_CODEC_ID_AAC,
   AV_CODEC_ID_H264,
   AV_CODEC_ID_MJPEG,
@@ -340,23 +345,23 @@ describe('CodecParameters', () => {
     });
 
     it('should get and set channel layout', () => {
-      const layout = { nbChannels: 2, order: 0, mask: 3n }; // Stereo
+      const layout = AV_CHANNEL_LAYOUT_STEREO; // Stereo
       params.channelLayout = layout;
 
       const retrieved = params.channelLayout;
       assert.equal(retrieved.nbChannels, 2);
-      assert.equal(retrieved.order, 0);
-      assert.equal(retrieved.mask, 3n);
+      assert.equal(retrieved.order, AV_CHANNEL_ORDER_NATIVE);
+      assert.equal(retrieved.mask, AV_CH_LAYOUT_STEREO);
     });
 
     it('should handle mono channel layout', () => {
-      const layout = { nbChannels: 1, order: 0, mask: 4n }; // Mono
+      const layout = AV_CHANNEL_LAYOUT_MONO;
       params.channelLayout = layout;
 
       const retrieved = params.channelLayout;
       assert.equal(retrieved.nbChannels, 1);
-      assert.equal(retrieved.order, 0);
-      assert.equal(retrieved.mask, 4n);
+      assert.equal(retrieved.order, AV_CHANNEL_ORDER_NATIVE);
+      assert.equal(retrieved.mask, AV_CH_LAYOUT_MONO);
     });
 
     it('should get and set frameSize', () => {
@@ -540,7 +545,7 @@ describe('CodecParameters', () => {
       const ctx = new CodecContext();
       ctx.allocContext3(codec);
       ctx.sampleRate = 44100;
-      ctx.channelLayout = { nbChannels: 2, order: 0, mask: 3n };
+      ctx.channelLayout = AV_CHANNEL_LAYOUT_STEREO;
       ctx.sampleFormat = AV_SAMPLE_FMT_S16;
 
       params.alloc();
@@ -607,7 +612,7 @@ describe('CodecParameters', () => {
       params.bitRate = 128000n;
       params.sampleRate = 48000;
       params.format = AV_SAMPLE_FMT_FLTP;
-      params.channelLayout = { nbChannels: 2, order: 0, mask: 3n };
+      params.channelLayout = AV_CHANNEL_LAYOUT_STEREO;
       params.profile = AV_PROFILE_AAC_LOW;
 
       const dst = new CodecParameters();
