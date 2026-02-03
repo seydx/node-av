@@ -2,9 +2,6 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
 ## [5.2.0] - XXX
 
 ### Added
@@ -49,28 +46,27 @@ await using screen = await DeviceAPI.openScreen({
 
 #### IOContext Input Support
 
-`Demuxer.open()` and `Demuxer.openSync()` now accept a pre-created `IOContext` as input, enabling advanced custom I/O scenarios with more control over buffering and seeking.
+- `Demuxer.open()` and `Demuxer.openSync()` now accept a pre-created `IOContext` as input, enabling advanced custom I/O scenarios with more control over buffering and seeking.
 
 #### Muxer - Start Time Offset
 
-New `startTime` option in `Muxer` stream options for controlling packet timestamp offsets.
+- New `startTime` option in `Muxer` stream options for controlling packet timestamp offsets.
 
 ### Changed
 
+#### Improved Type Safety
+
+- Stricter typings across the entire codebase — branded types are now enforced at compile time, preventing accidental use of raw number literals
+- Replaced inline magic numbers and objects with predefined constants
+
 #### Demuxer Input Support
 
-`FMP4Stream.create()`, `WebRTCStream.create()`, and `RTPStream.create()` now accept a pre-opened `Demuxer` instance as input in addition to URL strings. This enables using device capture or custom I/O as input for streaming.
-
-```typescript
-await using screen = await DeviceAPI.openScreen({ frameRate: 30 });
-const session = await WebRTCSession.create(screen, { hardware: 'auto' });
-```
+- `FMP4Stream.create()`, `WebRTCStream.create()`, and `RTPStream.create()` now accept a pre-opened `Demuxer` instance as input in addition to URL strings. This enables using device capture or custom I/O as input for streaming.
 
 #### Build Configuration
 
 - Enhanced symbol visibility flags and exports for native bindings
 - Updated linker flags for improved compatibility
-- Updated Linux screen capture format from `xcbgrab` to `x11grab`
 
 ### Fixed
 
@@ -81,7 +77,7 @@ const session = await WebRTCSession.create(screen, { hardware: 'auto' });
 
 #### Audio Channel Layout
 
-Fixed channel layout formatting for audio frames in filter graphs.
+- Fixed channel layout formatting for audio frames in filter graphs.
 
 ## [5.1.0] - 2026-01-27
 
