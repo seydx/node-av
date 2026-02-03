@@ -23,8 +23,104 @@ import type { AVBufferSrcFlag, AVColorRange, AVColorSpace, AVFilterCmdFlag, AVPi
 import type { FilterContext } from '../lib/filter-context.js';
 import type { ChannelLayout, IDimension, IRational } from '../lib/types.js';
 import type { Encoder } from './encoder.js';
-import type { FilterOptions } from './types.js';
+import type { HardwareContext } from './hardware.js';
 import type { SchedulableComponent } from './utilities/scheduler.js';
+
+/**
+ * Options for creating a filter instance.
+ */
+export interface FilterOptions {
+  /**
+   * Number of threads for parallel processing.
+   *
+   * Controls the number of threads used for filter processing.
+   * Set to 0 to auto-detect based on CPU cores.
+   *
+   * @default 0 (auto-detect)
+   */
+  threads?: number;
+
+  /**
+   * Software scaler options for video filters.
+   *
+   * Options passed to libswscale when scaling video within filters.
+   * Maps to AVFilterGraph->scale_sws_opts.
+   */
+  scaleSwsOpts?: string;
+
+  /**
+   * Audio resampler options for audio filters.
+   *
+   * Options passed to libswresample when resampling audio within filters.
+   * Maps to AVFilterGraph->aresample_swr_opts.
+   */
+  audioResampleOpts?: string;
+
+  /**
+   * Hardware acceleration context.
+   *
+   * Pass a HardwareContext instance to enable hardware-accelerated filtering.
+   * Set to null to disable hardware acceleration.
+   */
+  hardware?: HardwareContext | null;
+
+  /**
+   * Number of extra hardware frames to allocate.
+   *
+   * Useful for hardware filters requiring additional frame buffering.
+   * Some hardware filters need extra frames for look-ahead or reference.
+   */
+  extraHWFrames?: number;
+
+  /**
+   * Force constant framerate mode (CFR).
+   *
+   * When true, timeBase is automatically set to 1/framerate (like FFmpeg CLI -fps_mode cfr).
+   * When false (default), timeBase is taken from frame.timeBase (VFR mode).
+   *
+   * Maps to FFmpeg's IFILTER_FLAG_CFR.
+   * Requires `framerate` to be set when enabled.
+   *
+   * @default false (VFR mode)
+   */
+  cfr?: boolean;
+
+  /**
+   * Framerate for CFR mode or as hint for buffer source.
+   *
+   * Required when `cfr=true` to calculate timeBase = 1/framerate.
+   * Also passed to AVBufferSrcParameters->frame_rate.
+   *
+   * Maps to FFmpeg's InputFilterOptions->framerate.
+   */
+  framerate?: IRational;
+
+  /**
+   * Drop frames on format/parameter changes instead of reinitializing filtergraph.
+   *
+   * When true, frames with changed properties (resolution, format, etc.) are dropped
+   * instead of triggering filtergraph reinitialization. Useful for live streams
+   * with unstable properties.
+   *
+   * Maps to FFmpeg's IFILTER_FLAG_DROPCHANGED.
+   *
+   * @default false
+   */
+  dropOnChange?: boolean;
+
+  /**
+   * Allow filtergraph reinitialization when frame parameters change.
+   *
+   * When false, parameter changes (resolution, format) will cause errors
+   * instead of reinitializing the filtergraph.
+   * When true (default), filtergraph is reinitialized on parameter changes.
+   *
+   * Maps to FFmpeg's IFILTER_FLAG_REINIT.
+   *
+   * @default true
+   */
+  allowReinit?: boolean;
+}
 
 /**
  * High-level filter API for audio and video processing.

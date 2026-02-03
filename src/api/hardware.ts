@@ -53,7 +53,6 @@ import { Encoder } from './encoder.js';
 import { FilterAPI } from './filter.js';
 
 import type { AVCodecID, AVHWDeviceType, AVPixelFormat, FFDecoderCodec, FFEncoderCodec, FFHWDeviceType } from '../constants/index.js';
-import type { BaseCodecName, HardwareOptions } from './types.js';
 
 const __dirname = getDirname(import.meta.url);
 const h264Data = join(__dirname, 'data', 'test_h264.h264');
@@ -62,6 +61,36 @@ const vp8Data = join(__dirname, 'data', 'test_vp8.ivf');
 const vp9Data = join(__dirname, 'data', 'test_vp9.ivf');
 const av1Data = join(__dirname, 'data', 'test_av1.ivf');
 const mjpegData = join(__dirname, 'data', 'test_mjpeg.mjpeg');
+
+/**
+ * Base codec names supported across different hardware types.
+ */
+export type BaseCodecName =
+  | 'av1' // AV1 codec (amf, mediacodec, nvenc, qsv, vaapi)
+  | 'h264' // H.264/AVC (amf, mediacodec, nvenc, qsv, vaapi, v4l2m2m, mf, omx, rkmpp, videotoolbox, vulkan)
+  | 'hevc' // H.265/HEVC (amf, mediacodec, nvenc, qsv, vaapi, v4l2m2m, mf, rkmpp, videotoolbox, d3d12va, vulkan)
+  | 'h263' // H.263 (v4l2m2m)
+  | 'mpeg2' // MPEG-2 (qsv, vaapi)
+  | 'mpeg4' // MPEG-4 Part 2 (mediacodec, v4l2m2m, omx)
+  | 'vp8' // VP8 (mediacodec, vaapi, v4l2m2m)
+  | 'vp9' // VP9 (mediacodec, qsv, vaapi)
+  | 'mjpeg' // Motion JPEG (qsv, vaapi, rkmpp, videotoolbox)
+  | 'prores'; // ProRes (videotoolbox only)
+
+/**
+ * Hardware acceleration configuration options.
+ */
+export interface HardwareOptions {
+  /**
+   * Device path or index (e.g., '0' for first GPU).
+   */
+  device?: string;
+
+  /**
+   * Device initialization options.
+   */
+  options?: Record<string, string>;
+}
 
 /**
  * High-level hardware acceleration management.

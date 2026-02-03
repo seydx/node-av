@@ -18,7 +18,31 @@ import type {
 } from '../constants/constants.js';
 import { Dictionary } from './dictionary.js';
 import type { NativeFrame, NativeWrapper } from './native-types.js';
-import type { AudioFrame, ChannelLayout, VideoFrame } from './types.js';
+import type { ChannelLayout, IRational } from './types.js';
+
+/**
+ * Video Frame
+ */
+export interface VideoFrame {
+  width: number;
+  height: number;
+  format: AVPixelFormat;
+  timeBase?: IRational;
+  sampleAspectRatio?: IRational;
+  pts?: bigint;
+}
+
+/**
+ * Audio Frame
+ */
+export interface AudioFrame {
+  nbSamples: number;
+  format: AVSampleFormat;
+  sampleRate: number;
+  channelLayout: ChannelLayout;
+  timeBase?: IRational;
+  pts?: bigint;
+}
 
 /**
  * Container for uncompressed audio/video data.

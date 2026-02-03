@@ -14,8 +14,9 @@ import { Muxer } from './muxer.js';
 import { pipeline } from './pipeline.js';
 
 import type { AVCodecID, AVHWDeviceType, AVSampleFormat, FFAudioEncoder, FFHWDeviceType, FFVideoEncoder } from '../constants/index.js';
+import type { DemuxerOptions } from './demuxer.js';
+import type { EncoderOptions } from './encoder.js';
 import type { PipelineControl } from './pipeline.js';
-import type { DemuxerOptions, EncoderOptions } from './types.js';
 
 /**
  * Options for configuring RTP streaming.

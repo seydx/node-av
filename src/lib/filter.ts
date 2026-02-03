@@ -1,8 +1,15 @@
-import { AVMEDIA_TYPE_AUDIO, AVMEDIA_TYPE_VIDEO } from '../constants/constants.js';
+import { AVMEDIA_TYPE_AUDIO, AVMEDIA_TYPE_VIDEO, type AVMediaType } from '../constants/constants.js';
 import { bindings } from './binding.js';
 
 import type { NativeFilter, NativeWrapper } from './native-types.js';
-import type { FilterPad } from './types.js';
+
+/**
+ * Filter pad information
+ */
+export interface FilterPad {
+  name: string | null; // (e.g., "in", "out")
+  type: AVMediaType;
+}
 
 /**
  * Filter descriptor for video/audio processing.

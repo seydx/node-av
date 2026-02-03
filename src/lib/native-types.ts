@@ -1,13 +1,3 @@
-/**
- * Native FFmpeg Binding Type Definitions
- * =======================================
- *
- * This file contains all TypeScript interfaces for the native C++ FFmpeg bindings.
- * These interfaces represent the exact API surface exposed by the C++ layer.
- *
- * @internal
- */
-
 import type {
   AVBufferSrcFlag,
   AVChromaLocation,
@@ -47,7 +37,11 @@ import type {
   AVThreadType,
   SwsFlags,
 } from '../constants/index.js';
-import type { ChannelLayout, CodecProfile, FilterPad, ImageOptions, IRational, RTSPStreamInfo } from './types.js';
+import type { CodecProfile } from './codec.js';
+import type { FilterPad } from './filter.js';
+import type { RTSPStreamInfo } from './format-context.js';
+import type { ImageOptions } from './frame-utils.js';
+import type { ChannelLayout, IRational } from './types.js';
 
 /**
  * Native AVPacket binding interface

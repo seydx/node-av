@@ -3,9 +3,7 @@ import { existsSync } from 'fs';
 import { Device } from '../lib/device.js';
 import { Demuxer } from './demuxer.js';
 
-import type { DeviceInfo, DeviceMode } from '../lib/device.js';
-
-export type { DeviceInfo, DeviceMode };
+import type { AudioDeviceMode, DeviceInfo, DeviceMode } from '../lib/device.js';
 
 /**
  * Options for opening a camera device.
@@ -342,6 +340,61 @@ export class DeviceAPI {
    */
   static modesSync(deviceName: string): DeviceMode[] {
     return Device.modesSync(deviceName);
+  }
+
+  /**
+   * Query supported audio capture modes for an audio device.
+   *
+   * Returns supported sample rates, channel counts and sample formats,
+   * sorted descending by sample rate, then by channel count.
+   *
+   * @param deviceName - Device name as returned by `list()` (e.g. uniqueID on macOS)
+   *
+   * @returns Array of supported audio device modes
+   *
+   * @example
+   * ```typescript
+   * const devices = await DeviceAPI.list();
+   * const mic = devices.find(d => d.type === 'audio');
+   * if (mic) {
+   *   const modes = await DeviceAPI.audioModes(mic.name);
+   *   for (const mode of modes) {
+   *     console.log(`${mode.sampleRate}Hz ${mode.channels}ch`);
+   *   }
+   * }
+   * ```
+   *
+   * @see {@link audioModesSync} For sync version
+   */
+  static async audioModes(deviceName: string): Promise<AudioDeviceMode[]> {
+    DeviceAPI.ensureAlsaConfig();
+    return Device.audioModes(deviceName);
+  }
+
+  /**
+   * Query supported audio capture modes for an audio device synchronously.
+   *
+   * @param deviceName - Device name as returned by `listSync()`
+   *
+   * @returns Array of supported audio device modes
+   *
+   * @example
+   * ```typescript
+   * const devices = DeviceAPI.listSync();
+   * const mic = devices.find(d => d.type === 'audio');
+   * if (mic) {
+   *   const modes = DeviceAPI.audioModesSync(mic.name);
+   *   for (const mode of modes) {
+   *     console.log(`${mode.sampleRate}Hz ${mode.channels}ch`);
+   *   }
+   * }
+   * ```
+   *
+   * @see {@link audioModes} For async version
+   */
+  static audioModesSync(deviceName: string): AudioDeviceMode[] {
+    DeviceAPI.ensureAlsaConfig();
+    return Device.audioModesSync(deviceName);
   }
 
   /**

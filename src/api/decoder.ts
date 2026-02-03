@@ -24,13 +24,111 @@ import { FRAME_THREAD_QUEUE_SIZE, PACKET_THREAD_QUEUE_SIZE } from './constants.j
 import { AsyncQueue } from './utilities/async-queue.js';
 import { Scheduler } from './utilities/scheduler.js';
 
-import type { AVCodecID, EOFSignal, FFDecoderCodec } from '../constants/index.js';
+import type { AVCodecID, AVPixelFormat, AVThreadType, EOFSignal, FFDecoderCodec } from '../constants/index.js';
 import type { Stream } from '../lib/stream.js';
 import type { IRational } from '../lib/types.js';
 import type { Encoder } from './encoder.js';
 import type { FilterAPI } from './filter.js';
-import type { DecoderOptions } from './types.js';
+import type { HardwareContext } from './hardware.js';
 import type { SchedulableComponent } from './utilities/scheduler.js';
+
+/**
+ * Options for decoder creation.
+ */
+export interface DecoderOptions {
+  /**
+   * Exit immediately on first decode error.
+   *
+   * When enabled, the decoder will terminate on the first decode error.
+   * When disabled, errors are logged but decoding continues with next packet.
+   *
+   * @default true
+   */
+  exitOnError?: boolean;
+
+  /**
+   * Hardware acceleration context.
+   *
+   * Pass a HardwareContext instance to enable hardware-accelerated decoding.
+   * Set to null to disable hardware acceleration.
+   */
+  hardware?: HardwareContext | null;
+
+  /**
+   * Number of extra hardware frames to allocate.
+   *
+   * Useful for hardware decoders requiring additional frame buffering.
+   * Some hardware decoders need extra frames for reference or look-ahead.
+   */
+  extraHWFrames?: number;
+
+  /**
+   * Hardware frame output format.
+   *
+   * When set, hardware frames will be automatically transferred to this software pixel format.
+   * Useful when you need software frames for further processing but want to use hardware decoding.
+   */
+  hwaccelOutputFormat?: AVPixelFormat;
+
+  /**
+   * Force constant framerate mode.
+   *
+   * When set, ignores all timestamps and generates frames at a constant rate.
+   * Sets frame PTS to AV_NOPTS_VALUE, duration to 1, and time_base to 1/framerate.
+   * Matches FFmpeg CLI's DECODER_FLAG_FRAMERATE_FORCED behavior.
+   */
+  forcedFramerate?: IRational;
+
+  /**
+   * Override sample aspect ratio.
+   *
+   * When set, overrides the frame's sample_aspect_ratio with this value.
+   * Useful for fixing incorrect SAR in source material.
+   */
+  sarOverride?: IRational;
+
+  /**
+   * Apply cropping from frame metadata.
+   *
+   * When true, automatically crops frames based on their crop metadata.
+   * Uses av_frame_apply_cropping() with AV_FRAME_CROP_UNALIGNED flag.
+   * Useful for streams with letterboxing/pillarboxing metadata.
+   *
+   * @default false
+   */
+  applyCropping?: boolean;
+
+  /**
+   * Number of threads to use for decoding.
+   *
+   * Set to 0 to auto-detect based on CPU cores.
+   *
+   * @default 1
+   */
+  threadCount?: number;
+
+  /**
+   * Type of threading to use for decoding.
+   *
+   * - `FF_THREAD_FRAME` (1): Decode multiple frames in parallel.
+   *   Higher throughput but adds latency (1 frame delay per thread).
+   *   Not recommended for live streaming where future frames are unavailable.
+   *
+   * - `FF_THREAD_SLICE` (2): Decode parts of a single frame in parallel.
+   *   No additional latency, suitable for real-time/live streaming.
+   *
+   * @default FFmpeg default (both methods, codec chooses best)
+   */
+  threadType?: AVThreadType;
+
+  /**
+   * Additional codec-specific options.
+   *
+   * Key-value pairs of FFmpeg AVCodecContext options.
+   * These are passed directly to the decoder.
+   */
+  options?: Record<string, string | number | boolean | undefined | null>;
+}
 
 /**
  * High-level decoder for audio and video streams.

@@ -1,7 +1,45 @@
 import { bindings } from './binding.js';
 
 import type { NativeFrameUtils } from './native-types.js';
-import type { ImageOptions } from './types.js';
+
+/**
+ * Image output format
+ */
+export type ImageOutputFormat = 'nv12' | 'yuv420p' | 'rgb' | 'rgba' | 'gray';
+
+/**
+ * Image cropping options
+ */
+export interface ImageCrop {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Image resizing options
+ */
+export interface ImageResize {
+  width: number;
+  height: number;
+}
+
+/**
+ * Image format conversion options
+ */
+export interface ImageFormat {
+  to: ImageOutputFormat;
+}
+
+/**
+  Image processing options
+ */
+export interface ImageOptions {
+  format?: ImageFormat;
+  crop?: ImageCrop;
+  resize?: ImageResize;
+}
 
 /**
  * Frame processing utilities with persistent native frame pools.

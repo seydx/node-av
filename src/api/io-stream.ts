@@ -3,7 +3,80 @@ import { IOContext } from '../lib/index.js';
 import { IO_BUFFER_SIZE } from './constants.js';
 
 import type { AVSeekWhence } from '../constants/index.js';
-import type { DemuxerOptions, IOInputCallbacks } from './types.js';
+import type { DemuxerOptions } from './demuxer.js';
+
+/**
+ * Custom I/O callbacks for implementing custom input sources.
+ *
+ */
+export interface IOInputCallbacks {
+  /**
+   * Read callback - called when FFmpeg needs to read data.
+   *
+   * Can be synchronous or async (return a Promise).
+   *
+   * @param size - Number of bytes to read
+   *
+   * @returns Buffer with data, null for EOF, negative error code, or Promise resolving to same
+   */
+  read: (size: number) => Buffer | null | number | Promise<Buffer | null | number>;
+
+  /**
+   * Seek callback - called when FFmpeg needs to seek in the stream.
+   *
+   * Can be synchronous or async (return a Promise).
+   *
+   * @param offset - Offset to seek to
+   *
+   * @param whence - Seek origin (AVSEEK_SET, AVSEEK_CUR, AVSEEK_END, or AVSEEK_SIZE)
+   *
+   * @returns New position, negative error code, or Promise resolving to same
+   */
+  seek?: (offset: bigint, whence: AVSeekWhence) => bigint | number | Promise<bigint | number>;
+}
+
+/**
+ * Custom I/O callbacks for implementing custom output targets.
+ *
+ */
+export interface IOOutputCallbacks {
+  /**
+   * Write callback - called when FFmpeg needs to write data.
+   *
+   * Can be synchronous or async (return a Promise).
+   * The buffer may be reused by FFmpeg after the callback completes,
+   * so copy it if you need to keep the data.
+   *
+   * @param buffer - Buffer containing data to write
+   *
+   * @returns Number of bytes written, void (assumes all bytes written), or Promise resolving to same
+   */
+  write: (buffer: Buffer) => number | void | Promise<number | void>;
+
+  /**
+   * Seek callback - called when FFmpeg needs to seek in the output.
+   *
+   * Can be synchronous or async (return a Promise).
+   *
+   * @param offset - Offset to seek to
+   *
+   * @param whence - Seek origin (AVSEEK_SET, AVSEEK_CUR, AVSEEK_END)
+   *
+   * @returns New position, negative error code, or Promise resolving to same
+   */
+  seek?: (offset: bigint, whence: AVSeekWhence) => bigint | number | Promise<bigint | number>;
+
+  /**
+   * Read callback - some formats may need to read back data.
+   *
+   * Can be synchronous or async (return a Promise).
+   *
+   * @param size - Number of bytes to read
+   *
+   * @returns Buffer with data, null for EOF, negative error code, or Promise resolving to same
+   */
+  read?: (size: number) => Buffer | null | number | Promise<Buffer | null | number>;
+}
 
 /**
  * Factory for creating custom I/O contexts.

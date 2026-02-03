@@ -31,15 +31,8 @@ import { Encoder } from './encoder.js';
 import { AsyncQueue } from './utilities/async-queue.js';
 
 import type { IRational, OutputFormat, Stream } from '../lib/index.js';
-import type { IOOutputCallbacks, MuxerOptions } from './types.js';
-
-export interface AddStreamOptionsWithEncoder {
-  encoder?: Encoder;
-}
-
-export interface AddStreamOptionsWithInputStream {
-  inputStream?: Stream;
-}
+import type { Demuxer, RTPDemuxer } from './demuxer.js';
+import type { IOOutputCallbacks } from './io-stream.js';
 
 interface StreamDescription {
   initialized: boolean;
@@ -62,6 +55,183 @@ interface WriteJob {
   pkt: Packet;
   streamInfo: StreamDescription;
   streamIndex: number;
+}
+
+/**
+ * Options for Muxer creation.
+ */
+export interface MuxerOptions {
+  /**
+   * Input media for automatic metadata and property copying.
+   *
+   * When provided, Muxer will automatically copy:
+   * - Container-level metadata (title, artist, etc.)
+   * - Stream-level metadata
+   * - Disposition flags (DEFAULT, FORCED, etc.)
+   * - Duration hints for encoding
+   *
+   * This matches FFmpeg CLI behavior which copies metadata by default.
+   */
+  input?: Demuxer | RTPDemuxer;
+
+  /**
+   * Preferred output format.
+   *
+   * If not specified, format is guessed from file extension.
+   * Use this to override automatic format detection.
+   *
+   * Matches FFmpeg CLI's -f option.
+   */
+  format?: string;
+
+  /**
+   * Buffer size for I/O operations.
+   *
+   * This option controls the size of the internal buffer used for
+   * reading and writing data.
+   *
+   * @default 32768 (32 KB, matches FFmpeg CLI default)
+   */
+  bufferSize?: number;
+
+  /**
+   * Maximum packet size for I/O operations.
+   *
+   * This option controls the maximum size of individual packets
+   * for protocols that require specific packet sizes (e.g., RTP with MTU constraints).
+   *
+   * Matches FFmpeg's max_packet_size in AVIOContext.
+   *
+   * @default 1200
+   */
+  maxPacketSize?: number;
+
+  /**
+   * Exit immediately on first write error.
+   *
+   * When enabled, the muxer will terminate on the first write error.
+   * When disabled, errors are logged but processing continues.
+   *
+   * @default true
+   */
+  exitOnError?: boolean;
+
+  /**
+   * Maximum number of packets to buffer per stream in the sync queue.
+   *
+   * Matches FFmpeg CLI's -max_muxing_queue_size option.
+   * Limits memory usage when encoders are still initializing.
+   * Takes effect after muxingQueueDataThreshold is reached.
+   * If exceeded, an error is thrown.
+   *
+   * @default 128 (same as FFmpeg CLI)
+   */
+  maxMuxingQueueSize?: number;
+
+  /**
+   * Threshold in bytes after which maxMuxingQueueSize takes effect.
+   *
+   * Matches FFmpeg CLI's -muxing_queue_data_threshold option.
+   * Once this threshold is reached, maxMuxingQueueSize limit applies.
+   * This is an intelligent system: small streams (audio) can buffer many packets,
+   * large streams (video) are limited by packet count.
+   *
+   * @default 52428800 (50 MB, same as FFmpeg CLI)
+   */
+  muxingQueueDataThreshold?: number;
+
+  /**
+   * Maximum buffering duration in seconds for sync queue interleaving.
+   *
+   * Matches FFmpeg CLI's -shortest_buf_duration option.
+   * Controls how much buffering is allowed in the native sync queue
+   * for packet interleaving across multiple streams.
+   *
+   * @default 10 (same as FFmpeg CLI)
+   */
+  syncQueueBufferDuration?: number;
+
+  /**
+   * Start time offset in seconds for output timestamps.
+   *
+   * Matches FFmpeg CLI's -ss (output) option.
+   * Subtracts this offset from all packet timestamps.
+   * Use for trimming from start of stream.
+   *
+   * @default AV_NOPTS_VALUE (no offset)
+   */
+  startTime?: number;
+
+  /**
+   * Whether to copy initial non-keyframe packets in streamcopy mode.
+   *
+   * Matches FFmpeg CLI's -copyinkf option.
+   * If false (default), packets before first keyframe are skipped.
+   * If true, all packets from start are copied.
+   *
+   * @default false
+   */
+  copyInitialNonkeyframes?: boolean;
+
+  /**
+   * Copy or discard frames before start time.
+   *
+   * Matches FFmpeg CLI's -copypriorss option.
+   * Controls whether packets before the start time are copied:
+   * - -1 (default): Use FFmpeg's internal ts_copy_start calculation
+   * - 0: Discard packets before start time
+   * - 1: Copy all packets regardless of start time
+   *
+   * @default -1
+   */
+  copyPriorStart?: number;
+
+  /**
+   * Use synchronous packet queue for interleaving.
+   *
+   * When true and there are stream copy streams present, enables FFmpeg's
+   * sync queue for proper interleaving of packets based on timestamps.
+   *
+   * The sync queue is only activated when both conditions are met:
+   * - `useSyncQueue` is `true`
+   * - Output contains at least one stream copy stream
+   *
+   * This includes scenarios with:
+   * - Only stream copy streams (e.g., 1 streamcopy stream)
+   * - Mixed streams (e.g., 1 streamcopy + 1 encoded stream)
+   *
+   * For outputs with only encoded streams, the sync queue is not used.
+   *
+   * @default true
+   */
+  useSyncQueue?: boolean;
+
+  /**
+   * Use asynchronous write queue to prevent race conditions.
+   *
+   * When true and there are multiple streams (> 1), all write operations
+   * are serialized through an async queue, preventing concurrent access
+   * to AVFormatContext which can cause "Packet duration out of range"
+   * errors with parallel encoding.
+   *
+   * The async queue is only activated when both conditions are met:
+   * - `useAsyncWrite` is `true`
+   * - Output has more than one stream
+   *
+   * For single-stream outputs, writes are performed directly without
+   * queuing, regardless of this setting.
+   *
+   * @default true
+   */
+  useAsyncWrite?: boolean;
+
+  /**
+   * FFmpeg format options passed directly to the output.
+   *
+   * Key-value pairs of FFmpeg AVFormatContext options.
+   * These are passed directly to avformat_write_header().
+   */
+  options?: Record<string, string | number | boolean | bigint | undefined | null>;
 }
 
 /**
@@ -573,7 +743,7 @@ export class Muxer implements AsyncDisposable, Disposable {
    * });
    * ```
    */
-  addStream(encoder: Encoder, options?: AddStreamOptionsWithInputStream): number;
+  addStream(encoder: Encoder, options?: { inputStream?: Stream }): number;
 
   /**
    * Add a stream to the output (stream copy or transcoding mode).
@@ -625,9 +795,8 @@ export class Muxer implements AsyncDisposable, Disposable {
    * @see {@link writePacket} For writing packets to streams
    * @see {@link Encoder} For transcoding source
    */
-  addStream(stream: Stream, options?: AddStreamOptionsWithEncoder): number;
-
-  addStream(streamOrEncoder: Stream | Encoder, options?: AddStreamOptionsWithEncoder | AddStreamOptionsWithInputStream): number {
+  addStream(stream: Stream, options?: { encoder?: Encoder }): number;
+  addStream(streamOrEncoder: Stream | Encoder, options?: { encoder?: Encoder; inputStream?: Stream }): number {
     if (this.isClosed) {
       throw new Error('Muxer is closed');
     }
@@ -650,11 +819,11 @@ export class Muxer implements AsyncDisposable, Disposable {
     if (isEncoderFirst) {
       // First parameter is Encoder
       encoder = streamOrEncoder;
-      stream = (options as AddStreamOptionsWithInputStream | undefined)?.inputStream;
+      stream = options?.inputStream;
     } else {
       // First parameter is Stream
       stream = streamOrEncoder;
-      encoder = (options as AddStreamOptionsWithEncoder | undefined)?.encoder;
+      encoder = options?.encoder;
     }
 
     const isStreamCopy = !encoder;

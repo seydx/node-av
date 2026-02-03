@@ -10,7 +10,7 @@ export { CodecContext } from './codec-context.js';
 export { CodecParameters } from './codec-parameters.js';
 
 // Codec
-export { Codec } from './codec.js';
+export { Codec, type CodecProfile } from './codec.js';
 
 // Codec Parser
 export { CodecParser } from './codec-parser.js';
@@ -19,7 +19,7 @@ export { CodecParser } from './codec-parser.js';
 export { Packet } from './packet.js';
 
 // Frame
-export { Frame } from './frame.js';
+export { Frame, type AudioFrame, type VideoFrame } from './frame.js';
 
 // Stream
 export { Stream } from './stream.js';
@@ -45,7 +45,7 @@ export { AudioFifo } from './audio-fifo.js';
 export { Fifo } from './fifo.js';
 
 // Frame Utils
-export { FrameUtils } from './frame-utils.js';
+export { FrameUtils, type ImageCrop, type ImageFormat, type ImageOptions, type ImageOutputFormat, type ImageResize } from './frame-utils.js';
 
 // I/O Context
 export { IOContext } from './io-context.js';
@@ -64,7 +64,7 @@ export { FilterContext } from './filter-context.js';
 export { FilterGraphSegment } from './filter-graph-segment.js';
 export { FilterGraph } from './filter-graph.js';
 export { FilterInOut } from './filter-inout.js';
-export { Filter } from './filter.js';
+export { Filter, type FilterPad } from './filter.js';
 
 // Bitstream Filter related classes
 export { BitStreamFilterContext } from './bitstream-filter-context.js';
@@ -74,7 +74,7 @@ export { BitStreamFilter } from './bitstream-filter.js';
 export { Rational } from './rational.js';
 
 // Logging
-export { Log } from './log.js';
+export { Log, type LogOptions } from './log.js';
 
 // Device
 export { Device, type AudioDeviceMode, type DeviceInfo, type DeviceMode } from './device.js';

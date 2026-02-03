@@ -33,9 +33,10 @@ import { DELTA_THRESHOLD, DTS_ERROR_THRESHOLD, IO_BUFFER_SIZE, MAX_INPUT_QUEUE_S
 import { IOStream } from './io-stream.js';
 import { StreamingUtils } from './utilities/streaming.js';
 
-import type { AVMediaType, AVSeekFlag, AVSeekWhence } from '../constants/index.js';
+import type { AVMediaType, AVPixelFormat, AVSampleFormat, AVSeekFlag, AVSeekWhence } from '../constants/index.js';
 import type { Stream } from '../lib/stream.js';
-import type { DemuxerOptions, IOInputCallbacks, RawData, RTPDemuxer } from './types.js';
+import type { IRational } from '../lib/types.js';
+import type { IOInputCallbacks } from './io-stream.js';
 
 /**
  * Per-stream timestamp processing state.
@@ -50,6 +51,217 @@ interface StreamState {
   firstDts: bigint;
   nextDts: bigint;
   dts: bigint;
+}
+
+/**
+ * Raw video data configuration.
+ */
+export interface VideoRawData {
+  /**
+   * Type discriminator for TypeScript.
+   *
+   * Must be set to 'video' to identify this as video raw data.
+   */
+  type: 'video';
+
+  /**
+   * Raw video input source.
+   *
+   * Can be a file path, Buffer containing raw video data, or custom I/O callbacks.
+   */
+  input: string | Buffer | IOInputCallbacks;
+
+  /**
+   * Video frame width in pixels.
+   *
+   * Must match the actual width of the raw video data.
+   */
+  width: number;
+
+  /**
+   * Video frame height in pixels.
+   *
+   * Must match the actual height of the raw video data.
+   */
+  height: number;
+
+  /**
+   * Pixel format of the raw video data.
+   *
+   * Specifies how pixel data is stored (e.g., YUV420P, NV12, RGB24).
+   */
+  pixelFormat: AVPixelFormat;
+
+  /**
+   * Frame rate of the raw video.
+   *
+   * Specified as a rational number (numerator/denominator).
+   */
+  frameRate: IRational;
+}
+
+/**
+ * Raw audio data configuration.
+ */
+export interface AudioRawData {
+  /**
+   * Type discriminator for TypeScript.
+   *
+   * Must be set to 'audio' to identify this as audio raw data.
+   */
+  type: 'audio';
+
+  /**
+   * Raw audio input source.
+   *
+   * Can be a file path, Buffer containing raw audio data, or custom I/O callbacks.
+   */
+  input: string | Buffer | IOInputCallbacks;
+
+  /**
+   * Sample rate in Hz.
+   *
+   * Number of audio samples per second (e.g., 44100, 48000).
+   */
+  sampleRate: number;
+
+  /**
+   * Number of audio channels.
+   *
+   * Typical values: 1 (mono), 2 (stereo), 6 (5.1 surround).
+   */
+  channels: number;
+
+  /**
+   * Sample format of the raw audio data.
+   *
+   * Specifies how audio samples are stored (e.g., S16, FLT, S32).
+   */
+  sampleFormat: AVSampleFormat;
+}
+
+/**
+ * Options for Demuxer opening.
+ */
+export interface DemuxerOptions {
+  /**
+   * Buffer size for reading/writing operations.
+   *
+   * This option allows you to specify the buffer size used for I/O operations.
+   *
+   * @default 65536
+   *
+   */
+  bufferSize?: number;
+
+  /**
+   * Force specific input format.
+   *
+   * Use this to specify the input format explicitly instead of auto-detection.
+   * Useful for raw formats like 'rawvideo', 'rawaudio', etc.
+   *
+   */
+  format?: string;
+
+  /**
+   * Skip reading stream information on open.
+   *
+   * If true, stream info (codecs, formats, etc.) will not be read during opening.
+   * This can speed up opening time for certain use cases where stream info is not needed.
+   *
+   * @default false
+   */
+  skipStreamInfo?: boolean;
+
+  /**
+   * Start reading packets from the first keyframe.
+   *
+   * When enabled, all packets before the first keyframe will be skipped.
+   * Useful for seeking and trimming operations.
+   *
+   * @default false
+   */
+  startWithKeyframe?: boolean;
+
+  /**
+   * DTS delta threshold in seconds.
+   *
+   * Timestamp discontinuity detection threshold for formats with AVFMT_TS_DISCONT flag.
+   * When DTS delta exceeds this value, it's considered a discontinuity.
+   *
+   * Matches FFmpeg CLI's -dts_delta_threshold option.
+   *
+   * @default 10
+   */
+  dtsDeltaThreshold?: number;
+
+  /**
+   * DTS error threshold in seconds.
+   *
+   * Timestamp discontinuity detection threshold for continuous formats (without AVFMT_TS_DISCONT).
+   * When DTS delta exceeds this value, it's considered a timestamp error.
+   *
+   * Matches FFmpeg CLI's -dts_error_threshold option.
+   *
+   * @default 108000 (30 hours)
+   */
+  dtsErrorThreshold?: number;
+
+  /**
+   * Copy timestamps from input to output.
+   *
+   * When enabled, timestamps are passed through without modification.
+   * This disables most timestamp discontinuity corrections except for
+   * PTS wrap-around detection in discontinuous formats.
+   *
+   * Matches FFmpeg CLI's -copyts option.
+   *
+   * @default false
+   */
+  copyTs?: boolean;
+
+  /**
+   * FFmpeg format options passed directly to the input.
+   *
+   * Key-value pairs of FFmpeg AVFormatContext options.
+   * These are passed directly to avformat_open_input().
+   */
+  options?: Record<string, string | number | boolean | undefined | null>;
+}
+
+/**
+ * RTP Demuxer interface.
+ */
+export interface RTPDemuxer {
+  /**
+   * Demuxer configured for RTP/SRTP reception.
+   *
+   * Receives RTP packets via localhost UDP and feeds them to FFmpeg for decoding.
+   */
+  input: Demuxer;
+
+  /**
+   * Send RTP packet to FFmpeg for decoding.
+   *
+   * @param rtpPacket - RTP packet as Buffer or RtpPacket object
+   *
+   * @param streamIndex - Optional stream index for multiplexed RTP
+   */
+  sendPacket: (rtpPacket: Buffer | RtpPacket, streamIndex?: number) => void;
+
+  /**
+   * Cleanup function.
+   *
+   * Closes the demuxer and UDP socket asynchronously.
+   */
+  close: () => Promise<void>;
+
+  /**
+   * Synchronous cleanup function.
+   *
+   * Closes the demuxer and UDP socket synchronously.
+   */
+  closeSync: () => void;
 }
 
 /**
@@ -389,8 +601,8 @@ export class Demuxer implements AsyncDisposable, Disposable {
   static async open(input: string | Buffer, options?: DemuxerOptions): Promise<Demuxer>;
   static async open(input: IOInputCallbacks, options: (DemuxerOptions | undefined) & { format: string }): Promise<Demuxer>;
   static async open(input: IOContext, options: (DemuxerOptions | undefined) & { format: string }): Promise<Demuxer>;
-  static async open(rawData: RawData, options?: DemuxerOptions): Promise<Demuxer>;
-  static async open(input: string | Buffer | RawData | IOInputCallbacks | IOContext, options: DemuxerOptions = {}): Promise<Demuxer> {
+  static async open(rawData: VideoRawData | AudioRawData, options?: DemuxerOptions): Promise<Demuxer>;
+  static async open(input: string | Buffer | VideoRawData | AudioRawData | IOInputCallbacks | IOContext, options: DemuxerOptions = {}): Promise<Demuxer> {
     // Check if input is raw data
     if (typeof input === 'object' && 'type' in input && ('width' in input || 'sampleRate' in input)) {
       // Build options for raw data
@@ -629,8 +841,8 @@ export class Demuxer implements AsyncDisposable, Disposable {
   static openSync(input: string | Buffer, options?: DemuxerOptions): Demuxer;
   static openSync(input: IOInputCallbacks, options: (DemuxerOptions | undefined) & { format: string }): Demuxer;
   static openSync(input: IOContext, options: (DemuxerOptions | undefined) & { format: string }): Demuxer;
-  static openSync(rawData: RawData, options?: DemuxerOptions): Demuxer;
-  static openSync(input: string | Buffer | RawData | IOInputCallbacks | IOContext, options: DemuxerOptions = {}): Demuxer {
+  static openSync(rawData: VideoRawData | AudioRawData, options?: DemuxerOptions): Demuxer;
+  static openSync(input: string | Buffer | VideoRawData | AudioRawData | IOInputCallbacks | IOContext, options: DemuxerOptions = {}): Demuxer {
     // Check if input is raw data
     if (typeof input === 'object' && 'type' in input && ('width' in input || 'sampleRate' in input)) {
       // Build options for raw data

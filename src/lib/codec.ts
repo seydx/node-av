@@ -8,7 +8,18 @@ import type { FFDecoderCodec } from '../constants/decoders.js';
 import type { FFEncoderCodec } from '../constants/encoders.js';
 import type { FFHWDeviceType } from '../constants/hardware.js';
 import type { NativeCodec, NativeWrapper } from './native-types.js';
-import type { ChannelLayout, CodecProfile } from './types.js';
+import type { ChannelLayout } from './types.js';
+
+/**
+ * Codec profile definition
+ */
+export interface CodecProfile {
+  /** Profile ID (FF_PROFILE_*) */
+  profile: number;
+
+  /** Human-readable profile name */
+  name?: string;
+}
 
 /**
  * Codec descriptor for audio/video encoding and decoding.

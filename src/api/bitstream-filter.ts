@@ -9,8 +9,21 @@ import { AsyncQueue } from './utilities/async-queue.js';
 import { Scheduler, SchedulerControl } from './utilities/scheduler.js';
 
 import type { Stream } from '../lib/stream.js';
-import type { BitstreamFilterOptions } from './types.js';
 import type { SchedulableComponent } from './utilities/scheduler.js';
+
+/**
+ * Options for bitstream filter creation.
+ */
+export interface BitstreamFilterOptions {
+  /**
+   * Filter-specific options.
+   *
+   * Key-value pairs of FFmpeg bitstream filter options.
+   * These are passed directly to the filter via av_opt_set().
+   * Available options depend on the specific filter being used.
+   */
+  options?: Record<string, string | number | boolean | bigint | undefined | null>;
+}
 
 /**
  * High-level bitstream filter for packet processing.

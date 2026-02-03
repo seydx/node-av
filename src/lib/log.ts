@@ -1,7 +1,13 @@
 import { bindings } from './binding.js';
 
 import type { AVLogLevel } from '../constants/constants.js';
-import type { LogOptions } from './types.js';
+
+/**
+ * Log callback options for performance tuning.
+ */
+export interface LogOptions {
+  maxLevel?: AVLogLevel; // Messages above this level are ignored
+}
 
 /**
  * FFmpeg logging control and configuration.

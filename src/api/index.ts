@@ -1,34 +1,34 @@
 // IOStream
-export { IOStream } from './io-stream.js';
+export { IOStream, type IOInputCallbacks, type IOOutputCallbacks } from './io-stream.js';
 
 // Demuxer
-export { Demuxer } from './demuxer.js';
+export { Demuxer, type AudioRawData, type DemuxerOptions, type RTPDemuxer, type VideoRawData } from './demuxer.js';
 
 // Muxer
-export { Muxer, type AddStreamOptionsWithEncoder, type AddStreamOptionsWithInputStream } from './muxer.js';
+export { Muxer, type MuxerOptions } from './muxer.js';
 
 // Decoder
-export { Decoder } from './decoder.js';
+export { Decoder, type DecoderOptions } from './decoder.js';
 
 // Encoder
-export { Encoder } from './encoder.js';
+export { Encoder, type EncoderOptions } from './encoder.js';
 
 // AudioFrameBuffer
 export { AudioFrameBuffer } from './audio-frame-buffer.js';
 
 // Hardware
-export { HardwareContext } from './hardware.js';
+export { HardwareContext, type BaseCodecName, type HardwareOptions } from './hardware.js';
 
 // Device
-export { DeviceAPI, type CameraOptions, type DeviceInfo, type DeviceMode, type DeviceOptions, type MicrophoneOptions, type ScreenCaptureOptions } from './device.js';
+export { DeviceAPI, type CameraOptions, type DeviceOptions, type MicrophoneOptions, type ScreenCaptureOptions } from './device.js';
 
 // Filter
-export { FilterComplexAPI } from './filter-complex.js';
+export { FilterComplexAPI, type FilterComplexInput, type FilterComplexOutput } from './filter-complex.js';
 export { FilterPreset, type FilterSupport } from './filter-presets.js';
-export { FilterAPI } from './filter.js';
+export { FilterAPI, type FilterOptions } from './filter.js';
 
 // BitStreamFilter
-export { BitStreamFilterAPI } from './bitstream-filter.js';
+export { BitStreamFilterAPI, type BitstreamFilterOptions } from './bitstream-filter.js';
 
 // Pipeline
 export { pipeline, type NamedInputs, type NamedOutputs, type NamedStages, type PipelineControl, type StreamName } from './pipeline.js';
@@ -48,9 +48,6 @@ export { WhisperTranscriber, type WhisperSegment, type WhisperTranscriberOptions
 // Utilities
 export * from './utilities/index.js';
 export * from './utils.js';
-
-// Types
-export type * from './types.js';
 
 // Re-export werift
 export { MediaStreamTrack, RTCIceCandidate, RTCPeerConnection, RTCRtpCodecParameters, RTCSessionDescription, RtpPacket, type PeerConfig } from 'werift';

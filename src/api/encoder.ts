@@ -30,10 +30,113 @@ import { AsyncQueue } from './utilities/async-queue.js';
 import { SchedulerControl } from './utilities/scheduler.js';
 import { parseBitrate } from './utils.js';
 
-import type { AVCodecFlag, AVCodecID, AVPixelFormat, AVSampleFormat, EOFSignal, FFEncoderCodec } from '../constants/index.js';
+import type { AVCodecFlag, AVCodecID, AVPixelFormat, AVSampleFormat, AVThreadType, EOFSignal, FFEncoderCodec } from '../constants/index.js';
+import type { Decoder } from './decoder.js';
+import type { FilterComplexAPI } from './filter-complex.js';
+import type { FilterAPI } from './filter.js';
 import type { Muxer } from './muxer.js';
-import type { EncoderOptions } from './types.js';
 import type { SchedulableComponent } from './utilities/scheduler.js';
+
+/**
+ * Options for encoder creation.
+ */
+export interface EncoderOptions {
+  /**
+   * Target bitrate.
+   *
+   * Can be specified as number, bigint, or string with suffix (e.g., '5M', '128k').
+   * Used for rate control in video and audio encoding.
+   *
+   * @default 128k for audio, 1M for video
+   */
+  bitrate?: number | bigint | string;
+
+  /**
+   * Minimum bitrate for rate control.
+   *
+   * Can be specified as number, bigint, or string with suffix (e.g., '5M', '128k').
+   * Used with variable bitrate encoding to enforce quality floor.
+   */
+  minRate?: number | bigint | string;
+
+  /**
+   * Maximum bitrate for rate control.
+   *
+   * Can be specified as number, bigint, or string with suffix (e.g., '5M', '128k').
+   * Used with variable bitrate encoding to enforce bitrate ceiling.
+   */
+  maxRate?: number | bigint | string;
+
+  /**
+   * Rate control buffer size.
+   *
+   * Can be specified as number, bigint, or string with suffix (e.g., '5M', '128k').
+   * Determines the decoder buffer model size for rate control.
+   */
+  bufSize?: number | bigint | string;
+
+  /**
+   * Group of Pictures (GOP) size.
+   *
+   * Number of frames between keyframes.
+   * Larger GOP improves compression but reduces seekability.
+   */
+  gopSize?: number;
+
+  /**
+   * Maximum number of consecutive B-frames.
+   *
+   * B-frames improve compression but increase encoding complexity.
+   * Maximum B-frames allowed between I or P frames.
+   */
+  maxBFrames?: number;
+
+  /**
+   * Optional decoder reference for metadata extraction.
+   *
+   * Used to extract bits_per_raw_sample and other decoder-specific properties.
+   * Helps maintain quality during transcoding.
+   */
+  decoder?: Decoder;
+
+  /**
+   * Optional filter reference for metadata extraction.
+   *
+   * Used to extract filter output parameters.
+   * Ensures encoder matches filter output characteristics.
+   */
+  filter?: FilterAPI | FilterComplexAPI;
+
+  /**
+   * Number of threads to use for encoding.
+   *
+   * Set to 0 to auto-detect based on CPU cores.
+   *
+   * @default 1
+   */
+  threadCount?: number;
+
+  /**
+   * Type of threading to use for encoding.
+   *
+   * - `FF_THREAD_FRAME` (1): Encode multiple frames in parallel.
+   *   Higher throughput but adds latency (1 frame delay per thread).
+   *
+   * - `FF_THREAD_SLICE` (2): Encode parts of a single frame in parallel.
+   *   Lower latency, suitable for real-time encoding.
+   *
+   * @default FFmpeg default (both methods, codec chooses best)
+   */
+  threadType?: AVThreadType;
+
+  /**
+   * Additional codec-specific options.
+   *
+   * Key-value pairs of FFmpeg AVCodecContext options.
+   * These are passed directly to the encoder.
+   */
+  options?: Record<string, string | number | boolean | undefined | null>;
+}
 
 /**
  * High-level encoder for audio and video streams.

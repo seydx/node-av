@@ -21,8 +21,10 @@ import { Muxer } from './muxer.js';
 import { pipeline } from './pipeline.js';
 
 import type { AVCodecID, AVHWDeviceType, FFHWDeviceType } from '../constants/index.js';
+import type { DemuxerOptions } from './demuxer.js';
+import type { EncoderOptions } from './encoder.js';
+import type { IOOutputCallbacks } from './io-stream.js';
 import type { PipelineControl } from './pipeline.js';
-import type { DemuxerOptions, EncoderOptions, IOOutputCallbacks } from './types.js';
 
 export type MP4BoxType =
   // Top-level structure

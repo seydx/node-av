@@ -4,44 +4,32 @@ import type { AVPixelFormat, AVSampleFormat } from '../constants/constants.js';
 import type { NativeAudioDeviceMode, NativeDeviceInfo, NativeDeviceMode } from './native-types.js';
 
 /**
- * Device information for capture devices.
+ * Device information for capture devices
  */
 export interface DeviceInfo {
-  /** Device name or identifier */
   name: string;
-  /** Device description or friendly name */
   description: string;
-  /** Device type */
   type: 'video' | 'audio' | 'screen';
-  /** Whether this is the default device */
   isDefault: boolean;
 }
 
 /**
- * Device capture mode (resolution + frame rate range).
+ * Device capture mode
  */
 export interface DeviceMode {
-  /** Resolution width in pixels */
   width: number;
-  /** Resolution height in pixels */
   height: number;
-  /** Minimum supported frame rate */
   minFrameRate: number;
-  /** Maximum supported frame rate */
   maxFrameRate: number;
-  /** FFmpeg pixel format (AVPixelFormat enum value, e.g. AV_PIX_FMT_NV12) */
   pixelFormat: AVPixelFormat;
 }
 
 /**
- * Audio device capture mode (sample rate + channels + sample format).
+ * Audio device capture mode
  */
 export interface AudioDeviceMode {
-  /** Audio sample rate in Hz (e.g. 44100, 48000) */
   sampleRate: number;
-  /** Number of audio channels (e.g. 1 for mono, 2 for stereo) */
   channels: number;
-  /** FFmpeg sample format (AVSampleFormat enum value, e.g. AV_SAMPLE_FMT_S16) */
   sampleFormat: AVSampleFormat;
 }
 

@@ -15,10 +15,10 @@ import { Frame } from '../lib/frame.js';
 import { Rational } from '../lib/rational.js';
 import { avGetSampleFmtName, avInvQ, avRescaleQ } from '../lib/utilities.js';
 
-import type { AVBufferSrcFlag, AVSampleFormat, EOFSignal } from '../constants/index.js';
+import type { AVBufferSrcFlag, AVMediaType, AVSampleFormat, EOFSignal } from '../constants/index.js';
 import type { FilterContext } from '../lib/filter-context.js';
 import type { IRational } from '../lib/types.js';
-import type { FilterComplexOptions } from './types.js';
+import type { FilterOptions } from './filter.js';
 
 /**
  * Frame properties for change detection.
@@ -54,6 +54,63 @@ interface InputState {
 interface OutputState {
   label: string;
   buffersink: FilterContext | null;
+}
+
+/**
+ * Input configuration for FilterComplexAPI.
+ */
+export interface FilterComplexInput {
+  /**
+   * Input label identifier.
+   *
+   * Matches labels in filter_complex description (e.g., '0:v', '1:v', '0:a').
+   * Used to identify which buffersrc filter to send frames to via process() method.
+   */
+  label: string;
+}
+
+/**
+ * Output configuration for FilterComplexAPI.
+ */
+export interface FilterComplexOutput {
+  /**
+   * Output label identifier.
+   *
+   * Matches labels in filter_complex description (e.g., 'out', 'thumb', 'main').
+   * Used to identify which buffersink to read from via output() method.
+   */
+  label: string;
+
+  /**
+   * Media type for this output.
+   *
+   * If not specified, defaults to the media type of the first input.
+   * Set to 'AVMEDIA_TYPE_VIDEO' or 'AVMEDIA_TYPE_AUDIO' explicitly if needed (e.g., for audio extraction filters).
+   *
+   * @default Inferred from first input
+   */
+  mediaType?: AVMediaType;
+}
+
+/**
+ * Options for creating a complex filter graph.
+ */
+export interface FilterComplexOptions extends FilterOptions {
+  /**
+   * Input sources for the filter graph.
+   *
+   * Array of labeled frame sources that feed into the filter graph.
+   * Labels must match those referenced in the description string.
+   */
+  inputs: FilterComplexInput[];
+
+  /**
+   * Output labels from the filter graph.
+   *
+   * Array of output identifiers that can be consumed via output() method.
+   * Labels must match those defined in the description string.
+   */
+  outputs: FilterComplexOutput[];
 }
 
 /**
