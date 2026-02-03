@@ -1,3 +1,5 @@
+import { existsSync } from 'fs';
+
 import { Device } from '../lib/device.js';
 import { Demuxer } from './demuxer.js';
 
@@ -54,6 +56,12 @@ export interface MicrophoneOptions {
   sampleRate?: number;
   /** Number of audio channels */
   channels?: number;
+
+  /** Linux ALSA-specific options */
+  alsa?: {
+    /** Path to ALSA configuration file (overrides auto-detection) */
+    configPath?: string;
+  };
 
   /** Windows DirectShow-specific options */
   dshow?: {
@@ -232,6 +240,13 @@ export interface DeviceOptions {
  * @see {@link DeviceOptions} For combined video+audio capture options
  * @see {@link Demuxer} For processing captured streams
  */
+/**
+ * Standard ALSA configuration file search paths (same order as ALSA's configure.ac).
+ *
+ * @internal
+ */
+const ALSA_CONFIG_SEARCH_PATHS = ['/usr/share/alsa/alsa.conf', '/usr/local/share/alsa/alsa.conf', '/etc/alsa/alsa.conf'];
+
 export class DeviceAPI {
   /**
    * List all available capture devices.
@@ -254,6 +269,7 @@ export class DeviceAPI {
    * ```
    */
   static async list(): Promise<DeviceInfo[]> {
+    DeviceAPI.ensureAlsaConfig();
     return Device.list();
   }
 
@@ -271,6 +287,7 @@ export class DeviceAPI {
    * @see {@link list} For async version
    */
   static listSync(): DeviceInfo[] {
+    DeviceAPI.ensureAlsaConfig();
     return Device.listSync();
   }
 
@@ -420,6 +437,7 @@ export class DeviceAPI {
    * ```
    */
   static async openMicrophone(options: MicrophoneOptions = {}): Promise<Demuxer> {
+    DeviceAPI.ensureAlsaConfig(options.alsa?.configPath);
     const format = Device.getAudioFormat();
     const deviceName = DeviceAPI.buildAudioDeviceName(options);
     const formatOptions = DeviceAPI.buildAudioFormatOptions(options);
@@ -445,6 +463,7 @@ export class DeviceAPI {
    * @see {@link openMicrophone} For async version
    */
   static openMicrophoneSync(options: MicrophoneOptions = {}): Demuxer {
+    DeviceAPI.ensureAlsaConfig(options.alsa?.configPath);
     const format = Device.getAudioFormat();
     const deviceName = DeviceAPI.buildAudioDeviceName(options);
     const formatOptions = DeviceAPI.buildAudioFormatOptions(options);
@@ -1056,5 +1075,33 @@ export class DeviceAPI {
     }
 
     return { deviceName, formatOptions };
+  }
+
+  /**
+   * Ensure ALSA configuration is available on Linux.
+   *
+   * Auto-detects the ALSA configuration file from standard paths and sets
+   * `ALSA_CONFIG_PATH` if not already defined. This ensures ALSA can find
+   * its configuration even if it is installed at a non-standard location.
+   *
+   * @param configPath - Optional explicit path to alsa.conf
+   *
+   * @internal
+   */
+  private static ensureAlsaConfig(configPath?: string): void {
+    if (process.platform !== 'linux') return;
+    if (process.env.ALSA_CONFIG_PATH) return;
+
+    if (configPath) {
+      process.env.ALSA_CONFIG_PATH = configPath;
+      return;
+    }
+
+    for (const searchPath of ALSA_CONFIG_SEARCH_PATHS) {
+      if (existsSync(searchPath)) {
+        process.env.ALSA_CONFIG_PATH = searchPath;
+        return;
+      }
+    }
   }
 }
