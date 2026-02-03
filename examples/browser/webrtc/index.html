@@ -452,10 +452,22 @@
         audioDeviceSelect.style.display = 'none';
 
         if (type === 'screen') {
-          const opt = document.createElement('option');
-          opt.value = '0';
-          opt.textContent = 'Screen 0 (Main Display)';
-          deviceSelect.appendChild(opt);
+          const screens = deviceList.filter((d) => d.type === 'screen');
+          if (screens.length === 0) {
+            const opt = document.createElement('option');
+            opt.value = '0';
+            opt.textContent = 'Screen 0 (Default)';
+            deviceSelect.appendChild(opt);
+          } else {
+            screens.forEach((s, i) => {
+              const opt = document.createElement('option');
+              opt.value = String(i);
+              const bounds = s.bounds ? ` (${s.bounds.width}x${s.bounds.height}+${s.bounds.x}+${s.bounds.y})` : '';
+              opt.textContent = `${s.description || s.name}${bounds}`;
+              if (s.isDefault) opt.textContent += ' - Default';
+              deviceSelect.appendChild(opt);
+            });
+          }
           return;
         }
 
@@ -543,6 +555,9 @@
                 offerMsg.deviceType = deviceType;
                 offerMsg.device = device;
                 offerMsg.framerate = 30;
+                if (deviceType === 'screen') {
+                  offerMsg.screenIndex = device;
+                }
                 if (deviceType === 'device') {
                   offerMsg.audioDevice = audioDeviceSelect.value;
                 }

@@ -94,7 +94,8 @@ async function listDevices() {
   } else {
     for (const device of screenDevices) {
       const defaultTag = device.isDefault ? ' (default)' : '';
-      console.log(`  [${device.name}] ${device.description}${defaultTag}`);
+      const bounds = device.bounds ? ` (${device.bounds.width}x${device.bounds.height}+${device.bounds.x}+${device.bounds.y})` : '';
+      console.log(`  [${device.name}] ${device.description}${bounds}${defaultTag}`);
     }
   }
 

@@ -31,8 +31,8 @@ async function buildDeviceInput(message: Record<string, string | number | undefi
     case 'screen':
       return DeviceAPI.openScreen({
         frameRate: framerate,
+        screenIndex: Number(message.screenIndex ?? 0),
         avfoundation: {
-          screenIndex: Number(message.screenIndex ?? 0),
           captureSystemAudio: true,
         },
       });
