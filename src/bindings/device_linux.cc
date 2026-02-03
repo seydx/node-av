@@ -17,6 +17,15 @@
 #include <X11/Xlib.h>
 #include <X11/extensions/Xrandr.h>
 
+// Suppress ALSA's own stderr error messages.
+// FFmpeg handles ALSA errors through its own logging system (av_log),
+// so the raw ALSA messages are redundant noise for the end user.
+static void alsa_error_handler(const char*, int, const char*, int, const char*, ...) {}
+
+static struct AlsaSilencer {
+  AlsaSilencer() { snd_lib_error_set_handler(alsa_error_handler); }
+} alsa_silencer;
+
 namespace ffmpeg {
 
 // V4L2 fourcc → FFmpeg AVPixelFormat
