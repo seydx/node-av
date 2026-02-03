@@ -105,6 +105,15 @@ std::vector<DeviceInfo> enumerateDevices() {
         }
         if (!hasCapture) continue;
 
+        // Verify the device can actually be opened for capture.
+        // The pcm*c check only confirms the driver supports capture,
+        // not that hardware (e.g., a microphone) is connected.
+        std::string probeName = "hw:" + cardNum;
+        snd_pcm_t* probeHandle = nullptr;
+        int probeRet = snd_pcm_open(&probeHandle, probeName.c_str(), SND_PCM_STREAM_CAPTURE, SND_PCM_NONBLOCK);
+        if (probeRet < 0) continue;
+        snd_pcm_close(probeHandle);
+
         // Find the description (after the colon)
         size_t colonPos = line.find(':');
         std::string description;
