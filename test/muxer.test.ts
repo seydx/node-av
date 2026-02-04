@@ -1447,4 +1447,30 @@ describe('Muxer', () => {
       await cleanup();
     });
   });
+
+  describe('AbortSignal', () => {
+    it('should reject open with pre-aborted signal', async () => {
+      const controller = new AbortController();
+      controller.abort();
+      const outputFile = getTempFile('mkv');
+      await assert.rejects(() => Muxer.open(outputFile, { format: 'matroska', signal: controller.signal }), { name: 'AbortError' });
+      await cleanup();
+    });
+
+    it('should abort writePacket with signal', async () => {
+      const controller = new AbortController();
+      const outputFile = getTempFile('mkv');
+      await using input = await Demuxer.open(inputFile);
+      const output = await Muxer.open(outputFile, { format: 'matroska', signal: controller.signal });
+      const vs = input.video()!;
+      output.addStream(vs);
+
+      controller.abort();
+      const { value: packet } = await input.packets(vs.index).next();
+      await assert.rejects(() => output.writePacket(packet, 0), { name: 'AbortError' });
+      packet?.free();
+      await output.close();
+      await cleanup();
+    });
+  });
 });

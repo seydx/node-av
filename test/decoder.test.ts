@@ -1094,4 +1094,36 @@ describe('Decoder', () => {
       media.closeSync();
     });
   });
+
+  describe('AbortSignal', () => {
+    it('should reject create with pre-aborted signal', async () => {
+      const controller = new AbortController();
+      controller.abort();
+      const media = await Demuxer.open(inputFile);
+      const videoStream = media.video()!;
+
+      await assert.rejects(() => Decoder.create(videoStream, { signal: controller.signal }), { name: 'AbortError' });
+      await media.close();
+    });
+
+    it('should abort frames generator with signal', async () => {
+      const controller = new AbortController();
+      await using input = await Demuxer.open(inputFile);
+      using decoder = await Decoder.create(input.video()!, { signal: controller.signal });
+
+      let count = 0;
+      await assert.rejects(
+        async () => {
+          for await (const frame of decoder.frames(input.packets(input.video()!.index))) {
+            if (!frame) break;
+            count++;
+            if (count === 3) controller.abort();
+            frame.free();
+          }
+        },
+        { name: 'AbortError' },
+      );
+      assert.ok(count >= 3);
+    });
+  });
 });

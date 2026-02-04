@@ -1319,4 +1319,44 @@ describe('Demuxer', () => {
       rtpInput2.closeSync();
     });
   });
+
+  describe('AbortSignal', () => {
+    it('should reject open with pre-aborted signal', async () => {
+      const controller = new AbortController();
+      controller.abort();
+      await assert.rejects(() => Demuxer.open(inputFile, { signal: controller.signal }), { name: 'AbortError' });
+    });
+
+    it('should throw AbortError on packets after abort', async () => {
+      const controller = new AbortController();
+      const media = await Demuxer.open(inputFile, { signal: controller.signal });
+      openInstances.push(media);
+
+      // Abort before iterating
+      controller.abort();
+
+      await assert.rejects(
+        async () => {
+          for await (const packet of media.packets()) {
+            if (!packet) break;
+            packet.free();
+          }
+        },
+        { name: 'AbortError' },
+      );
+
+      await media.close();
+    });
+
+    it('should abort seek with signal', async () => {
+      const controller = new AbortController();
+      const media = await Demuxer.open(inputFile, { signal: controller.signal });
+      openInstances.push(media);
+
+      controller.abort();
+      await assert.rejects(() => media.seek(0), { name: 'AbortError' });
+
+      await media.close();
+    });
+  });
 });

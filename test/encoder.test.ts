@@ -675,4 +675,31 @@ describe('Encoder', () => {
       assert.equal(encoder.getCodecContext(), null);
     });
   });
+
+  describe('AbortSignal', () => {
+    it('should reject create with pre-aborted signal', async () => {
+      const controller = new AbortController();
+      controller.abort();
+      await assert.rejects(() => Encoder.create(FF_ENCODER_LIBX264, { signal: controller.signal }), { name: 'AbortError' });
+    });
+
+    it('should abort encode with signal', async () => {
+      const controller = new AbortController();
+      const encoder = await Encoder.create(FF_ENCODER_LIBX264, { signal: controller.signal });
+
+      controller.abort();
+
+      const frame = new Frame();
+      frame.format = AV_PIX_FMT_YUV420P;
+      frame.width = 320;
+      frame.height = 240;
+      frame.alloc();
+      frame.pts = 0n;
+      frame.timeBase = new Rational(1, 30);
+
+      await assert.rejects(() => encoder.encode(frame), { name: 'AbortError' });
+      frame.free();
+      encoder.close();
+    });
+  });
 });

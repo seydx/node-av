@@ -1294,4 +1294,56 @@ describe('Pipeline - Comprehensive Tests', () => {
       });
     });
   });
+
+  describe('AbortSignal', () => {
+    it('should abort pipeline with signal (stream copy)', async () => {
+      const outputFile = getTestOutputPath('abort-copy.mp4');
+
+      try {
+        const controller = new AbortController();
+        await using input = await Demuxer.open(inputFile);
+        const output = await Muxer.open(outputFile);
+
+        const control = pipeline(input, output, { signal: controller.signal });
+        setTimeout(() => controller.abort(), 50);
+        await control.completion;
+
+        await output.close();
+      } finally {
+        cleanupTestFile(outputFile);
+      }
+    });
+
+    it('should abort pipeline with signal (transcode)', async () => {
+      const outputFile = getTestOutputPath('abort-transcode.mp4');
+
+      try {
+        const controller = new AbortController();
+        await using input = await Demuxer.open(inputFile);
+        using decoder = await Decoder.create(input.video()!);
+        using encoder = await Encoder.create(FF_ENCODER_LIBX264, { decoder });
+        const output = await Muxer.open(outputFile);
+
+        const control = pipeline(input, decoder, encoder, output, { signal: controller.signal });
+        setTimeout(() => controller.abort(), 50);
+        await control.completion;
+
+        await output.close();
+      } finally {
+        cleanupTestFile(outputFile);
+      }
+    });
+
+    it('should handle pre-aborted signal in pipeline', async () => {
+      const controller = new AbortController();
+      controller.abort();
+
+      assert.throws(
+        () => {
+          pipeline({} as any, {} as any, { signal: controller.signal });
+        },
+        { name: 'AbortError' },
+      );
+    });
+  });
 });
