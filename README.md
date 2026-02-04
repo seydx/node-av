@@ -519,6 +519,7 @@ If you encounter module resolution errors like `Cannot find module 'lib/binary-s
 |---------|--------|---------------|----------------|
 | `browser-fmp4` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/browser/fmp4) |
 | `browser-webrtc` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/browser/webrtc) |
+| `api-abort-signal` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-abort-signal.ts) |
 | `api-dash` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-dash.ts) |
 | `api-device-capture` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-device-capture.ts) |
 | `api-encode-decode` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-encode-decode.ts) |
