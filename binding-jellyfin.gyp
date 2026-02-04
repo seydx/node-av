@@ -278,7 +278,6 @@
                             "/opt/ffbuild/prefix/lib/libSPIRV-Tools.a",
                             "/opt/ffbuild/prefix/lib/libSPIRV-Tools-opt.a",
                             "/opt/ffbuild/prefix/lib/libSPIRV-Tools-link.a",
-                            "/opt/ffbuild/prefix/lib/libSPVRemapper.a",
                             "/opt/ffbuild/prefix/lib/libspirv-cross-core.a",
                             "/opt/ffbuild/prefix/lib/libspirv-cross-glsl.a",
                             "/opt/ffbuild/prefix/lib/libspirv-cross-hlsl.a",
