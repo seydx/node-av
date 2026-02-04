@@ -136,6 +136,13 @@ export interface EncoderOptions {
    * These are passed directly to the encoder.
    */
   options?: Record<string, string | number | boolean | undefined | null>;
+
+  /**
+   * AbortSignal for cancellation.
+   *
+   * When aborted, async generators stop yielding and async methods throw AbortError.
+   */
+  signal?: AbortSignal;
 }
 
 /**
@@ -212,6 +219,7 @@ export class Encoder implements Disposable {
   private outputQueue: AsyncQueue<Packet>;
   private workerPromise: Promise<void> | null = null;
   private pipeToPromise: Promise<void> | null = null;
+  private signal?: AbortSignal;
 
   /**
    * @param codecContext - Configured codec context
@@ -351,7 +359,14 @@ export class Encoder implements Disposable {
 
     const opts = options.options ? Dictionary.fromObject(options.options) : undefined;
 
-    return new Encoder(codecContext, codec, options, opts);
+    const encoder = new Encoder(codecContext, codec, options, opts);
+
+    if (options.signal) {
+      options.signal.throwIfAborted();
+      encoder.signal = options.signal;
+    }
+
+    return encoder;
   }
 
   /**
@@ -472,7 +487,14 @@ export class Encoder implements Disposable {
 
     const opts = options.options ? Dictionary.fromObject(options.options) : undefined;
 
-    return new Encoder(codecContext, codec, options, opts);
+    const encoder = new Encoder(codecContext, codec, options, opts);
+
+    if (options.signal) {
+      options.signal.throwIfAborted();
+      encoder.signal = options.signal;
+    }
+
+    return encoder;
   }
 
   /**
@@ -710,6 +732,8 @@ export class Encoder implements Disposable {
    * @see {@link encodeSync} For synchronous version
    */
   async encode(frame: Frame | null): Promise<void> {
+    this.signal?.throwIfAborted();
+
     if (this.isClosed) {
       return;
     }
@@ -861,6 +885,7 @@ export class Encoder implements Disposable {
    * @see {@link encodeAllSync} For synchronous version
    */
   async encodeAll(frame: Frame | null): Promise<Packet[]> {
+    this.signal?.throwIfAborted();
     await this.encode(frame);
 
     // Receive all available packets
@@ -1021,6 +1046,8 @@ export class Encoder implements Disposable {
     }
 
     for await (using frame of frames) {
+      this.signal?.throwIfAborted();
+
       if (frame === null) {
         yield* finalize();
         return;
@@ -1166,6 +1193,8 @@ export class Encoder implements Disposable {
    * @see {@link flushSync} For synchronous version
    */
   async flush(): Promise<void> {
+    this.signal?.throwIfAborted();
+
     if (this.isClosed || !this.initialized) {
       return;
     }

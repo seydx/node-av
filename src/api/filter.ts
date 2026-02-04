@@ -120,6 +120,13 @@ export interface FilterOptions {
    * @default true
    */
   allowReinit?: boolean;
+
+  /**
+   * AbortSignal for cancellation.
+   *
+   * When aborted, async generators stop yielding and async methods throw AbortError.
+   */
+  signal?: AbortSignal;
 }
 
 /**
@@ -187,6 +194,7 @@ export class FilterAPI implements Disposable {
   private outputQueue: AsyncQueue<Frame>;
   private workerPromise: Promise<void> | null = null;
   private nextComponent: SchedulableComponent<Frame> | null = null;
+  private signal?: AbortSignal;
   private pipeToPromise: Promise<void> | null = null;
 
   /**
@@ -265,7 +273,14 @@ export class FilterAPI implements Disposable {
       graph.scaleSwsOpts = options.scaleSwsOpts;
     }
 
-    return new FilterAPI(graph, description, options);
+    const filter = new FilterAPI(graph, description, options);
+
+    if (options.signal) {
+      options.signal.throwIfAborted();
+      filter.signal = options.signal;
+    }
+
+    return filter;
   }
 
   /**
@@ -657,6 +672,8 @@ export class FilterAPI implements Disposable {
    * @see {@link processSync} For synchronous version
    */
   async process(frame: Frame | null): Promise<void> {
+    this.signal?.throwIfAborted();
+
     if (this.isClosed) {
       return;
     }
@@ -836,6 +853,7 @@ export class FilterAPI implements Disposable {
    * @see {@link processAllSync} For synchronous version
    */
   async processAll(frame: Frame | null): Promise<Frame[]> {
+    this.signal?.throwIfAborted();
     await this.process(frame);
 
     // Receive all available frames
@@ -997,6 +1015,8 @@ export class FilterAPI implements Disposable {
     }
 
     for await (using frame of frames) {
+      this.signal?.throwIfAborted();
+
       if (frame === null) {
         yield* finalize();
         return;
@@ -1142,6 +1162,8 @@ export class FilterAPI implements Disposable {
    * @see {@link flushSync} For synchronous version
    */
   async flush(): Promise<void> {
+    this.signal?.throwIfAborted();
+
     if (this.isClosed || !this.initialized || !this.buffersrcCtx) {
       return;
     }

@@ -228,6 +228,14 @@ export interface DemuxerOptions {
    * These are passed directly to avformat_open_input().
    */
   options?: Record<string, string | number | boolean | undefined | null>;
+
+  /**
+   * AbortSignal for cancellation.
+   *
+   * When aborted, async generators stop yielding and async methods throw AbortError.
+   * The demux thread is stopped automatically.
+   */
+  signal?: AbortSignal;
 }
 
 /**
@@ -309,7 +317,7 @@ export class Demuxer implements AsyncDisposable, Disposable {
   private _streams: Stream[] = [];
   private ioContext?: IOContext;
   private isClosed = false;
-  private options: Required<DemuxerOptions>;
+  private options: Required<Omit<DemuxerOptions, 'signal'>>;
 
   // Timestamp processing state (per-stream)
   private streamStates = new Map<number, StreamState>();
@@ -325,6 +333,8 @@ export class Demuxer implements AsyncDisposable, Disposable {
   private queueResolvers = new Map<number | 'all', () => void>(); // Promise resolvers for waiting consumers
   private demuxThreadActive = false;
   private demuxEof = false;
+  private signal?: AbortSignal;
+  private signalCleanup?: () => void;
 
   /**
    * @param formatContext - Opened format context
@@ -335,7 +345,7 @@ export class Demuxer implements AsyncDisposable, Disposable {
    *
    * @internal
    */
-  private constructor(formatContext: FormatContext, options: Required<DemuxerOptions>, ioContext?: IOContext) {
+  private constructor(formatContext: FormatContext, options: Required<Omit<DemuxerOptions, 'signal'>>, ioContext?: IOContext) {
     this.formatContext = formatContext;
     this.ioContext = ioContext;
     this._streams = formatContext.streams ?? [];
@@ -754,7 +764,7 @@ export class Demuxer implements AsyncDisposable, Disposable {
       }
 
       // Apply defaults to options
-      const fullOptions: Required<DemuxerOptions> = {
+      const fullOptions: Required<Omit<DemuxerOptions, 'signal'>> = {
         bufferSize,
         format: options.format ?? '',
         skipStreamInfo: options.skipStreamInfo ?? false,
@@ -765,7 +775,14 @@ export class Demuxer implements AsyncDisposable, Disposable {
         options: options.options ?? {},
       };
 
-      return new Demuxer(formatContext, fullOptions, ioContext);
+      const demuxer = new Demuxer(formatContext, fullOptions, ioContext);
+
+      if (options.signal) {
+        options.signal.throwIfAborted();
+        demuxer.signal = options.signal;
+      }
+
+      return demuxer;
     } catch (error) {
       // Clean up only on error
       if (ioContext) {
@@ -994,7 +1011,7 @@ export class Demuxer implements AsyncDisposable, Disposable {
       }
 
       // Apply defaults to options
-      const fullOptions: Required<DemuxerOptions> = {
+      const fullOptions: Required<Omit<DemuxerOptions, 'signal'>> = {
         bufferSize,
         format: options.format ?? '',
         skipStreamInfo: options.skipStreamInfo ?? false,
@@ -1005,7 +1022,14 @@ export class Demuxer implements AsyncDisposable, Disposable {
         options: options.options ?? {},
       };
 
-      return new Demuxer(formatContext, fullOptions, ioContext);
+      const demuxer = new Demuxer(formatContext, fullOptions, ioContext);
+
+      if (options.signal) {
+        options.signal.throwIfAborted();
+        demuxer.signal = options.signal;
+      }
+
+      return demuxer;
     } catch (error) {
       // Clean up only on error
       if (ioContext) {
@@ -1675,6 +1699,8 @@ export class Demuxer implements AsyncDisposable, Disposable {
     // Always start demux thread (handles single and multiple generators)
     this.startDemuxThread();
 
+    let aborted = false;
+
     try {
       let hasSeenKeyframe = !this.options.startWithKeyframe;
 
@@ -1682,6 +1708,11 @@ export class Demuxer implements AsyncDisposable, Disposable {
       const queue = this.packetQueues.get(queueKey)!;
 
       while (!this.isClosed) {
+        if (this.signal?.aborted) {
+          aborted = true;
+          break;
+        }
+
         // Try to get packet from queue
         let packet = queue.shift();
 
@@ -1698,6 +1729,12 @@ export class Demuxer implements AsyncDisposable, Disposable {
 
           // Wait for demux thread to add packet
           await promise;
+
+          // Check for abort after wakeup
+          if (this.signal?.aborted) {
+            aborted = true;
+            break;
+          }
 
           // Check again after wakeup
           if (this.demuxEof) {
@@ -1734,8 +1771,14 @@ export class Demuxer implements AsyncDisposable, Disposable {
         await this.stopDemuxThread();
       }
 
-      yield null; // Signal EOF
+      if (!aborted) {
+        yield null; // Signal EOF
+      }
     }
+
+    // Throw after generator cleanup — only reachable when aborted
+    // (when not aborted, yield null in finally already terminated the generator)
+    this.signal?.throwIfAborted();
   }
 
   /**
@@ -1876,6 +1919,8 @@ export class Demuxer implements AsyncDisposable, Disposable {
    * @see {@link AVSeekFlag} For seek flags
    */
   async seek(timestamp: number, streamIndex = -1, flags: AVSeekFlag = AVFLAG_NONE): Promise<number> {
+    this.signal?.throwIfAborted();
+
     if (this.isClosed) {
       throw new Error('Cannot seek on closed input');
     }
@@ -1943,6 +1988,19 @@ export class Demuxer implements AsyncDisposable, Disposable {
     }
 
     this.demuxThreadActive = true;
+
+    if (this.signal && !this.signalCleanup) {
+      const handler = () => {
+        this.demuxThreadActive = false;
+        for (const resolve of this.queueResolvers.values()) {
+          resolve();
+        }
+        this.queueResolvers.clear();
+      };
+      this.signal.addEventListener('abort', handler, { once: true });
+      this.signalCleanup = () => this.signal?.removeEventListener('abort', handler);
+    }
+
     this.demuxThread = (async () => {
       using packet = new Packet();
       packet.alloc();
@@ -2387,6 +2445,10 @@ export class Demuxer implements AsyncDisposable, Disposable {
 
     this.isClosed = true;
 
+    // Clean up abort signal listener
+    this.signalCleanup?.();
+    this.signalCleanup = undefined;
+
     // Signal demux thread to stop FIRST
     this.demuxThreadActive = false;
 
@@ -2465,6 +2527,10 @@ export class Demuxer implements AsyncDisposable, Disposable {
     }
 
     this.isClosed = true;
+
+    // Clean up abort signal listener
+    this.signalCleanup?.();
+    this.signalCleanup = undefined;
 
     // IMPORTANT: Clear pb reference FIRST to prevent use-after-free
     if (this.ioContext) {

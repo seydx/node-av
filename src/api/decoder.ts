@@ -128,6 +128,13 @@ export interface DecoderOptions {
    * These are passed directly to the decoder.
    */
   options?: Record<string, string | number | boolean | undefined | null>;
+
+  /**
+   * AbortSignal for cancellation.
+   *
+   * When aborted, async generators stop yielding and async methods throw AbortError.
+   */
+  signal?: AbortSignal;
 }
 
 /**
@@ -196,6 +203,7 @@ export class Decoder implements Disposable {
   private workerPromise: Promise<void> | null = null;
   private nextComponent: SchedulableComponent<Frame> | null = null;
   private pipeToPromise: Promise<void> | null = null;
+  private signal?: AbortSignal;
 
   /**
    * @param codecContext - Configured codec context
@@ -404,7 +412,14 @@ export class Decoder implements Disposable {
       }
     }
 
-    return new Decoder(codecContext, codec, stream, options);
+    const decoder = new Decoder(codecContext, codec, stream, options);
+
+    if (options.signal) {
+      options.signal.throwIfAborted();
+      decoder.signal = options.signal;
+    }
+
+    return decoder;
   }
 
   /**
@@ -588,7 +603,14 @@ export class Decoder implements Disposable {
       }
     }
 
-    return new Decoder(codecContext, codec, stream, options);
+    const decoder = new Decoder(codecContext, codec, stream, options);
+
+    if (options.signal) {
+      options.signal.throwIfAborted();
+      decoder.signal = options.signal;
+    }
+
+    return decoder;
   }
 
   /**
@@ -713,6 +735,8 @@ export class Decoder implements Disposable {
    * @see {@link decodeSync} For synchronous version
    */
   async decode(packet: Packet | null): Promise<void> {
+    this.signal?.throwIfAborted();
+
     if (this.isClosed) {
       return;
     }
@@ -884,6 +908,7 @@ export class Decoder implements Disposable {
    * @see {@link decodeAllSync} For synchronous version
    */
   async decodeAll(packet: Packet | null): Promise<Frame[]> {
+    this.signal?.throwIfAborted();
     await this.decode(packet);
 
     // Receive all available frames
@@ -1049,6 +1074,8 @@ export class Decoder implements Disposable {
     }
 
     for await (using packet of packets) {
+      this.signal?.throwIfAborted();
+
       if (packet === null) {
         yield* finalize();
         return;
@@ -1192,6 +1219,8 @@ export class Decoder implements Disposable {
    * @see {@link flushSync} For synchronous version
    */
   async flush(): Promise<void> {
+    this.signal?.throwIfAborted();
+
     if (this.isClosed) {
       return;
     }

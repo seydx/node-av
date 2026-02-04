@@ -31,7 +31,7 @@ export { FilterAPI, type FilterOptions } from './filter.js';
 export { BitStreamFilterAPI, type BitstreamFilterOptions } from './bitstream-filter.js';
 
 // Pipeline
-export { pipeline, type NamedInputs, type NamedOutputs, type NamedStages, type PipelineControl, type StreamName } from './pipeline.js';
+export { pipeline, type NamedInputs, type NamedOutputs, type NamedStages, type PipelineControl, type PipelineOptions, type StreamName } from './pipeline.js';
 
 // WebRTC Stream
 export { WebRTCStream, type WebRTCCodecInfo, type WebRTCStreamOptions } from './webrtc-stream.js';

@@ -23,6 +23,13 @@ export interface BitstreamFilterOptions {
    * Available options depend on the specific filter being used.
    */
   options?: Record<string, string | number | boolean | bigint | undefined | null>;
+
+  /**
+   * AbortSignal for cancellation.
+   *
+   * When aborted, async generators stop yielding and async methods throw AbortError.
+   */
+  signal?: AbortSignal;
 }
 
 /**
@@ -77,6 +84,7 @@ export class BitStreamFilterAPI implements Disposable {
   private workerPromise: Promise<void> | null = null;
   private nextComponent: SchedulableComponent<Packet> | null = null;
   private pipeToPromise: Promise<void> | null = null;
+  private signal?: AbortSignal;
 
   /**
    * @param bsf - Bitstream filter
@@ -188,7 +196,14 @@ export class BitStreamFilterAPI implements Disposable {
       const initRet = ctx.init();
       FFmpegError.throwIfError(initRet, 'Failed to initialize bitstream filter');
 
-      return new BitStreamFilterAPI(filter, ctx, stream);
+      const bsfApi = new BitStreamFilterAPI(filter, ctx, stream);
+
+      if (filterOptions?.signal) {
+        filterOptions.signal.throwIfAborted();
+        bsfApi.signal = filterOptions.signal;
+      }
+
+      return bsfApi;
     } catch (error) {
       // Clean up on error
       ctx.free();
@@ -306,6 +321,8 @@ export class BitStreamFilterAPI implements Disposable {
    * @see {@link filterSync} For synchronous version
    */
   async filter(packet: Packet | null): Promise<void> {
+    this.signal?.throwIfAborted();
+
     if (this.isClosed) {
       return;
     }
@@ -425,6 +442,7 @@ export class BitStreamFilterAPI implements Disposable {
    * @see {@link filterAllSync} For synchronous version
    */
   async filterAll(packet: Packet | null): Promise<Packet[]> {
+    this.signal?.throwIfAborted();
     await this.filter(packet);
 
     // Receive all output packets
@@ -583,6 +601,8 @@ export class BitStreamFilterAPI implements Disposable {
     }
 
     for await (using packet of packets) {
+      this.signal?.throwIfAborted();
+
       if (packet === null) {
         yield* finalize();
         return;
@@ -722,6 +742,8 @@ export class BitStreamFilterAPI implements Disposable {
    * @see {@link flushSync} For synchronous version
    */
   async flush(): Promise<void> {
+    this.signal?.throwIfAborted();
+
     if (this.isClosed) {
       return;
     }

@@ -69,6 +69,19 @@ export interface PipelineControl {
   readonly completion: Promise<void>;
 }
 
+/**
+ * Options for pipeline execution.
+ */
+export interface PipelineOptions {
+  /**
+   * AbortSignal for cancellation.
+   *
+   * When aborted, the pipeline stops processing gracefully.
+   * Equivalent to calling `control.stop()`.
+   */
+  signal?: AbortSignal;
+}
+
 // ============================================================================
 // Simple Pipeline Overloads (single stream, variable parameters)
 // ============================================================================
@@ -616,6 +629,23 @@ export function pipeline<K extends StreamName, T extends Packet | Frame | null =
   stages: NamedStages<K>,
 ): Record<K, AsyncGenerator<T>>;
 
+/**
+ * Any pipeline overload with PipelineOptions as the last argument.
+ *
+ * @param args - Pipeline arguments followed by options
+ *
+ * @returns Pipeline control, async generator, or record of generators
+ *
+ * @example
+ * ```typescript
+ * const controller = new AbortController();
+ * const control = pipeline(input, decoder, encoder, output, { signal: controller.signal });
+ * ```
+ */
+export function pipeline(
+  ...args: [...any[], PipelineOptions]
+): PipelineControl | AsyncGenerator<Packet | Frame | null> | Record<StreamName, AsyncGenerator<Packet | Frame | null>>;
+
 // ============================================================================
 // Implementation
 // ============================================================================
@@ -655,6 +685,14 @@ export function pipeline<K extends StreamName, T extends Packet | Frame | null =
  * ```
  */
 export function pipeline(...args: any[]): PipelineControl | AsyncGenerator<Packet | Frame | null> | Record<StreamName, AsyncGenerator<Packet | Frame | null>> {
+  // Extract PipelineOptions if last arg is a plain object with signal key
+  let pipelineOptions: PipelineOptions | undefined;
+  const lastArg = args[args.length - 1];
+  if (args.length > 0 && typeof lastArg === 'object' && lastArg !== null && Object.getPrototypeOf(lastArg) === Object.prototype && 'signal' in lastArg) {
+    pipelineOptions = args.pop() as PipelineOptions;
+  }
+  pipelineOptions?.signal?.throwIfAborted();
+
   // Detect pipeline type based on first argument
   const firstArg = args[0];
   const secondArg = args[1];
@@ -673,7 +711,7 @@ export function pipeline(...args: any[]): PipelineControl | AsyncGenerator<Packe
 
     if (args.length === 3) {
       // Full named pipeline with output(s)
-      return runNamedPipeline(namedInputs, stages, args[2]);
+      return runNamedPipeline(namedInputs, stages, args[2], pipelineOptions);
     } else {
       // Partial named pipeline
       return runNamedPartialPipeline(namedInputs, stages);
@@ -687,20 +725,20 @@ export function pipeline(...args: any[]): PipelineControl | AsyncGenerator<Packe
       return runNamedPartialPipeline(args[0], args[1]);
     } else {
       // Full named pipeline with output
-      return runNamedPipeline(args[0], args[1], args[2]);
+      return runNamedPipeline(args[0], args[1], args[2], pipelineOptions);
     }
   } else if (isDemuxer(firstArg)) {
     // Check if this is a stream copy (Demuxer → Muxer)
     if (args.length === 2 && isMuxer(args[1])) {
       // Stream copy all streams
-      return runDemuxerPipeline(args[0], args[1]);
+      return runDemuxerPipeline(args[0], args[1], pipelineOptions);
     } else {
       // Simple pipeline starting with Demuxer
-      return runSimplePipeline(args);
+      return runSimplePipeline(args, pipelineOptions);
     }
   } else {
     // Simple pipeline (variable arguments)
-    return runSimplePipeline(args);
+    return runSimplePipeline(args, pipelineOptions);
   }
 }
 
@@ -716,15 +754,24 @@ export function pipeline(...args: any[]): PipelineControl | AsyncGenerator<Packe
 class PipelineControlImpl implements PipelineControl {
   private _stopped = false;
   private _completion: Promise<void>;
+  private signalCleanup?: () => void;
 
   /**
    * @param executionPromise - Promise that resolves when pipeline completes
    *
+   * @param signal - Optional AbortSignal for cancellation
+   *
    * @internal
    */
-  constructor(executionPromise: Promise<void>) {
+  constructor(executionPromise: Promise<void>, signal?: AbortSignal) {
     // Don't resolve immediately on stop, wait for the actual pipeline to finish
     this._completion = executionPromise;
+
+    if (signal) {
+      const handler = () => this.stop();
+      signal.addEventListener('abort', handler, { once: true });
+      this.signalCleanup = () => signal.removeEventListener('abort', handler);
+    }
   }
 
   /**
@@ -740,6 +787,8 @@ class PipelineControlImpl implements PipelineControl {
    */
   stop(): void {
     this._stopped = true;
+    this.signalCleanup?.();
+    this.signalCleanup = undefined;
   }
 
   /**
@@ -778,14 +827,19 @@ class PipelineControlImpl implements PipelineControl {
  *
  * @param output - Media output destination
  *
+ * @param options - Pipeline options
+ *
  * @returns Pipeline control interface
  *
  * @internal
  */
-function runDemuxerPipeline(input: Demuxer, output: Muxer): PipelineControl {
+function runDemuxerPipeline(input: Demuxer, output: Muxer, options?: PipelineOptions): PipelineControl {
   let control: PipelineControl;
   // eslint-disable-next-line prefer-const
-  control = new PipelineControlImpl(runDemuxerPipelineAsync(input, output, () => control?.isStopped() ?? false));
+  control = new PipelineControlImpl(
+    runDemuxerPipelineAsync(input, output, () => control?.isStopped() ?? false),
+    options?.signal,
+  );
   return control;
 }
 
@@ -884,11 +938,13 @@ async function runDemuxerPipelineAsync(input: Demuxer, output: Muxer, shouldStop
  *
  * @param args - Pipeline arguments
  *
+ * @param options - Pipeline options
+ *
  * @returns Pipeline control or async generator
  *
  * @internal
  */
-function runSimplePipeline(args: any[]): PipelineControl | AsyncGenerator<Packet | Frame | null> {
+function runSimplePipeline(args: any[], options?: PipelineOptions): PipelineControl | AsyncGenerator<Packet | Frame | null> {
   const [source, ...stages] = args;
 
   // Check if last stage is Muxer (consumes stream)
@@ -944,7 +1000,10 @@ function runSimplePipeline(args: any[]): PipelineControl | AsyncGenerator<Packet
   if (isOutput) {
     let control: PipelineControl;
     // eslint-disable-next-line prefer-const
-    control = new PipelineControlImpl(consumeSimplePipeline(generator, lastStage, metadata, () => control?.isStopped() ?? false));
+    control = new PipelineControlImpl(
+      consumeSimplePipeline(generator, lastStage, metadata, () => control?.isStopped() ?? false),
+      options?.signal,
+    );
     return control;
   }
 
@@ -1163,14 +1222,24 @@ function runNamedPartialPipeline<K extends StreamName>(inputs: NamedInputs<K>, s
  *
  * @param output - Output destination(s)
  *
+ * @param options - Pipeline options
+ *
  * @returns Pipeline control interface
  *
  * @internal
  */
-function runNamedPipeline<K extends StreamName>(inputs: NamedInputs<K>, stages: NamedStages<K>, output: Muxer | NamedOutputs<K>): PipelineControl {
+function runNamedPipeline<K extends StreamName>(
+  inputs: NamedInputs<K>,
+  stages: NamedStages<K>,
+  output: Muxer | NamedOutputs<K>,
+  options?: PipelineOptions,
+): PipelineControl {
   let control: PipelineControl;
   // eslint-disable-next-line prefer-const
-  control = new PipelineControlImpl(runNamedPipelineAsync(inputs, stages, output, () => control?.isStopped() ?? false));
+  control = new PipelineControlImpl(
+    runNamedPipelineAsync(inputs, stages, output, () => control?.isStopped() ?? false),
+    options?.signal,
+  );
   return control;
 }
 

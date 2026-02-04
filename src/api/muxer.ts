@@ -234,6 +234,13 @@ export interface MuxerOptions {
    * These are passed directly to avformat_write_header().
    */
   options?: Record<string, string | number | boolean | bigint | undefined | null>;
+
+  /**
+   * AbortSignal for cancellation.
+   *
+   * When aborted, async methods throw AbortError.
+   */
+  signal?: AbortSignal;
 }
 
 /**
@@ -298,6 +305,7 @@ export class Muxer implements AsyncDisposable, Disposable {
   private containerMetadataCopied = false; // Track if container metadata has been copied
   private writeQueue?: AsyncQueue<WriteJob>; // Optional async queue for serialized writes
   private writeWorkerPromise?: Promise<void>; // Background worker promise
+  private signal?: AbortSignal;
 
   /**
    * @param options - Media output options
@@ -464,6 +472,11 @@ export class Muxer implements AsyncDisposable, Disposable {
         output.formatContext.setFlags(AVFMT_FLAG_CUSTOM_IO);
       }
 
+      if (options?.signal) {
+        options.signal.throwIfAborted();
+        output.signal = options.signal;
+      }
+
       return output;
     } catch (error) {
       // Cleanup on error
@@ -610,6 +623,11 @@ export class Muxer implements AsyncDisposable, Disposable {
         output.ioContext = IOStream.createOutput(target, options);
         output.formatContext.pb = output.ioContext;
         output.formatContext.setFlags(AVFMT_FLAG_CUSTOM_IO);
+      }
+
+      if (options?.signal) {
+        options.signal.throwIfAborted();
+        output.signal = options.signal;
       }
 
       return output;
@@ -1131,6 +1149,8 @@ export class Muxer implements AsyncDisposable, Disposable {
    * @see {@link addStream} For adding streams
    */
   async writePacket(packet: Packet | null | undefined, streamIndex: number): Promise<void> {
+    this.signal?.throwIfAborted();
+
     if (this.isClosed) {
       throw new Error('Muxer is closed');
     }
