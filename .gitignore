@@ -68,7 +68,6 @@ ffmpeg_examples
 /docs/index.md
 /projects
 /ffmpeg-msvc
-/build_mac_local.sh
 /*.txt
 /list.ts
 /caches

@@ -12,7 +12,7 @@ npm run build
 
 **Requirements:** Node.js 22.18+, Python 3.x, pkg-config.
 
-The project uses a custom [jellyfin-ffmpeg](https://github.com/jellyfin/jellyfin-ffmpeg) fork as a git submodule in `externals/jellyfin-ffmpeg`. The native bindings are built against this specific FFmpeg version — standard FFmpeg builds are not supported.
+The project uses a custom [jellyfin-ffmpeg](https://github.com/jellyfin/jellyfin-ffmpeg) fork as a git submodule in `externals/jellyfin-ffmpeg`. The native bindings are built against this specific FFmpeg version — standard FFmpeg builds are not supported. On macOS, use `./build_mac_local.sh` to compile FFmpeg and all dependencies as static libraries to `/opt/ffbuild/prefix` (build tools are installed automatically via Homebrew).
 
 ## Development
 
