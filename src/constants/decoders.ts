@@ -16,7 +16,7 @@ export type FFAudioDecoder = FFDecoderCodec & { readonly __type: 'audio' };
 export type FFSubtitleDecoder = FFDecoderCodec & { readonly __type: 'subtitle' };
 
 // ============================================================================
-// VIDEO DECODERS (353 software, 49 hardware)
+// VIDEO DECODERS (354 software, 49 hardware)
 // ============================================================================
 
 // Software video decoders
@@ -184,6 +184,7 @@ export const FF_DECODER_LIBOPENCORE_AMRNB = 'libopencore_amrnb' as FFVideoDecode
 export const FF_DECODER_LIBOPENCORE_AMRWB = 'libopencore_amrwb' as FFVideoDecoder;
 export const FF_DECODER_LIBOPENH264 = 'libopenh264' as FFVideoDecoder;
 export const FF_DECODER_LIBRSVG = 'librsvg' as FFVideoDecoder;
+export const FF_DECODER_LIBSVTJPEGXS = 'libsvtjpegxs' as FFVideoDecoder;
 export const FF_DECODER_LIBUAVS3D = 'libuavs3d' as FFVideoDecoder;
 export const FF_DECODER_LIBVPX_VP8 = 'libvpx_vp8' as FFVideoDecoder;
 export const FF_DECODER_LIBVPX_VP9 = 'libvpx_vp9' as FFVideoDecoder;

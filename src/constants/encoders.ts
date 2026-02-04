@@ -16,7 +16,7 @@ export type FFAudioEncoder = FFEncoderCodec & { readonly __type: 'audio' };
 export type FFSubtitleEncoder = FFEncoderCodec & { readonly __type: 'subtitle' };
 
 // ============================================================================
-// VIDEO ENCODERS (134 software, 44 hardware)
+// VIDEO ENCODERS (135 software, 45 hardware)
 // ============================================================================
 
 // Software video encoders
@@ -77,6 +77,7 @@ export const FF_ENCODER_LIBOPENJPEG = 'libopenjpeg' as FFVideoEncoder;
 export const FF_ENCODER_LIBRAV1E = 'librav1e' as FFVideoEncoder;
 export const FF_ENCODER_LIBSHINE = 'libshine' as FFVideoEncoder;
 export const FF_ENCODER_LIBSVTAV1 = 'libsvtav1' as FFVideoEncoder;
+export const FF_ENCODER_LIBSVTJPEGXS = 'libsvtjpegxs' as FFVideoEncoder;
 export const FF_ENCODER_LIBTHEORA = 'libtheora' as FFVideoEncoder;
 export const FF_ENCODER_LIBTWOLAME = 'libtwolame' as FFVideoEncoder;
 export const FF_ENCODER_LIBVO_AMRWBENC = 'libvo_amrwbenc' as FFVideoEncoder;
@@ -162,6 +163,11 @@ export const FF_ENCODER_AV1_AMF = 'av1_amf' as FFVideoEncoder;
 export const FF_ENCODER_H264_AMF = 'h264_amf' as FFVideoEncoder;
 export const FF_ENCODER_HEVC_AMF = 'hevc_amf' as FFVideoEncoder;
 
+// Direct3D 12
+export const FF_ENCODER_AV1_D3D12VA = 'av1_d3d12va' as FFVideoEncoder;
+export const FF_ENCODER_H264_D3D12VA = 'h264_d3d12va' as FFVideoEncoder;
+export const FF_ENCODER_HEVC_D3D12VA = 'hevc_d3d12va' as FFVideoEncoder;
+
 // Android MediaCodec
 export const FF_ENCODER_AV1_MEDIACODEC = 'av1_mediacodec' as FFVideoEncoder;
 export const FF_ENCODER_H264_MEDIACODEC = 'h264_mediacodec' as FFVideoEncoder;
@@ -203,10 +209,6 @@ export const FF_ENCODER_H264_V4L2M2M = 'h264_v4l2m2m' as FFVideoEncoder;
 export const FF_ENCODER_HEVC_V4L2M2M = 'hevc_v4l2m2m' as FFVideoEncoder;
 export const FF_ENCODER_MPEG4_V4L2M2M = 'mpeg4_v4l2m2m' as FFVideoEncoder;
 export const FF_ENCODER_VP8_V4L2M2M = 'vp8_v4l2m2m' as FFVideoEncoder;
-
-// Direct3D 12
-export const FF_ENCODER_H264_D3D12VA = 'h264_d3d12va' as FFVideoEncoder;
-export const FF_ENCODER_HEVC_D3D12VA = 'hevc_d3d12va' as FFVideoEncoder;
 
 // OpenMAX
 export const FF_ENCODER_H264_OMX = 'h264_omx' as FFVideoEncoder;
