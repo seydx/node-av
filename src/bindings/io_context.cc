@@ -32,6 +32,7 @@ Napi::Object IOContext::Init(Napi::Env env, Napi::Object exports) {
     InstanceMethod<&IOContext::SkipSync>("skipSync"),
     InstanceMethod<&IOContext::Tell>("tell"),
     InstanceMethod(Napi::Symbol::WellKnown(env, "asyncDispose"), &IOContext::AsyncDispose),
+    InstanceMethod(Napi::Symbol::WellKnown(env, "dispose"), &IOContext::SyncDispose),
 
     InstanceAccessor<&IOContext::GetEof, nullptr>("eof"),
     InstanceAccessor<&IOContext::GetError, nullptr>("error"),
@@ -718,6 +719,23 @@ Napi::Value IOContext::AsyncDispose(const Napi::CallbackInfo& info) {
     // This context was opened with avio_open2, use closep
     return ClosepAsync(info);
   }
+}
+
+Napi::Value IOContext::SyncDispose(const Napi::CallbackInfo& info) {
+  if (callback_data_) {
+    // Created with allocContextWithCallbacks — use freeContext logic
+    CleanupCallbacks();
+
+    if (ctx_) {
+      avio_context_free(&ctx_);
+      ctx_ = nullptr;
+    }
+  } else {
+    // Opened with avio_open2 — use closepSync logic
+    return ClosepSync(info);
+  }
+
+  return info.Env().Undefined();
 }
 
 } // namespace ffmpeg

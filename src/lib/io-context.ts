@@ -71,7 +71,7 @@ import type { NativeIOContext, NativeWrapper } from './native-types.js';
  * @see [AVIOContext](https://ffmpeg.org/doxygen/trunk/structAVIOContext.html) - FFmpeg Doxygen
  * @see {@link FormatContext} For using with demuxing/muxing
  */
-export class IOContext extends OptionMember<NativeIOContext> implements AsyncDisposable, NativeWrapper<NativeIOContext> {
+export class IOContext extends OptionMember<NativeIOContext> implements Disposable, AsyncDisposable, NativeWrapper<NativeIOContext> {
   constructor() {
     super(new bindings.IOContext());
   }
@@ -771,6 +771,24 @@ export class IOContext extends OptionMember<NativeIOContext> implements AsyncDis
    */
   getNative(): NativeIOContext {
     return this.native;
+  }
+
+  /**
+   * Dispose of the I/O context synchronously.
+   *
+   * Implements the Disposable interface for automatic cleanup.
+   * Closes the context and releases resources.
+   *
+   * @example
+   * ```typescript
+   * {
+   *   using io = IOStream.create(buffer);
+   *   // Use io...
+   * } // Automatically freed when leaving scope
+   * ```
+   */
+  [Symbol.dispose](): void {
+    this.native[Symbol.dispose]();
   }
 
   /**

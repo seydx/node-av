@@ -365,7 +365,7 @@ export interface NativeDictionary extends Disposable {
  *
  * @internal
  */
-export interface NativeIOContext extends AsyncDisposable {
+export interface NativeIOContext extends Disposable, AsyncDisposable {
   readonly __brand: 'NativeIOContext';
 
   allocContext(bufferSize: number, writeFlag: number): void;
@@ -405,6 +405,7 @@ export interface NativeIOContext extends AsyncDisposable {
   maxPacketSize: number;
   direct: number;
 
+  [Symbol.dispose](): void;
   [Symbol.asyncDispose](): Promise<void>;
 }
 

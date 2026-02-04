@@ -108,6 +108,7 @@ private:
   Napi::Value Open2Async(const Napi::CallbackInfo& info);
   Napi::Value Open2Sync(const Napi::CallbackInfo& info);
   Napi::Value AsyncDispose(const Napi::CallbackInfo& info);
+  Napi::Value SyncDispose(const Napi::CallbackInfo& info);
 };
 
 } // namespace ffmpeg
