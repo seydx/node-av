@@ -52,6 +52,15 @@ await using screen = await DeviceAPI.openScreen({
 
 - New `startTime` option in `Muxer` stream options for controlling packet timestamp offsets.
 
+#### FFmpeg Constants Update
+
+Updated auto-generated constants from upstream FFmpeg:
+
+- New codec: `AV_CODEC_ID_JPEGXS` (JPEG XS)
+- New decoder: `FF_DECODER_LIBSVTJPEGXS` (SVT-JPEG XS)
+- New encoder: `FF_ENCODER_LIBSVTJPEGXS` (SVT-JPEG XS)
+- New hardware encoders: `FF_ENCODER_AV1_D3D12VA`, `FF_ENCODER_H264_D3D12VA`, `FF_ENCODER_HEVC_D3D12VA` (Direct3D 12)
+
 ### Changed
 
 #### Improved Type Safety
