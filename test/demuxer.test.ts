@@ -1,5 +1,5 @@
 import assert from 'node:assert';
-import { readFileSync } from 'node:fs';
+import { createReadStream, readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { after, describe, it } from 'node:test';
 
@@ -233,7 +233,7 @@ describe('Demuxer', () => {
 
     it('should require format for native IOContext (async)', async () => {
       const buffer = await readFile(inputFile);
-      const ioContext = IOStream.create(buffer);
+      await using ioContext = IOStream.create(buffer);
 
       // @ts-expect-error Testing missing format
       await assert.rejects(async () => await Demuxer.open(ioContext), /Format must be specified for native IOContext input/);
@@ -241,7 +241,7 @@ describe('Demuxer', () => {
 
     it('should require format for native IOContext (sync)', () => {
       const buffer = readFileSync(inputFile);
-      const ioContext = IOStream.create(buffer);
+      using ioContext = IOStream.create(buffer);
 
       // @ts-expect-error Testing missing format
       assert.throws(() => Demuxer.openSync(ioContext), /Format must be specified for native IOContext input/);
@@ -351,6 +351,57 @@ describe('Demuxer', () => {
       const media2 = Demuxer.openSync(callbacks, { format: 'mp4' });
       assert.equal(media2.streams.length, streamCount, 'Should have same streams');
       media2.closeSync();
+    });
+
+    it('should open from Readable stream (async)', async () => {
+      const webmFile = getInputFile('video-vp9.webm');
+      const readable = createReadStream(webmFile);
+      const media = await Demuxer.open(readable, { format: 'webm' });
+      openInstances.push(media);
+
+      assert.ok(media, 'Should create Demuxer from Readable');
+      assert.ok(media.streams.length > 0, 'Should have streams');
+      assert.ok(media.video(), 'Should have video stream');
+
+      await media.close();
+      readable.destroy();
+    });
+
+    it('should read packets from Readable stream', async () => {
+      const webmFile = getInputFile('video-vp9.webm');
+      const readable = createReadStream(webmFile);
+      const media = await Demuxer.open(readable, { format: 'webm' });
+      openInstances.push(media);
+
+      let count = 0;
+      for await (const packet of media.packets()) {
+        if (!packet) break;
+        count++;
+        packet.free();
+        if (count >= 10) break;
+      }
+      assert.ok(count > 0, 'Should have read packets from Readable stream');
+
+      await media.close();
+      readable.destroy();
+    });
+
+    it('should require format for Readable stream (async)', async () => {
+      const readable = createReadStream(inputFile);
+
+      // @ts-expect-error Testing missing format
+      await assert.rejects(async () => await Demuxer.open(readable), /Format must be specified for Readable stream input/);
+
+      readable.destroy();
+    });
+
+    it('should require format for Readable stream (sync)', () => {
+      const readable = createReadStream(inputFile);
+
+      // @ts-expect-error Testing missing format
+      assert.throws(() => Demuxer.openSync(readable), /Format must be specified for Readable stream input/);
+
+      readable.destroy();
     });
   });
 

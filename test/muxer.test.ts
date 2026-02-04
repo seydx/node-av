@@ -1,4 +1,5 @@
 import assert from 'node:assert';
+import { createWriteStream } from 'node:fs';
 import { readFile, stat, unlink } from 'node:fs/promises';
 import { describe, it } from 'node:test';
 
@@ -119,6 +120,87 @@ describe('Muxer', () => {
 
       assert(output instanceof Muxer);
       await output.close();
+    });
+
+    it('should open with Writable stream (async)', async () => {
+      const outputFile = getTempFile('mkv');
+      const ws = createWriteStream(outputFile);
+      const output = await Muxer.open(ws, { format: 'matroska' });
+
+      assert(output instanceof Muxer);
+      assert.equal(output.isOpen, true, 'Output should be open');
+
+      await output.close();
+      ws.end();
+    });
+
+    it('should write to Writable stream', async () => {
+      const outputFile = getTempFile('mkv');
+      await using input = await Demuxer.open(inputFile);
+      const ws = createWriteStream(outputFile);
+      const output = await Muxer.open(ws, { format: 'matroska' });
+
+      // Add video stream
+      const videoStream = input.video()!;
+      assert.ok(videoStream, 'Should have video stream');
+      const streamIdx = output.addStream(videoStream);
+
+      // Copy some packets (header written automatically on first packet)
+      let count = 0;
+      for await (const packet of input.packets(videoStream.index)) {
+        if (!packet) break;
+        await output.writePacket(packet, streamIdx);
+        packet.free();
+        if (++count >= 30) break;
+      }
+
+      // Signal EOF for the stream
+      await output.writePacket(null, streamIdx);
+
+      // Close output (trailer written automatically)
+      await output.close();
+      ws.end();
+
+      // Wait for stream to finish writing
+      await new Promise<void>((resolve) => ws.on('finish', resolve));
+
+      // Verify output file exists and has content
+      const fileStat = await stat(outputFile);
+      assert.ok(fileStat.size > 0, 'Output file should have content');
+
+      await cleanup();
+    });
+
+    it('should require format for Writable stream (async)', async () => {
+      const outputFile = getTempFile('mkv');
+      const ws = createWriteStream(outputFile);
+
+      // @ts-expect-error Testing missing format
+      await assert.rejects(async () => await Muxer.open(ws), /Format must be specified for Writable stream output/);
+
+      ws.end();
+      await cleanup();
+    });
+
+    it('should fail with seek-dependent format (mp4) on Writable stream', async () => {
+      const outputFile = getTempFile('mp4');
+      await using input = await Demuxer.open(inputFile);
+      const ws = createWriteStream(outputFile);
+      const output = await Muxer.open(ws, { format: 'mp4' });
+
+      const videoStream = input.video()!;
+      const streamIdx = output.addStream(videoStream);
+
+      // MP4 needs seek for moov atom — writePacket triggers header write which fails
+      const packet = (await input.packets(videoStream.index).next()).value;
+      assert.ok(packet, 'Should have a packet');
+
+      await assert.rejects(async () => await output.writePacket(packet, streamIdx), /non seekable|Invalid argument/);
+
+      packet.free();
+      await output.close();
+      ws.end();
+      await cleanup();
     });
   });
 
