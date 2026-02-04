@@ -14,9 +14,9 @@
 
 import { parseArgs } from 'node:util';
 
-import { Decoder, DeviceAPI, Encoder, FF_ENCODER_AAC, FF_ENCODER_LIBX264, Muxer } from '../src/index.js';
 import { PixelFormatUtils } from '../src/api/utilities/pixel-format.js';
 import { SampleFormatUtils } from '../src/api/utilities/sample-format.js';
+import { Decoder, DeviceAPI, Encoder, FF_ENCODER_AAC, FF_ENCODER_LIBX264, Muxer } from '../src/index.js';
 import { prepareTestEnvironment } from './index.js';
 
 const args = parseArgs({
