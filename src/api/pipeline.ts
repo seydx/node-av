@@ -97,6 +97,8 @@ export interface PipelineOptions {
  *
  * @param output - Media output destination
  *
+ * @param options - Pipeline options for cancellation support
+ *
  * @returns Pipeline control for managing execution
  *
  * @example
@@ -105,7 +107,7 @@ export interface PipelineOptions {
  * await control.completion;
  * ```
  */
-export function pipeline(source: Demuxer, decoder: Decoder, encoder: Encoder, output: Muxer): PipelineControl;
+export function pipeline(source: Demuxer, decoder: Decoder, encoder: Encoder, output: Muxer, options?: PipelineOptions): PipelineControl;
 
 /**
  * Full transcoding pipeline with filter: input → decoder → filter → encoder → output.
@@ -120,6 +122,8 @@ export function pipeline(source: Demuxer, decoder: Decoder, encoder: Encoder, ou
  *
  * @param output - Media output destination
  *
+ * @param options - Pipeline options for cancellation support
+ *
  * @returns Pipeline control for managing execution
  *
  * @example
@@ -128,7 +132,7 @@ export function pipeline(source: Demuxer, decoder: Decoder, encoder: Encoder, ou
  * await control.completion;
  * ```
  */
-export function pipeline(source: Demuxer, decoder: Decoder, filter: FilterAPI | FilterAPI[], encoder: Encoder, output: Muxer): PipelineControl;
+export function pipeline(source: Demuxer, decoder: Decoder, filter: FilterAPI | FilterAPI[], encoder: Encoder, output: Muxer, options?: PipelineOptions): PipelineControl;
 
 /**
  * Transcoding with bitstream filter: input → decoder → encoder → bsf → output.
@@ -143,6 +147,8 @@ export function pipeline(source: Demuxer, decoder: Decoder, filter: FilterAPI | 
  *
  * @param output - Media output destination
  *
+ * @param options - Pipeline options for cancellation support
+ *
  * @returns Pipeline control for managing execution
  *
  * @example
@@ -154,7 +160,14 @@ export function pipeline(source: Demuxer, decoder: Decoder, filter: FilterAPI | 
  * await control.completion;
  * ```
  */
-export function pipeline(source: Demuxer, decoder: Decoder, encoder: Encoder, bsf: BitStreamFilterAPI | BitStreamFilterAPI[], output: Muxer): PipelineControl;
+export function pipeline(
+  source: Demuxer,
+  decoder: Decoder,
+  encoder: Encoder,
+  bsf: BitStreamFilterAPI | BitStreamFilterAPI[],
+  output: Muxer,
+  options?: PipelineOptions,
+): PipelineControl;
 
 /**
  * Full pipeline with filter and bsf: input → decoder → filter → encoder → bsf → output.
@@ -170,6 +183,8 @@ export function pipeline(source: Demuxer, decoder: Decoder, encoder: Encoder, bs
  * @param bsf - Bitstream filter
  *
  * @param output - Media output destination
+ *
+ * @param options - Pipeline options for cancellation support
  *
  * @returns Pipeline control for managing execution
  *
@@ -190,6 +205,7 @@ export function pipeline(
   encoder: Encoder,
   bsf: BitStreamFilterAPI | BitStreamFilterAPI[],
   output: Muxer,
+  options?: PipelineOptions,
 ): PipelineControl;
 
 /**
@@ -207,6 +223,8 @@ export function pipeline(
  *
  * @param output - Media output destination
  *
+ * @param options - Pipeline options for cancellation support
+ *
  * @returns Pipeline control for managing execution
  *
  * @example
@@ -219,7 +237,15 @@ export function pipeline(
  * await control.completion;
  * ```
  */
-export function pipeline(source: Demuxer, decoder: Decoder, filter1: FilterAPI, filter2: FilterAPI, encoder: Encoder, output: Muxer): PipelineControl;
+export function pipeline(
+  source: Demuxer,
+  decoder: Decoder,
+  filter1: FilterAPI,
+  filter2: FilterAPI,
+  encoder: Encoder,
+  output: Muxer,
+  options?: PipelineOptions,
+): PipelineControl;
 
 /**
  * Stream copy pipeline: input → output (copies all streams).
@@ -227,6 +253,8 @@ export function pipeline(source: Demuxer, decoder: Decoder, filter1: FilterAPI, 
  * @param source - Media input source
  *
  * @param output - Media output destination
+ *
+ * @param options - Pipeline options for cancellation support
  *
  * @returns Pipeline control for managing execution
  *
@@ -237,7 +265,7 @@ export function pipeline(source: Demuxer, decoder: Decoder, filter1: FilterAPI, 
  * await control.completion;
  * ```
  */
-export function pipeline(source: Demuxer, output: Muxer): PipelineControl;
+export function pipeline(source: Demuxer, output: Muxer, options?: PipelineOptions): PipelineControl;
 
 /**
  * Stream copy with bitstream filter: input → bsf → output.
@@ -247,6 +275,8 @@ export function pipeline(source: Demuxer, output: Muxer): PipelineControl;
  * @param bsf - Bitstream filter for packet processing
  *
  * @param output - Media output destination
+ *
+ * @param options - Pipeline options for cancellation support
  *
  * @returns Pipeline control for managing execution
  *
@@ -258,7 +288,7 @@ export function pipeline(source: Demuxer, output: Muxer): PipelineControl;
  * await control.completion;
  * ```
  */
-export function pipeline(source: Demuxer, bsf: BitStreamFilterAPI | BitStreamFilterAPI[], output: Muxer): PipelineControl;
+export function pipeline(source: Demuxer, bsf: BitStreamFilterAPI | BitStreamFilterAPI[], output: Muxer, options?: PipelineOptions): PipelineControl;
 
 /**
  * Filter + encode + output: frames → filter → encoder → output.
@@ -270,6 +300,8 @@ export function pipeline(source: Demuxer, bsf: BitStreamFilterAPI | BitStreamFil
  * @param encoder - Encoder for encoding frames
  *
  * @param output - Media output destination
+ *
+ * @param options - Pipeline options for cancellation support
  *
  * @returns Pipeline control for managing execution
  *
@@ -283,7 +315,13 @@ export function pipeline(source: Demuxer, bsf: BitStreamFilterAPI | BitStreamFil
  * await control.completion;
  * ```
  */
-export function pipeline(source: AsyncIterable<Frame | null>, filter: FilterAPI | FilterAPI[], encoder: Encoder, output: Muxer): PipelineControl;
+export function pipeline(
+  source: AsyncIterable<Frame | null>,
+  filter: FilterAPI | FilterAPI[],
+  encoder: Encoder,
+  output: Muxer,
+  options?: PipelineOptions,
+): PipelineControl;
 
 /**
  * Encode + output: frames → encoder → output.
@@ -293,6 +331,8 @@ export function pipeline(source: AsyncIterable<Frame | null>, filter: FilterAPI 
  * @param encoder - Encoder for encoding frames
  *
  * @param output - Media output destination
+ *
+ * @param options - Pipeline options for cancellation support
  *
  * @returns Pipeline control for managing execution
  *
@@ -305,7 +345,7 @@ export function pipeline(source: AsyncIterable<Frame | null>, filter: FilterAPI 
  * await control.completion;
  * ```
  */
-export function pipeline(source: AsyncIterable<Frame | null>, encoder: Encoder, output: Muxer): PipelineControl;
+export function pipeline(source: AsyncIterable<Frame | null>, encoder: Encoder, output: Muxer, options?: PipelineOptions): PipelineControl;
 
 /**
  * Partial pipeline: input → decoder (returns frames).
@@ -313,6 +353,8 @@ export function pipeline(source: AsyncIterable<Frame | null>, encoder: Encoder, 
  * @param source - Media input source
  *
  * @param decoder - Decoder for decoding packets
+ *
+ * @param options - Pipeline options for cancellation support
  *
  * @returns Async generator of frames
  *
@@ -327,7 +369,7 @@ export function pipeline(source: AsyncIterable<Frame | null>, encoder: Encoder, 
  * }
  * ```
  */
-export function pipeline(source: Demuxer, decoder: Decoder): AsyncGenerator<Frame | null>;
+export function pipeline(source: Demuxer, decoder: Decoder, options?: PipelineOptions): AsyncGenerator<Frame | null>;
 
 /**
  * Partial pipeline: input → decoder → filter (returns frames).
@@ -337,6 +379,8 @@ export function pipeline(source: Demuxer, decoder: Decoder): AsyncGenerator<Fram
  * @param decoder - Decoder for decoding packets
  *
  * @param filter - Filter or filter chain
+ *
+ * @param options - Pipeline options for cancellation support
  *
  * @returns Async generator of frames
  *
@@ -352,7 +396,7 @@ export function pipeline(source: Demuxer, decoder: Decoder): AsyncGenerator<Fram
  * }
  * ```
  */
-export function pipeline(source: Demuxer, decoder: Decoder, filter: FilterAPI | FilterAPI[]): AsyncGenerator<Frame | null>;
+export function pipeline(source: Demuxer, decoder: Decoder, filter: FilterAPI | FilterAPI[], options?: PipelineOptions): AsyncGenerator<Frame | null>;
 
 /**
  * Partial pipeline: input → decoder → filter → encoder (returns packets).
@@ -364,6 +408,8 @@ export function pipeline(source: Demuxer, decoder: Decoder, filter: FilterAPI | 
  * @param filter - Filter or filter chain
  *
  * @param encoder - Encoder for encoding frames
+ *
+ * @param options - Pipeline options for cancellation support
  *
  * @returns Async generator of packets
  *
@@ -380,7 +426,7 @@ export function pipeline(source: Demuxer, decoder: Decoder, filter: FilterAPI | 
  * }
  * ```
  */
-export function pipeline(source: Demuxer, decoder: Decoder, filter: FilterAPI | FilterAPI[], encoder: Encoder): AsyncGenerator<Packet | null>;
+export function pipeline(source: Demuxer, decoder: Decoder, filter: FilterAPI | FilterAPI[], encoder: Encoder, options?: PipelineOptions): AsyncGenerator<Packet | null>;
 
 /**
  * Partial pipeline: input → decoder → encoder (returns packets).
@@ -390,6 +436,8 @@ export function pipeline(source: Demuxer, decoder: Decoder, filter: FilterAPI | 
  * @param decoder - Decoder for decoding packets
  *
  * @param encoder - Encoder for encoding frames
+ *
+ * @param options - Pipeline options for cancellation support
  *
  * @returns Async generator of packets
  *
@@ -405,7 +453,7 @@ export function pipeline(source: Demuxer, decoder: Decoder, filter: FilterAPI | 
  * }
  * ```
  */
-export function pipeline(source: Demuxer, decoder: Decoder, encoder: Encoder): AsyncGenerator<Packet | null>;
+export function pipeline(source: Demuxer, decoder: Decoder, encoder: Encoder, options?: PipelineOptions): AsyncGenerator<Packet | null>;
 
 /**
  * Partial pipeline: frames → filter (returns frames).
@@ -413,6 +461,8 @@ export function pipeline(source: Demuxer, decoder: Decoder, encoder: Encoder): A
  * @param source - Frame source (async iterable)
  *
  * @param filter - Filter or filter chain
+ *
+ * @param options - Pipeline options for cancellation support
  *
  * @returns Async generator of filtered frames
  *
@@ -428,7 +478,7 @@ export function pipeline(source: Demuxer, decoder: Decoder, encoder: Encoder): A
  * }
  * ```
  */
-export function pipeline(source: AsyncIterable<Frame | null>, filter: FilterAPI | FilterAPI[]): AsyncGenerator<Frame | null>;
+export function pipeline(source: AsyncIterable<Frame | null>, filter: FilterAPI | FilterAPI[], options?: PipelineOptions): AsyncGenerator<Frame | null>;
 
 /**
  * Partial pipeline: frames → encoder (returns packets).
@@ -436,6 +486,8 @@ export function pipeline(source: AsyncIterable<Frame | null>, filter: FilterAPI 
  * @param source - Frame source (async iterable)
  *
  * @param encoder - Encoder for encoding frames
+ *
+ * @param options - Pipeline options for cancellation support
  *
  * @returns Async generator of packets
  *
@@ -451,7 +503,7 @@ export function pipeline(source: AsyncIterable<Frame | null>, filter: FilterAPI 
  * }
  * ```
  */
-export function pipeline(source: AsyncIterable<Frame | null>, encoder: Encoder): AsyncGenerator<Packet | null>;
+export function pipeline(source: AsyncIterable<Frame | null>, encoder: Encoder, options?: PipelineOptions): AsyncGenerator<Packet | null>;
 
 /**
  * Partial pipeline: frames → filter → encoder (returns packets).
@@ -461,6 +513,8 @@ export function pipeline(source: AsyncIterable<Frame | null>, encoder: Encoder):
  * @param filter - Filter or filter chain
  *
  * @param encoder - Encoder for encoding frames
+ *
+ * @param options - Pipeline options for cancellation support
  *
  * @returns Async generator of packets
  *
@@ -477,7 +531,12 @@ export function pipeline(source: AsyncIterable<Frame | null>, encoder: Encoder):
  * }
  * ```
  */
-export function pipeline(source: AsyncIterable<Frame | null>, filter: FilterAPI | FilterAPI[], encoder: Encoder): AsyncGenerator<Packet | null>;
+export function pipeline(
+  source: AsyncIterable<Frame | null>,
+  filter: FilterAPI | FilterAPI[],
+  encoder: Encoder,
+  options?: PipelineOptions,
+): AsyncGenerator<Packet | null>;
 
 // ============================================================================
 // Named Pipeline Overloads (multiple streams, variable parameters)
@@ -491,6 +550,8 @@ export function pipeline(source: AsyncIterable<Frame | null>, filter: FilterAPI 
  * @param stages - Named processing stages for each stream
  *
  * @param output - Single output destination for all streams
+ *
+ * @param options - Pipeline options for cancellation support
  *
  * @returns Pipeline control for managing execution
  *
@@ -508,7 +569,7 @@ export function pipeline(source: AsyncIterable<Frame | null>, filter: FilterAPI 
  * await control.completion;
  * ```
  */
-export function pipeline<K extends StreamName>(input: Demuxer, stages: NamedStages<K>, output: Muxer): PipelineControl;
+export function pipeline<K extends StreamName>(input: Demuxer, stages: NamedStages<K>, output: Muxer, options?: PipelineOptions): PipelineControl;
 
 /**
  * Named pipeline with single output - all streams go to the same output.
@@ -518,6 +579,8 @@ export function pipeline<K extends StreamName>(input: Demuxer, stages: NamedStag
  * @param stages - Named processing stages for each stream
  *
  * @param output - Single output destination for all streams
+ *
+ * @param options - Pipeline options for cancellation support
  *
  * @returns Pipeline control for managing execution
  *
@@ -535,7 +598,7 @@ export function pipeline<K extends StreamName>(input: Demuxer, stages: NamedStag
  * await control.completion;
  * ```
  */
-export function pipeline<K extends StreamName>(inputs: NamedInputs<K>, stages: NamedStages<K>, output: Muxer): PipelineControl;
+export function pipeline<K extends StreamName>(inputs: NamedInputs<K>, stages: NamedStages<K>, output: Muxer, options?: PipelineOptions): PipelineControl;
 
 /**
  * Named pipeline with shared input and multiple outputs.
@@ -545,6 +608,8 @@ export function pipeline<K extends StreamName>(inputs: NamedInputs<K>, stages: N
  * @param stages - Named processing stages for each stream
  *
  * @param outputs - Named output destinations
+ *
+ * @param options - Pipeline options for cancellation support
  *
  * @returns Pipeline control for managing execution
  *
@@ -562,7 +627,7 @@ export function pipeline<K extends StreamName>(inputs: NamedInputs<K>, stages: N
  * await control.completion;
  * ```
  */
-export function pipeline<K extends StreamName>(input: Demuxer, stages: NamedStages<K>, outputs: NamedOutputs<K>): PipelineControl;
+export function pipeline<K extends StreamName>(input: Demuxer, stages: NamedStages<K>, outputs: NamedOutputs<K>, options?: PipelineOptions): PipelineControl;
 
 /**
  * Named pipeline with multiple outputs - each stream has its own output.
@@ -572,6 +637,8 @@ export function pipeline<K extends StreamName>(input: Demuxer, stages: NamedStag
  * @param stages - Named processing stages for each stream
  *
  * @param outputs - Named output destinations
+ *
+ * @param options - Pipeline options for cancellation support
  *
  * @returns Pipeline control for managing execution
  *
@@ -589,7 +656,7 @@ export function pipeline<K extends StreamName>(input: Demuxer, stages: NamedStag
  * await control.completion;
  * ```
  */
-export function pipeline<K extends StreamName>(inputs: NamedInputs<K>, stages: NamedStages<K>, outputs: NamedOutputs<K>): PipelineControl;
+export function pipeline<K extends StreamName>(inputs: NamedInputs<K>, stages: NamedStages<K>, outputs: NamedOutputs<K>, options?: PipelineOptions): PipelineControl;
 
 /**
  * Partial named pipeline (returns generators for further processing).
@@ -597,6 +664,8 @@ export function pipeline<K extends StreamName>(inputs: NamedInputs<K>, stages: N
  * @param inputs - Named input sources
  *
  * @param stages - Named processing stages
+ *
+ * @param options - Pipeline options for cancellation support
  *
  * @returns Record of async generators for each stream
  *
@@ -627,24 +696,8 @@ export function pipeline<K extends StreamName>(inputs: NamedInputs<K>, stages: N
 export function pipeline<K extends StreamName, T extends Packet | Frame | null = Packet | Frame | null>(
   inputs: NamedInputs<K>,
   stages: NamedStages<K>,
+  options?: PipelineOptions,
 ): Record<K, AsyncGenerator<T>>;
-
-/**
- * Any pipeline overload with PipelineOptions as the last argument.
- *
- * @param args - Pipeline arguments followed by options
- *
- * @returns Pipeline control, async generator, or record of generators
- *
- * @example
- * ```typescript
- * const controller = new AbortController();
- * const control = pipeline(input, decoder, encoder, output, { signal: controller.signal });
- * ```
- */
-export function pipeline(
-  ...args: [...any[], PipelineOptions]
-): PipelineControl | AsyncGenerator<Packet | Frame | null> | Record<StreamName, AsyncGenerator<Packet | Frame | null>>;
 
 // ============================================================================
 // Implementation
@@ -685,10 +738,14 @@ export function pipeline(
  * ```
  */
 export function pipeline(...args: any[]): PipelineControl | AsyncGenerator<Packet | Frame | null> | Record<StreamName, AsyncGenerator<Packet | Frame | null>> {
-  // Extract PipelineOptions if last arg is a plain object with signal key
+  // Extract PipelineOptions if last arg is undefined or a PipelineOptions object.
+  // PipelineOptions is identified as a plain object whose only known key is 'signal'.
+  // This distinguishes it from NamedInputs/NamedStages/NamedOutputs which have stream name keys.
   let pipelineOptions: PipelineOptions | undefined;
   const lastArg = args[args.length - 1];
-  if (args.length > 0 && typeof lastArg === 'object' && lastArg !== null && Object.getPrototypeOf(lastArg) === Object.prototype && 'signal' in lastArg) {
+  if (lastArg === undefined) {
+    args.pop();
+  } else if (args.length > 0 && typeof lastArg === 'object' && lastArg !== null && Object.getPrototypeOf(lastArg) === Object.prototype && 'signal' in lastArg) {
     pipelineOptions = args.pop() as PipelineOptions;
   }
   pipelineOptions?.signal?.throwIfAborted();
@@ -827,7 +884,7 @@ class PipelineControlImpl implements PipelineControl {
  *
  * @param output - Media output destination
  *
- * @param options - Pipeline options
+ * @param options - Pipeline options for cancellation support
  *
  * @returns Pipeline control interface
  *
@@ -938,7 +995,7 @@ async function runDemuxerPipelineAsync(input: Demuxer, output: Muxer, shouldStop
  *
  * @param args - Pipeline arguments
  *
- * @param options - Pipeline options
+ * @param options - Pipeline options for cancellation support
  *
  * @returns Pipeline control or async generator
  *
@@ -1222,7 +1279,7 @@ function runNamedPartialPipeline<K extends StreamName>(inputs: NamedInputs<K>, s
  *
  * @param output - Output destination(s)
  *
- * @param options - Pipeline options
+ * @param options - Pipeline options for cancellation support
  *
  * @returns Pipeline control interface
  *
