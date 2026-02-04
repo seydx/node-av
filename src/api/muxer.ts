@@ -1,5 +1,6 @@
 import { mkdirSync } from 'fs';
 import { mkdir } from 'fs/promises';
+import { Writable } from 'node:stream';
 import { dirname, resolve } from 'path';
 
 import {
@@ -26,8 +27,9 @@ import { Packet } from '../lib/packet.js';
 import { Rational } from '../lib/rational.js';
 import { SyncQueue, SyncQueueType } from '../lib/sync-queue.js';
 import { avAddQ, avCompareTs, avGetAudioFrameDuration2, avRescaleDelta, avRescaleQ } from '../lib/utilities.js';
-import { IO_BUFFER_SIZE, MAX_MUXING_QUEUE_SIZE, MAX_PACKET_SIZE, MUXING_QUEUE_DATA_THRESHOLD, SYNC_BUFFER_DURATION } from './constants.js';
+import { MAX_MUXING_QUEUE_SIZE, MUXING_QUEUE_DATA_THRESHOLD, SYNC_BUFFER_DURATION } from './constants.js';
 import { Encoder } from './encoder.js';
+import { IOStream } from './io-stream.js';
 import { AsyncQueue } from './utilities/async-queue.js';
 
 import type { IRational, OutputFormat, Stream } from '../lib/index.js';
@@ -382,7 +384,8 @@ export class Muxer implements AsyncDisposable, Disposable {
    */
   static async open(target: string, options?: MuxerOptions): Promise<Muxer>;
   static async open(target: IOOutputCallbacks, options: MuxerOptions & { format: string }): Promise<Muxer>;
-  static async open(target: string | IOOutputCallbacks, options?: MuxerOptions): Promise<Muxer> {
+  static async open(target: Writable, options: MuxerOptions & { format: string }): Promise<Muxer>;
+  static async open(target: string | IOOutputCallbacks | Writable, options?: MuxerOptions): Promise<Muxer> {
     const output = new Muxer(options);
 
     try {
@@ -419,6 +422,26 @@ export class Muxer implements AsyncDisposable, Disposable {
           FFmpegError.throwIfError(openRet, `Failed to open output file: ${resolvedTarget}`);
           output.formatContext.pb = output.ioContext;
         }
+      } else if (target instanceof Writable) {
+        // Writable stream - format is required
+        if (!options?.format) {
+          throw new Error('Format must be specified for Writable stream output');
+        }
+
+        const ret = output.formatContext.allocOutputContext2(null, options.format, null);
+        FFmpegError.throwIfError(ret, 'Failed to allocate output context');
+
+        // Set format options if provided
+        if (options?.options) {
+          for (const [key, value] of Object.entries(options.options)) {
+            const ret = output.formatContext.setOption(key, value);
+            FFmpegError.throwIfError(ret, `Failed to set muxer option '${key}'`);
+          }
+        }
+
+        output.ioContext = IOStream.createOutput(target, options);
+        output.formatContext.pb = output.ioContext;
+        output.formatContext.setFlags(AVFMT_FLAG_CUSTOM_IO);
       } else {
         // Custom IO with callbacks - format is required
         if (!options?.format) {
@@ -436,10 +459,7 @@ export class Muxer implements AsyncDisposable, Disposable {
           }
         }
 
-        // Setup custom IO with callbacks
-        output.ioContext = new IOContext();
-        output.ioContext.allocContextWithCallbacks(options.bufferSize ?? IO_BUFFER_SIZE, 1, target.read, target.write, target.seek);
-        output.ioContext.maxPacketSize = options.maxPacketSize ?? MAX_PACKET_SIZE;
+        output.ioContext = IOStream.createOutput(target, options);
         output.formatContext.pb = output.ioContext;
         output.formatContext.setFlags(AVFMT_FLAG_CUSTOM_IO);
       }
@@ -512,7 +532,8 @@ export class Muxer implements AsyncDisposable, Disposable {
    */
   static openSync(target: string, options?: MuxerOptions): Muxer;
   static openSync(target: IOOutputCallbacks, options: MuxerOptions & { format: string }): Muxer;
-  static openSync(target: string | IOOutputCallbacks, options?: MuxerOptions): Muxer {
+  static openSync(target: Writable, options: MuxerOptions & { format: string }): Muxer;
+  static openSync(target: string | IOOutputCallbacks | Writable, options?: MuxerOptions): Muxer {
     const output = new Muxer(options);
 
     try {
@@ -549,6 +570,26 @@ export class Muxer implements AsyncDisposable, Disposable {
           FFmpegError.throwIfError(openRet, `Failed to open output file: ${resolvedTarget}`);
           output.formatContext.pb = output.ioContext;
         }
+      } else if (target instanceof Writable) {
+        // Writable stream - format is required
+        if (!options?.format) {
+          throw new Error('Format must be specified for Writable stream output');
+        }
+
+        const ret = output.formatContext.allocOutputContext2(null, options.format, null);
+        FFmpegError.throwIfError(ret, 'Failed to allocate output context');
+
+        // Set format options if provided
+        if (options?.options) {
+          for (const [key, value] of Object.entries(options.options)) {
+            const ret = output.formatContext.setOption(key, value);
+            FFmpegError.throwIfError(ret, `Failed to set muxer option '${key}'`);
+          }
+        }
+
+        output.ioContext = IOStream.createOutput(target, options);
+        output.formatContext.pb = output.ioContext;
+        output.formatContext.setFlags(AVFMT_FLAG_CUSTOM_IO);
       } else {
         // Custom IO with callbacks - format is required
         if (!options?.format) {
@@ -566,10 +607,7 @@ export class Muxer implements AsyncDisposable, Disposable {
           }
         }
 
-        // Setup custom IO with callbacks
-        output.ioContext = new IOContext();
-        output.ioContext.allocContextWithCallbacks(options.bufferSize ?? IO_BUFFER_SIZE, 1, target.read, target.write, target.seek);
-        output.ioContext.maxPacketSize = options.maxPacketSize ?? MAX_PACKET_SIZE;
+        output.ioContext = IOStream.createOutput(target, options);
         output.formatContext.pb = output.ioContext;
         output.formatContext.setFlags(AVFMT_FLAG_CUSTOM_IO);
       }

@@ -1,6 +1,7 @@
 import { createSocket } from 'dgram';
 import { closeSync, openSync, readSync } from 'fs';
 import { open } from 'fs/promises';
+import { Readable } from 'node:stream';
 import { resolve } from 'path';
 import { RtpPacket } from 'werift';
 
@@ -601,8 +602,9 @@ export class Demuxer implements AsyncDisposable, Disposable {
   static async open(input: string | Buffer, options?: DemuxerOptions): Promise<Demuxer>;
   static async open(input: IOInputCallbacks, options: (DemuxerOptions | undefined) & { format: string }): Promise<Demuxer>;
   static async open(input: IOContext, options: (DemuxerOptions | undefined) & { format: string }): Promise<Demuxer>;
+  static async open(input: Readable, options: (DemuxerOptions | undefined) & { format: string }): Promise<Demuxer>;
   static async open(rawData: VideoRawData | AudioRawData, options?: DemuxerOptions): Promise<Demuxer>;
-  static async open(input: string | Buffer | VideoRawData | AudioRawData | IOInputCallbacks | IOContext, options: DemuxerOptions = {}): Promise<Demuxer> {
+  static async open(input: string | Buffer | VideoRawData | AudioRawData | IOInputCallbacks | IOContext | Readable, options: DemuxerOptions = {}): Promise<Demuxer> {
     // Check if input is raw data
     if (typeof input === 'object' && 'type' in input && ('width' in input || 'sampleRate' in input)) {
       // Build options for raw data
@@ -687,6 +689,19 @@ export class Demuxer implements AsyncDisposable, Disposable {
 
         const ret = await formatContext.openInput('', inputFormat, optionsDict);
         FFmpegError.throwIfError(ret, 'Failed to open input from native IOContext');
+      } else if (input instanceof Readable) {
+        // Readable stream - format is required
+        if (!options.format) {
+          throw new Error('Format must be specified for Readable stream input');
+        }
+
+        formatContext.allocContext();
+        ioContext = IOStream.create(input, { bufferSize: options.bufferSize });
+        formatContext.pb = ioContext;
+        formatContext.setFlags(AVFMT_FLAG_CUSTOM_IO);
+
+        const ret = await formatContext.openInput('', inputFormat, optionsDict);
+        FFmpegError.throwIfError(ret, 'Failed to open input from Readable stream');
       } else if (typeof input === 'object' && 'read' in input) {
         // Custom I/O with callbacks - format is required
         if (!options.format) {
@@ -705,7 +720,7 @@ export class Demuxer implements AsyncDisposable, Disposable {
         const ret = await formatContext.openInput('', inputFormat, optionsDict);
         FFmpegError.throwIfError(ret, 'Failed to open input from custom I/O');
       } else {
-        throw new TypeError('Invalid input type. Expected file path, URL, Buffer, IOContext, or IOInputCallbacks');
+        throw new TypeError('Invalid input type. Expected file path, URL, Buffer, IOContext, Readable, or IOInputCallbacks');
       }
 
       // Find stream information
@@ -841,8 +856,9 @@ export class Demuxer implements AsyncDisposable, Disposable {
   static openSync(input: string | Buffer, options?: DemuxerOptions): Demuxer;
   static openSync(input: IOInputCallbacks, options: (DemuxerOptions | undefined) & { format: string }): Demuxer;
   static openSync(input: IOContext, options: (DemuxerOptions | undefined) & { format: string }): Demuxer;
+  static openSync(input: Readable, options: (DemuxerOptions | undefined) & { format: string }): Demuxer;
   static openSync(rawData: VideoRawData | AudioRawData, options?: DemuxerOptions): Demuxer;
-  static openSync(input: string | Buffer | VideoRawData | AudioRawData | IOInputCallbacks | IOContext, options: DemuxerOptions = {}): Demuxer {
+  static openSync(input: string | Buffer | VideoRawData | AudioRawData | IOInputCallbacks | IOContext | Readable, options: DemuxerOptions = {}): Demuxer {
     // Check if input is raw data
     if (typeof input === 'object' && 'type' in input && ('width' in input || 'sampleRate' in input)) {
       // Build options for raw data
@@ -927,6 +943,19 @@ export class Demuxer implements AsyncDisposable, Disposable {
 
         const ret = formatContext.openInputSync('', inputFormat, optionsDict);
         FFmpegError.throwIfError(ret, 'Failed to open input from native IOContext');
+      } else if (input instanceof Readable) {
+        // Readable stream - format is required
+        if (!options.format) {
+          throw new Error('Format must be specified for Readable stream input');
+        }
+
+        formatContext.allocContext();
+        ioContext = IOStream.create(input, { bufferSize: options.bufferSize });
+        formatContext.pb = ioContext;
+        formatContext.setFlags(AVFMT_FLAG_CUSTOM_IO);
+
+        const ret = formatContext.openInputSync('', inputFormat, optionsDict);
+        FFmpegError.throwIfError(ret, 'Failed to open input from Readable stream');
       } else if (typeof input === 'object' && 'read' in input) {
         // Custom I/O with callbacks - format is required
         if (!options.format) {
@@ -945,7 +974,7 @@ export class Demuxer implements AsyncDisposable, Disposable {
         const ret = formatContext.openInputSync('', inputFormat, optionsDict);
         FFmpegError.throwIfError(ret, 'Failed to open input from custom I/O');
       } else {
-        throw new TypeError('Invalid input type. Expected file path, URL, Buffer, IOContext, or IOInputCallbacks');
+        throw new TypeError('Invalid input type. Expected file path, URL, Buffer, IOContext, Readable, or IOInputCallbacks');
       }
 
       // Find stream information
@@ -2045,8 +2074,13 @@ export class Demuxer implements AsyncDisposable, Disposable {
     // Wait for demux thread with timeout to avoid hanging on blocked reads
     if (this.demuxThread) {
       const threadPromise = this.demuxThread;
-      const timeoutPromise = new Promise<void>((resolve) => setTimeout(resolve, 2000));
+      let timer: ReturnType<typeof setTimeout>;
+      const timeoutPromise = new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, 2000);
+        timer.unref();
+      });
       await Promise.race([threadPromise, timeoutPromise]);
+      clearTimeout(timer!);
       this.demuxThread = null;
     }
 
@@ -2377,8 +2411,13 @@ export class Demuxer implements AsyncDisposable, Disposable {
     // Wait for demux thread with timeout to avoid hanging on blocked reads
     if (this.demuxThread) {
       const threadPromise = this.demuxThread;
-      const timeoutPromise = new Promise<void>((resolve) => setTimeout(resolve, 2000));
+      let timer: ReturnType<typeof setTimeout>;
+      const timeoutPromise = new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, 2000);
+        timer.unref();
+      });
       await Promise.race([threadPromise, timeoutPromise]);
+      clearTimeout(timer!);
       this.demuxThread = null;
     }
 

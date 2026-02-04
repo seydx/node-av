@@ -1,9 +1,14 @@
+import { once } from 'node:events';
+import { Readable } from 'node:stream';
+
 import { AVSEEK_CUR, AVSEEK_END, AVSEEK_SET, AVSEEK_SIZE } from '../constants/constants.js';
 import { IOContext } from '../lib/index.js';
-import { IO_BUFFER_SIZE } from './constants.js';
+import { IO_BUFFER_SIZE, MAX_PACKET_SIZE } from './constants.js';
 
+import type { Writable } from 'node:stream';
 import type { AVSeekWhence } from '../constants/index.js';
 import type { DemuxerOptions } from './demuxer.js';
+import type { MuxerOptions } from './muxer.js';
 
 /**
  * Custom I/O callbacks for implementing custom input sources.
@@ -168,7 +173,26 @@ export class IOStream {
    * ```
    */
   static create(callbacks: IOInputCallbacks, options?: DemuxerOptions): IOContext;
-  static create(input: Buffer | IOInputCallbacks, options: DemuxerOptions = {}): IOContext | Promise<IOContext> {
+  /**
+   * Create I/O context from a Node.js Readable stream.
+   *
+   * Creates an I/O context that reads from a Readable stream.
+   * Seeking is not supported for streams.
+   *
+   * @param stream - Node.js Readable stream
+   *
+   * @param options - I/O configuration options
+   *
+   * @returns Configured I/O context
+   *
+   * @example
+   * ```typescript
+   * const readable = fs.createReadStream('video.mkv');
+   * const ioContext = IOStream.create(readable, { format: 'matroska' });
+   * ```
+   */
+  static create(stream: Readable, options?: DemuxerOptions): IOContext;
+  static create(input: Buffer | IOInputCallbacks | Readable, options: DemuxerOptions = {}): IOContext {
     const { bufferSize = IO_BUFFER_SIZE } = options;
 
     // Handle Buffer
@@ -176,12 +200,79 @@ export class IOStream {
       return this.createFromBuffer(input, bufferSize);
     }
 
-    // Handle custom callbacks
-    if (typeof input === 'object' && 'read' in input) {
-      return this.createFromCallbacks(input, bufferSize);
+    // Handle Readable stream (must be before callbacks check since Readable has 'read')
+    if (input instanceof Readable) {
+      return this.createFromReadable(input, bufferSize);
     }
 
-    throw new TypeError('Invalid input type. Expected Buffer or IOInputCallbacks');
+    // Handle custom callbacks
+    if (typeof input === 'object' && 'read' in input) {
+      return this.createFromInputCallbacks(input, bufferSize);
+    }
+
+    throw new TypeError('Invalid input type. Expected Buffer, Readable, or IOInputCallbacks');
+  }
+
+  /**
+   * Create I/O context for writing to a Node.js Writable stream.
+   *
+   * Creates a write-mode I/O context from a Writable stream with
+   * backpressure support and automatic buffer copying.
+   * Seeking is not supported for streams.
+   *
+   * @param stream - Node.js Writable stream
+   *
+   * @param options - Output configuration options
+   *
+   * @returns Configured I/O context
+   *
+   * @example
+   * ```typescript
+   * const writable = fs.createWriteStream('output.mkv');
+   * const ioContext = IOStream.createOutput(writable, { format: 'matroska' });
+   * ```
+   */
+  static createOutput(stream: Writable, options?: MuxerOptions): IOContext;
+  /**
+   * Create I/O context from custom output callbacks.
+   *
+   * Creates a write-mode I/O context using custom write, optional seek,
+   * and optional read callbacks.
+   *
+   * @param callbacks - I/O callbacks for write, seek, and read operations
+   *
+   * @param options - Output configuration options
+   *
+   * @returns Configured I/O context
+   *
+   * @throws {Error} If callbacks missing required write function
+   *
+   * @example
+   * ```typescript
+   * const chunks: Buffer[] = [];
+   * const ioContext = IOStream.createOutput({
+   *   write: (buffer) => {
+   *     chunks.push(Buffer.from(buffer));
+   *     return buffer.length;
+   *   }
+   * }, { format: 'matroska' });
+   * ```
+   */
+  static createOutput(callbacks: IOOutputCallbacks, options?: MuxerOptions): IOContext;
+  static createOutput(output: Writable | IOOutputCallbacks, options?: MuxerOptions): IOContext {
+    const { bufferSize = IO_BUFFER_SIZE, maxPacketSize = MAX_PACKET_SIZE } = options ?? {};
+
+    // Handle Writable stream (must be before callbacks check since Writable has 'write')
+    if (typeof output === 'object' && 'writable' in output) {
+      return this.createForWritable(output, bufferSize, maxPacketSize);
+    }
+
+    // Handle custom callbacks
+    if (typeof output === 'object' && 'write' in output) {
+      return this.createFromOutputCallbacks(output, bufferSize, maxPacketSize);
+    }
+
+    throw new TypeError('Invalid output type. Expected Writable or IOOutputCallbacks');
   }
 
   /**
@@ -240,10 +331,150 @@ export class IOStream {
   }
 
   /**
-   * Create I/O context from callbacks.
+   * Create I/O context from a Node.js Readable stream.
    *
-   * Sets up custom I/O with user-provided callbacks.
-   * Supports read and optional seek operations.
+   * Sets up async read callbacks that buffer data from the stream.
+   * Seeking is not supported for streams.
+   *
+   * @param stream - Node.js Readable stream
+   *
+   * @param bufferSize - Internal buffer size
+   *
+   * @returns Configured I/O context
+   *
+   * @internal
+   */
+  private static createFromReadable(stream: Readable, bufferSize: number): IOContext {
+    let chunks: Buffer[] = [];
+    let totalBuffered = 0;
+    let streamEnded = false;
+    let streamError: Error | null = null;
+    let pendingResolve: (() => void) | null = null;
+
+    const wakeUp = () => {
+      if (pendingResolve) {
+        const resolve = pendingResolve;
+        pendingResolve = null;
+        resolve();
+      }
+    };
+
+    const removeListeners = () => {
+      stream.off('readable', onReadable);
+      stream.off('end', onEnd);
+      stream.off('error', onError);
+      stream.off('close', wakeUp);
+    };
+
+    const onReadable = () => wakeUp();
+    const onEnd = () => {
+      streamEnded = true;
+      wakeUp();
+    };
+    const onError = (err: Error) => {
+      streamError = err;
+      wakeUp();
+    };
+
+    // Track state changes and wake up pending reads
+    stream.on('readable', onReadable);
+    stream.on('end', onEnd);
+    stream.on('error', onError);
+    stream.on('close', wakeUp);
+
+    const ioContext = new IOContext();
+    ioContext.allocContextWithCallbacks(
+      bufferSize,
+      0, // read mode
+      async (size: number): Promise<Buffer | null> => {
+        // Pull-based: read from stream on demand
+        while (totalBuffered < size && !streamEnded && !streamError && !stream.destroyed) {
+          // Try to read available data first
+          let chunk: Buffer | null;
+          while ((chunk = stream.read() as Buffer | null) !== null) {
+            chunks.push(chunk);
+            totalBuffered += chunk.length;
+          }
+
+          // If we have enough data, stop waiting
+          if (totalBuffered >= size) break;
+
+          // If stream is done, stop waiting
+          if (streamEnded || streamError || stream.destroyed) break;
+
+          // Wait for more data
+          await new Promise<void>((resolve) => {
+            pendingResolve = resolve;
+          });
+        }
+
+        // No data available — EOF, remove listeners
+        if (totalBuffered === 0) {
+          removeListeners();
+          return null;
+        }
+
+        const concat = Buffer.concat(chunks);
+        const result = concat.subarray(0, Math.min(size, concat.length));
+        const remainder = concat.subarray(result.length);
+        chunks = remainder.length > 0 ? [remainder] : [];
+        totalBuffered = remainder.length;
+
+        // If stream is done and all data consumed, remove listeners
+        if (totalBuffered === 0 && (streamEnded || streamError || stream.destroyed)) {
+          removeListeners();
+        }
+
+        return result;
+      },
+      undefined, // no write
+      undefined, // no seek
+    );
+
+    return ioContext;
+  }
+
+  /**
+   * Create I/O context for writing to a Node.js Writable stream.
+   *
+   * Sets up async write callbacks with backpressure support.
+   * The buffer is copied before writing since FFmpeg reuses its internal buffer.
+   *
+   * @param stream - Node.js Writable stream
+   *
+   * @param bufferSize - Internal buffer size
+   *
+   * @param maxPacketSize - Maximum packet size
+   *
+   * @returns Configured I/O context
+   *
+   * @internal
+   */
+  private static createForWritable(stream: Writable, bufferSize: number, maxPacketSize: number): IOContext {
+    const ioContext = new IOContext();
+    ioContext.allocContextWithCallbacks(
+      bufferSize,
+      1, // write mode
+      undefined, // no read
+      async (buffer: Buffer): Promise<number> => {
+        // Copy buffer — FFmpeg reuses the internal buffer after callback returns
+        const copy = Buffer.from(buffer);
+        if (!stream.write(copy)) {
+          // Backpressure: wait for drain
+          await once(stream, 'drain');
+        }
+        return copy.length;
+      },
+      undefined, // no seek
+    );
+    ioContext.maxPacketSize = maxPacketSize;
+    return ioContext;
+  }
+
+  /**
+   * Create I/O context from custom input callbacks.
+   *
+   * Sets up custom I/O with user-provided read and optional seek callbacks.
    *
    * @param callbacks - User I/O callbacks
    *
@@ -251,26 +482,46 @@ export class IOStream {
    *
    * @returns Configured I/O context
    *
-   * @throws {Error} If read callback not provided
-   *
    * @internal
    */
-  private static createFromCallbacks(callbacks: IOInputCallbacks, bufferSize: number): IOContext {
-    // We only support read mode in the high-level API
-    // Write mode would be needed for custom output, which we don't currently support
-
-    if (!callbacks.read) {
-      throw new Error('Read callback is required');
-    }
-
+  private static createFromInputCallbacks(callbacks: IOInputCallbacks, bufferSize: number): IOContext {
     const ioContext = new IOContext();
     ioContext.allocContextWithCallbacks(
       bufferSize,
-      0, // Always read mode
+      0, // read mode
       callbacks.read,
-      undefined, // No write callback in high-level API
+      undefined,
       callbacks.seek,
     );
+
+    return ioContext;
+  }
+
+  /**
+   * Create I/O context from custom output callbacks.
+   *
+   * Sets up custom I/O with user-provided write, optional seek, and optional read callbacks.
+   *
+   * @param callbacks - User I/O callbacks
+   *
+   * @param bufferSize - Internal buffer size
+   *
+   * @param maxPacketSize - Maximum packet size
+   *
+   * @returns Configured I/O context
+   *
+   * @internal
+   */
+  private static createFromOutputCallbacks(callbacks: IOOutputCallbacks, bufferSize: number, maxPacketSize: number): IOContext {
+    const ioContext = new IOContext();
+    ioContext.allocContextWithCallbacks(
+      bufferSize,
+      1, // write mode
+      callbacks.read,
+      callbacks.write,
+      callbacks.seek,
+    );
+    ioContext.maxPacketSize = maxPacketSize;
 
     return ioContext;
   }
