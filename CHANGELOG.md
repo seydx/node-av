@@ -44,6 +44,65 @@ await using screen = await DeviceAPI.openScreen({
 | Combined | AVFoundation | — | DirectShow |
 | Screen | ScreenCaptureKit | x11grab | GDI grab |
 
+#### AbortSignal / AbortController Support
+
+All high-level API classes now support `AbortSignal` for cancellation via an optional `signal` property in their options:
+
+- `Demuxer`, `Muxer`, `Decoder`, `Encoder`, `FilterAPI`, `BitStreamFilterAPI` — pass `signal` in options
+- `pipeline()` — pass `{ signal }` as the last argument
+- Async generators (`packets()`, `frames()`, `packets()`) stop yielding on abort
+- Async methods (`decode()`, `encode()`, `writePacket()`, etc.) throw `AbortError` on abort
+- Pre-aborted signals are rejected immediately
+- `close()` is never affected — cleanup always runs
+
+**Example:**
+```typescript
+const controller = new AbortController();
+
+await using input = await Demuxer.open('input.mp4', { signal: controller.signal });
+using decoder = await Decoder.create(input.video()!, { signal: controller.signal });
+
+// Cancel after 5 seconds
+setTimeout(() => controller.abort(), 5000);
+
+try {
+  for await (const packet of input.packets()) {
+    for await (const frame of decoder.frames(packet)) {
+      // Process frame...
+    }
+  }
+} catch (err) {
+  if (err.name === 'AbortError') {
+    console.log('Processing cancelled');
+  }
+}
+
+// Pipeline with signal
+const control = pipeline(input, decoder, encoder, output, { signal: controller.signal });
+await control.completion;
+```
+
+#### Readable & Writable Stream Support
+
+- `Demuxer.open()` now accepts a Node.js `Readable` stream as input, and `Muxer.open()` now accepts a `Writable` stream as output. This enables seamless integration with Node.js stream APIs.
+
+**Example:**
+```typescript
+import { createReadStream, createWriteStream } from 'fs';
+
+// Demux from a Readable stream
+const readable = createReadStream('input.mkv');
+await using input = await Demuxer.open(readable, { format: 'matroska' });
+
+// Mux to a Writable stream (use non-seekable formats like mpegts or matroska)
+const writable = createWriteStream('output.ts');
+await using output = await Muxer.open(writable, { format: 'mpegts' });
+```
+
+#### IOContext Synchronous Dispose
+
+- `IOContext` now implements the synchronous `Disposable` interface (`Symbol.dispose`) in addition to `AsyncDisposable`. This allows using `using` (synchronous) instead of `await using` when async cleanup is not needed.
+
 #### IOContext Input Support
 
 - `Demuxer.open()` and `Demuxer.openSync()` now accept a pre-created `IOContext` as input, enabling advanced custom I/O scenarios with more control over buffering and seeking.

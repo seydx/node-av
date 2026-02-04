@@ -99,7 +99,7 @@ console.log('=== Example 2: Manual iteration with AbortSignal ===');
       }
     }
   } catch (err) {
-    if (err instanceof DOMException && err.name === 'AbortError') {
+    if (err.name === 'AbortError') {
       console.log(`Aborted after ${frameCount} frames.`);
     } else {
       throw err;
@@ -121,7 +121,7 @@ console.log('=== Example 3: Pre-aborted signal ===');
     console.log('This should not be reached');
     void input;
   } catch (err) {
-    if (err instanceof DOMException && err.name === 'AbortError') {
+    if (err.name === 'AbortError') {
       console.log('Correctly rejected: Cannot open with pre-aborted signal.');
     } else {
       throw err;
