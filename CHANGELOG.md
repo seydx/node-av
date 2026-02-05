@@ -25,7 +25,7 @@ New high-level `SharedTexture` class for importing Electron's offscreen renderin
 import { HardwareContext, SharedTexture, AV_HWDEVICE_TYPE_VIDEOTOOLBOX } from 'node-av';
 
 // Create hardware context (platform-specific)
-const hw = await HardwareContext.create(AV_HWDEVICE_TYPE_VIDEOTOOLBOX);
+const hw = HardwareContext.create(AV_HWDEVICE_TYPE_VIDEOTOOLBOX);
 using sharedTexture = SharedTexture.create(hw);
 
 // In Electron paint event with offscreen rendering
@@ -49,7 +49,7 @@ offscreen.webContents.on('paint', (event) => {
 const drmFrame = sharedTexture.importTexture(textureInfo, { pts: 0n });
 
 // Map to VAAPI for encoding
-const vaapiHw = await HardwareContext.create(AV_HWDEVICE_TYPE_VAAPI);
+const vaapiHw = HardwareContext.create(AV_HWDEVICE_TYPE_VAAPI);
 const vaapiFrame = sharedTexture.mapTo(drmFrame, vaapiHw);
 ```
 
