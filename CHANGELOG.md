@@ -2,7 +2,102 @@
 
 All notable changes to this project will be documented in this file.
 
-## [5.2.0] - XXX
+## [Unreleased]
+
+### Added
+
+#### SharedTexture - Electron GPU Texture Import
+
+New high-level `SharedTexture` class for importing Electron's offscreen rendering GPU textures as FFmpeg hardware frames with zero-copy.
+
+**Platform support:**
+
+| Platform | GPU Format | Handle Type |
+|----------|-----------|-------------|
+| macOS | `AV_PIX_FMT_VIDEOTOOLBOX` | IOSurface |
+| Windows | `AV_PIX_FMT_D3D11` | DXGI shared handle |
+| Linux | `AV_PIX_FMT_DRM_PRIME` | DMA-BUF |
+
+**Example:**
+```typescript
+import { HardwareContext, SharedTexture, AV_HWDEVICE_TYPE_VIDEOTOOLBOX } from 'node-av';
+
+// Create hardware context (platform-specific)
+const hw = await HardwareContext.create(AV_HWDEVICE_TYPE_VIDEOTOOLBOX);
+using sharedTexture = SharedTexture.create(hw);
+
+// In Electron paint event with offscreen rendering
+offscreen.webContents.on('paint', (event) => {
+  const texture = event.texture;
+  if (!texture?.textureInfo) return;
+
+  // Import as hardware frame (zero-copy)
+  using frame = sharedTexture.importTexture(texture.textureInfo, { pts: 0n });
+  // frame.format === AV_PIX_FMT_VIDEOTOOLBOX (macOS)
+  // frame.format === AV_PIX_FMT_D3D11 (Windows)
+  // frame.format === AV_PIX_FMT_DRM_PRIME (Linux)
+
+  texture.release();
+});
+```
+
+**New `mapTo()` helper** for mapping frames between hardware formats (e.g., DRM PRIME → VAAPI):
+```typescript
+// Import DRM PRIME frame
+const drmFrame = sharedTexture.importTexture(textureInfo, { pts: 0n });
+
+// Map to VAAPI for encoding
+const vaapiHw = await HardwareContext.create(AV_HWDEVICE_TYPE_VAAPI);
+const vaapiFrame = sharedTexture.mapTo(drmFrame, vaapiHw);
+```
+
+#### FMP4Stream - Async Generator & Init Segment API
+
+- **`fragments()` async generator**: Yields media fragments (moof+mdat) for streaming, separate from init segment
+- **`initSegment` property**: Promise that resolves with ftyp+moov data once available (box mode only)
+- **AbortSignal support**: `signal` option for graceful stream cancellation
+
+**Example:**
+```typescript
+const stream = FMP4Stream.create('rtsp://camera/stream', {
+  supportedCodecs: 'avc1.640029,mp4a.40.2',
+  boxMode: true,
+  signal: controller.signal,
+});
+
+await stream.start();
+
+// Get init segment (ftyp+moov) for MSE SourceBuffer initialization
+const init = await stream.initSegment;
+sourceBuffer.appendBuffer(init);
+
+// Stream media fragments via async generator
+for await (const fragment of stream.fragments()) {
+  sourceBuffer.appendBuffer(fragment.data);
+}
+```
+
+#### RTPStream - AbortSignal Support
+
+- **AbortSignal support**: `signal` option for graceful stream cancellation, consistent with FMP4Stream
+
+**Example:**
+```typescript
+const controller = new AbortController();
+
+const stream = RTPStream.create('rtsp://camera/stream', {
+  signal: controller.signal,
+  onVideoPacket: (rtp) => peer.sendRtp(rtp),
+  onAudioPacket: (rtp) => peer.sendRtp(rtp),
+});
+
+await stream.start();
+
+// Cancel after timeout
+setTimeout(() => controller.abort(), 30000);
+```
+
+## [5.2.0] - 2026-02-05
 
 ### Added
 
