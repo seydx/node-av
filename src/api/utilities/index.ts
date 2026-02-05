@@ -24,12 +24,12 @@ export { StreamingUtils } from './streaming.js';
 
 // Whisper Model Downloader
 export {
-  WhisperDownloader,
   WHISPER_MODELS,
   WHISPER_VAD_MODELS,
+  WhisperDownloader,
   type DownloadOptions,
-  type WhisperModelType,
   type WhisperModelName,
+  type WhisperModelType,
   type WhisperVADModelName,
 } from './whisper-model.js';
 
@@ -38,3 +38,13 @@ export { AsyncQueue } from './async-queue.js';
 
 // Scheduler
 export { Scheduler, SchedulerControl, type SchedulableComponent } from './scheduler.js';
+
+// SharedTexture
+export {
+  SharedTexture,
+  type ImportHandleProps,
+  type SharedTextureHandle,
+  type SharedTextureOptions,
+  type TextureFrameOptions,
+  type TextureInfo,
+} from './electron-shared-texture.js';

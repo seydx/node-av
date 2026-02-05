@@ -81,6 +81,7 @@
                     {
                         "sources": [
                             "src/bindings/device_darwin.mm",
+                            "src/bindings/gpu_texture_darwin.mm",
                         ],
                         "include_dirs": [
                             "/opt/ffbuild/prefix/include",
@@ -160,6 +161,7 @@
                             "-framework Metal",
                             "-framework MetalKit",
                             "-framework Foundation",
+                            "-framework IOSurface",
                             "-framework OpenCL",
                             "-weak_framework ScreenCaptureKit",
                         ],
@@ -202,6 +204,7 @@
                     {
                         "sources": [
                             "src/bindings/device_linux.cc",
+                            "src/bindings/gpu_texture_linux.cc",
                         ],
                         "include_dirs": [
                             "/opt/ffbuild/prefix/include",
@@ -364,6 +367,7 @@
                     {
                         "sources": [
                             "src/bindings/device_win32.cc",
+                            "src/bindings/gpu_texture_win.cc",
                         ],
                         "conditions": [
                             [
@@ -483,6 +487,8 @@
                             "-lmfuuid",
                             "-lpsapi",
                             "-lvfw32",
+                            "-ld3d11",
+                            "-ldxgi",
                         ],
                         "cflags": [
                             "-fvisibility=hidden",

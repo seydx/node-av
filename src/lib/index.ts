@@ -19,7 +19,7 @@ export { CodecParser } from './codec-parser.js';
 export { Packet } from './packet.js';
 
 // Frame
-export { Frame, type AudioFrame, type VideoFrame } from './frame.js';
+export { Frame, type AudioFrame, type D3D11TextureFrame, type DmaBufFrame, type DmaBufPlanes, type IOSurfaceFrame, type VideoFrame } from './frame.js';
 
 // Stream
 export { Stream } from './stream.js';

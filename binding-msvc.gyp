@@ -65,6 +65,7 @@
                 "src/bindings/device_sync.cc",
                 "src/bindings/device_async.cc",
                 "src/bindings/device_win32.cc",
+                "src/bindings/gpu_texture_win.cc",
                 "externals/jellyfin-ffmpeg/fftools/sync_queue.c",
             ],
             "include_dirs": [
@@ -168,6 +169,8 @@
                 "gdi32.lib",
                 "advapi32.lib",
                 "vfw32.lib",
+                "d3d11.lib",
+                "dxgi.lib",
             ],
             "conditions": [
                 [

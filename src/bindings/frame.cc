@@ -1,6 +1,8 @@
 #include "frame.h"
 #include "hardware_frames_context.h"
+#include "hardware_device_context.h"
 #include "dictionary.h"
+#include "gpu_texture.h"
 
 namespace ffmpeg {
 
@@ -29,6 +31,9 @@ Napi::Object Frame::Init(Napi::Env env, Napi::Object exports) {
     InstanceMethod<&Frame::RemoveSideData>("removeSideData"),
     InstanceMethod<&Frame::GetMetadata>("getMetadata"),
     InstanceMethod<&Frame::ApplyCropping>("applyCropping"),
+    InstanceMethod<&Frame::ImportIOSurface>("importIOSurface"),
+    InstanceMethod<&Frame::ImportD3D11Texture>("importD3D11Texture"),
+    InstanceMethod<&Frame::ImportDmaBuf>("importDmaBuf"),
     InstanceMethod<&Frame::Dispose>(Napi::Symbol::WellKnown(env, "dispose")),
 
     InstanceAccessor<&Frame::GetFormat, &Frame::SetFormat>("format"),
@@ -1152,6 +1157,99 @@ Napi::Value Frame::ApplyCropping(const Napi::CallbackInfo& info) {
   // Apply cropping using FFmpeg's av_frame_apply_cropping
   int ret = av_frame_apply_cropping(frame_, flags);
 
+  return Napi::Number::New(env, ret);
+}
+
+Napi::Value Frame::ImportIOSurface(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+  if (!frame_) {
+    return Napi::Number::New(env, AVERROR(EINVAL));
+  }
+
+  if (info.Length() < 2 || !info[0].IsBuffer() || !info[1].IsObject()) {
+    Napi::TypeError::New(env, "Expected (buffer, hwFramesCtx)").ThrowAsJavaScriptException();
+    return Napi::Number::New(env, AVERROR(EINVAL));
+  }
+
+  Napi::Buffer<uint8_t> buffer = info[0].As<Napi::Buffer<uint8_t>>();
+  HardwareFramesContext* framesCtx = UnwrapNativeObject<HardwareFramesContext>(env, info[1], "HardwareFramesContext");
+
+  if (!framesCtx || !framesCtx->Get()) {
+    Napi::TypeError::New(env, "Invalid HardwareFramesContext").ThrowAsJavaScriptException();
+    return Napi::Number::New(env, AVERROR(EINVAL));
+  }
+
+  int ret = importIOSurface(frame_, buffer.Data(), buffer.Length(), framesCtx->Get());
+  return Napi::Number::New(env, ret);
+}
+
+Napi::Value Frame::ImportD3D11Texture(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+  if (!frame_) {
+    return Napi::Number::New(env, AVERROR(EINVAL));
+  }
+
+  if (info.Length() < 2 || !info[0].IsBuffer() || !info[1].IsObject()) {
+    Napi::TypeError::New(env, "Expected (buffer, hwDeviceCtx)").ThrowAsJavaScriptException();
+    return Napi::Number::New(env, AVERROR(EINVAL));
+  }
+
+  Napi::Buffer<uint8_t> buffer = info[0].As<Napi::Buffer<uint8_t>>();
+  HardwareDeviceContext* deviceCtx = UnwrapNativeObject<HardwareDeviceContext>(env, info[1], "HardwareDeviceContext");
+
+  if (!deviceCtx || !deviceCtx->Get()) {
+    Napi::TypeError::New(env, "Invalid HardwareDeviceContext").ThrowAsJavaScriptException();
+    return Napi::Number::New(env, AVERROR(EINVAL));
+  }
+
+  int ret = importD3D11Texture(frame_, buffer.Data(), buffer.Length(), deviceCtx->Get());
+  return Napi::Number::New(env, ret);
+}
+
+Napi::Value Frame::ImportDmaBuf(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+  if (!frame_) {
+    return Napi::Number::New(env, AVERROR(EINVAL));
+  }
+
+  // importDmaBuf(planes, width, height, modifier, swFormat)
+  if (info.Length() < 5 || !info[0].IsArray() || !info[1].IsNumber() ||
+      !info[2].IsNumber() || !info[3].IsBigInt() || !info[4].IsNumber()) {
+    Napi::TypeError::New(env, "Expected (planes[], width, height, modifier, swFormat)").ThrowAsJavaScriptException();
+    return Napi::Number::New(env, AVERROR(EINVAL));
+  }
+
+  Napi::Array planes = info[0].As<Napi::Array>();
+  int width = info[1].As<Napi::Number>().Int32Value();
+  int height = info[2].As<Napi::Number>().Int32Value();
+  bool lossless;
+  uint64_t modifier = info[3].As<Napi::BigInt>().Uint64Value(&lossless);
+  int swFormat = info[4].As<Napi::Number>().Int32Value();
+
+  int numPlanes = planes.Length();
+  if (numPlanes <= 0 || numPlanes > 4) {
+    Napi::TypeError::New(env, "Invalid number of planes (expected 1-4)").ThrowAsJavaScriptException();
+    return Napi::Number::New(env, AVERROR(EINVAL));
+  }
+
+  int fds[4] = {0};
+  int strides[4] = {0};
+  int offsets[4] = {0};
+  int sizes[4] = {0};
+
+  for (int i = 0; i < numPlanes; i++) {
+    Napi::Object plane = planes.Get(i).As<Napi::Object>();
+    fds[i] = plane.Get("fd").As<Napi::Number>().Int32Value();
+    strides[i] = plane.Get("stride").As<Napi::Number>().Int32Value();
+    offsets[i] = plane.Get("offset").As<Napi::Number>().Int32Value();
+    sizes[i] = plane.Get("size").As<Napi::Number>().Int32Value();
+  }
+
+  int ret = importDmaBuf(frame_, fds, strides, offsets, sizes,
+                          numPlanes, width, height, modifier, swFormat);
   return Napi::Number::New(env, ret);
 }
 

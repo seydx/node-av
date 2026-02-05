@@ -65,6 +65,7 @@
                 "src/bindings/device_sync.cc",
                 "src/bindings/device_async.cc",
                 "src/bindings/device_darwin.mm",
+                "src/bindings/gpu_texture_darwin.mm",
                 "externals/jellyfin-ffmpeg/fftools/sync_queue.c",
             ],
             "include_dirs": [
@@ -140,6 +141,7 @@
                 "-lbz2",
                 "-framework CoreFoundation",
                 "-framework CoreVideo",
+                "-framework IOSurface",
                 "-framework CoreMedia",
                 "-framework CoreServices",
                 "-framework AudioToolbox",

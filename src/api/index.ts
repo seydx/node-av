@@ -40,7 +40,7 @@ export { WebRTCStream, type WebRTCCodecInfo, type WebRTCStreamOptions } from './
 export { RTPStream, type RTPStreamOptions } from './rtp-stream.js';
 
 // fMP4 Stream
-export { FMP4_CODECS, FMP4Stream, type FMP4Data, type FMP4StreamOptions, type MP4Box, type MP4BoxType } from './fmp4-stream.js';
+export { FMP4_CODECS, FMP4Stream, type FMP4Data, type FMP4Fragment, type FMP4StreamOptions, type MP4Box, type MP4BoxType } from './fmp4-stream.js';
 
 // Whisper Transcriber
 export { WhisperTranscriber, type WhisperSegment, type WhisperTranscriberOptions } from './whisper.js';

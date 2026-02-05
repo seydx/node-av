@@ -1,4 +1,4 @@
-import { AV_NOPTS_VALUE, AV_TIME_BASE_Q, AVMEDIA_TYPE_AUDIO, AVMEDIA_TYPE_UNKNOWN, AVMEDIA_TYPE_VIDEO } from '../constants/constants.js';
+import { AV_NOPTS_VALUE, AV_PIX_FMT_BGRA, AV_TIME_BASE_Q, AVMEDIA_TYPE_AUDIO, AVMEDIA_TYPE_UNKNOWN, AVMEDIA_TYPE_VIDEO } from '../constants/constants.js';
 import { bindings } from './binding.js';
 import { FFmpegError } from './error.js';
 import { HardwareFramesContext } from './hardware-frames-context.js';
@@ -17,6 +17,7 @@ import type {
   AVSampleFormat,
 } from '../constants/constants.js';
 import { Dictionary } from './dictionary.js';
+import type { HardwareDeviceContext } from './hardware-device-context.js';
 import type { NativeFrame, NativeWrapper } from './native-types.js';
 import type { ChannelLayout, IRational } from './types.js';
 
@@ -40,6 +41,51 @@ export interface AudioFrame {
   format: AVSampleFormat;
   sampleRate: number;
   channelLayout: ChannelLayout;
+  timeBase?: IRational;
+  pts?: bigint;
+}
+
+/**
+ * Options for {@link Frame.fromIOSurface} (macOS only).
+ *
+ * Creates a zero-copy hardware frame from an IOSurface handle.
+ * Width and height are auto-detected from the IOSurface.
+ */
+export interface IOSurfaceFrame {
+  hwFramesCtx: HardwareFramesContext;
+  timeBase?: IRational;
+  pts?: bigint;
+}
+
+/**
+ * Options for {@link Frame.fromD3D11Texture} (Windows only).
+ *
+ * Creates a zero-copy hardware frame from a D3D11 shared texture handle.
+ * Width and height are auto-detected from the texture descriptor.
+ */
+export interface D3D11TextureFrame {
+  hwDeviceCtx: HardwareDeviceContext;
+  timeBase?: IRational;
+  pts?: bigint;
+}
+
+/**
+ * DMA-BUF plane descriptors for Linux GPU buffer sharing.
+ */
+export interface DmaBufPlanes {
+  planes: { fd: number; stride: number; offset: number; size: number }[];
+  modifier: string;
+}
+
+/**
+ * Options for {@link Frame.fromDmaBuf} (Linux only).
+ *
+ * Creates a zero-copy DRM PRIME frame from DMA-BUF file descriptors.
+ */
+export interface DmaBufFrame {
+  width: number;
+  height: number;
+  swFormat?: AVPixelFormat;
   timeBase?: IRational;
   pts?: bigint;
 }
@@ -197,6 +243,119 @@ export class Frame implements Disposable, NativeWrapper<NativeFrame> {
     const copyRet = frame.fromBuffer(buffer);
     FFmpegError.throwIfError(copyRet, 'Failed to copy buffer to frame');
 
+    return frame;
+  }
+
+  /**
+   * Create a hardware frame from an IOSurface handle (macOS only).
+   *
+   * Zero-copy: the frame references the same GPU memory as the IOSurface.
+   * Width and height are auto-detected from the IOSurface.
+   *
+   * @param ioSurface - IOSurfaceRef pointer as Buffer
+   *
+   * @param props - Hardware context and timing options
+   *
+   * @returns Hardware frame referencing the IOSurface GPU memory
+   *
+   * @throws {FFmpegError} If the import fails (e.g., invalid handle, wrong platform)
+   *
+   * @example
+   * ```typescript
+   * import { Frame, HardwareFramesContext } from 'node-av/lib';
+   *
+   * const frame = Frame.fromIOSurface(ioSurfaceBuffer, {
+   *   hwFramesCtx,
+   *   pts: 0n,
+   *   timeBase: { num: 1, den: 90000 },
+   * });
+   * ```
+   */
+  static fromIOSurface(ioSurface: Buffer, props: IOSurfaceFrame): Frame {
+    const frame = new Frame();
+    frame.alloc();
+    frame.pts = props.pts ?? AV_NOPTS_VALUE;
+    if (props.timeBase) {
+      frame.timeBase = new Rational(props.timeBase.num, props.timeBase.den);
+    }
+    const ret = frame.native.importIOSurface(ioSurface, props.hwFramesCtx.getNative());
+    FFmpegError.throwIfError(ret, 'Failed to import IOSurface');
+    return frame;
+  }
+
+  /**
+   * Create a hardware frame from a D3D11 shared texture (Windows only).
+   *
+   * Zero-copy: the frame references the shared GPU texture.
+   * Width and height are auto-detected from the texture descriptor.
+   *
+   * @param handle - D3D11 shared texture handle as Buffer
+   *
+   * @param props - Hardware context and timing options
+   *
+   * @returns Hardware frame referencing the D3D11 texture
+   *
+   * @throws {FFmpegError} If the import fails (e.g., invalid handle, wrong platform)
+   *
+   * @example
+   * ```typescript
+   * import { Frame, HardwareDeviceContext } from 'node-av/lib';
+   *
+   * const frame = Frame.fromD3D11Texture(sharedTextureHandle, {
+   *   hwDeviceCtx,
+   *   pts: 0n,
+   *   timeBase: { num: 1, den: 90000 },
+   * });
+   * ```
+   */
+  static fromD3D11Texture(handle: Buffer, props: D3D11TextureFrame): Frame {
+    const frame = new Frame();
+    frame.alloc();
+    frame.pts = props.pts ?? AV_NOPTS_VALUE;
+    if (props.timeBase) {
+      frame.timeBase = new Rational(props.timeBase.num, props.timeBase.den);
+    }
+    const ret = frame.native.importD3D11Texture(handle, props.hwDeviceCtx.getNative());
+    FFmpegError.throwIfError(ret, 'Failed to import D3D11 shared texture');
+    return frame;
+  }
+
+  /**
+   * Create a DRM PRIME frame from DMA-BUF file descriptors (Linux only).
+   *
+   * Zero-copy: the frame references the DMA-BUF GPU memory.
+   *
+   * @param dmaBuf - DMA-BUF plane descriptors
+   *
+   * @param props - Dimensions and timing options
+   *
+   * @returns Hardware frame referencing the DMA-BUF memory
+   *
+   * @throws {FFmpegError} If the import fails (e.g., invalid descriptors, wrong platform)
+   *
+   * @example
+   * ```typescript
+   * import { Frame } from 'node-av/lib';
+   *
+   * // Create DRM PRIME frame from DMA-BUF
+   * const drmFrame = Frame.fromDmaBuf(dmaBufPlanes, {
+   *   width: 1920,
+   *   height: 1080,
+   *   pts: 0n,
+   *   timeBase: { num: 1, den: 90000 },
+   * });
+   * ```
+   */
+  static fromDmaBuf(dmaBuf: DmaBufPlanes, props: DmaBufFrame): Frame {
+    const frame = new Frame();
+    frame.alloc();
+    frame.pts = props.pts ?? AV_NOPTS_VALUE;
+    if (props.timeBase) {
+      frame.timeBase = new Rational(props.timeBase.num, props.timeBase.den);
+    }
+    const swFormat = props.swFormat ?? AV_PIX_FMT_BGRA;
+    const ret = frame.native.importDmaBuf(dmaBuf.planes, props.width, props.height, BigInt(dmaBuf.modifier), swFormat);
+    FFmpegError.throwIfError(ret, 'Failed to import DMA-BUF');
     return frame;
   }
 

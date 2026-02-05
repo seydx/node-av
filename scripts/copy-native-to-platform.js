@@ -22,9 +22,7 @@ if (!existsSync(source)) {
 }
 
 for (const toolchain of toolchains) {
-  const packageName = toolchain
-    ? `@seydx/node-av-${platform}-${arch}-${toolchain}`
-    : `@seydx/node-av-${platform}-${arch}`;
+  const packageName = toolchain ? `@seydx/node-av-${platform}-${arch}-${toolchain}` : `@seydx/node-av-${platform}-${arch}`;
 
   const dest = resolve(root, 'node_modules', packageName, 'node-av.node');
   mkdirSync(dirname(dest), { recursive: true });

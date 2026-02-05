@@ -132,6 +132,10 @@ private:
   void SetRepeatPict(const Napi::CallbackInfo& info, const Napi::Value& value);
 
   Napi::Value ApplyCropping(const Napi::CallbackInfo& info);
+
+  Napi::Value ImportIOSurface(const Napi::CallbackInfo& info);
+  Napi::Value ImportD3D11Texture(const Napi::CallbackInfo& info);
+  Napi::Value ImportDmaBuf(const Napi::CallbackInfo& info);
 };
 
 } // namespace ffmpeg
