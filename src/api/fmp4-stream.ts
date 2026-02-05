@@ -86,6 +86,16 @@ export interface MP4Box {
 }
 
 /**
+ * A fragment of fMP4 data yielded by {@link FMP4Stream.fragments}.
+ */
+export interface FMP4Fragment {
+  /** fMP4 data buffer */
+  data: Buffer;
+  /** Box information (complete boxes, parsed box details) */
+  info: FMP4Data;
+}
+
+/**
  * fMP4 data information provided in onData callback.
  */
 export interface FMP4Data {
@@ -191,6 +201,14 @@ export interface FMP4StreamOptions {
    * @default '+frag_keyframe+separate_moof+default_base_moof+empty_moov'
    */
   movFlags?: string;
+
+  /**
+   * AbortSignal for cancellation.
+   *
+   * When aborted, the stream stops gracefully, equivalent to calling stop().
+   * If already aborted when start() is called, throws AbortError.
+   */
+  signal?: AbortSignal;
 }
 
 /**
@@ -248,7 +266,7 @@ export const FMP4_CODECS = {
  * ```
  */
 export class FMP4Stream {
-  private options: Required<FMP4StreamOptions>;
+  private options: Required<Omit<FMP4StreamOptions, 'signal'>>;
   private inputUrl: string | null;
   private inputOptions: DemuxerOptions;
   private input?: Demuxer;
@@ -261,8 +279,20 @@ export class FMP4Stream {
   private audioFilter?: FilterAPI;
   private audioEncoder?: Encoder;
   private pipeline?: PipelineControl;
+  private signal?: AbortSignal;
   private supportedCodecs: Set<string>;
   private incompleteBoxBuffer: Buffer | null = null;
+  private fragmentQueue: {
+    queue: FMP4Fragment[];
+    resolve: ((value: IteratorResult<FMP4Fragment>) => void) | null;
+    done: boolean;
+  } | null = null;
+
+  private _initSegment: Buffer | null = null;
+  private _initSegmentResolve: ((value: Buffer) => void) | null = null;
+  private _initSegmentPromise: Promise<Buffer> | null = null;
+  private _ftypData: Buffer | null = null;
+  private _moovData: Buffer | null = null;
 
   /**
    * @param input - Media input URL or pre-opened Demuxer
@@ -316,6 +346,8 @@ export class FMP4Stream {
       movFlags: options.movFlags ?? '+frag_keyframe+separate_moof+default_base_moof+empty_moov',
     };
 
+    this.signal = options.signal;
+
     // Parse supported codecs
     this.supportedCodecs = new Set(
       this.options.supportedCodecs
@@ -358,6 +390,28 @@ export class FMP4Stream {
    */
   static create(input: string | Demuxer, options: FMP4StreamOptions = {}): FMP4Stream {
     return new FMP4Stream(input, options);
+  }
+
+  /**
+   * Promise that resolves with the init segment (ftyp+moov).
+   *
+   * Only available when boxMode is enabled.
+   * Resolves once the first ftyp and moov boxes have been received.
+   *
+   * @throws {Error} If boxMode is not enabled
+   */
+  get initSegment(): Promise<Buffer> {
+    if (!this.options.boxMode) {
+      throw new Error('initSegment is only available in box mode');
+    }
+    this._initSegmentPromise ??= new Promise<Buffer>((resolve) => {
+      if (this._initSegment) {
+        resolve(this._initSegment);
+      } else {
+        this._initSegmentResolve = resolve;
+      }
+    });
+    return this._initSegmentPromise;
   }
 
   /**
@@ -497,6 +551,9 @@ export class FMP4Stream {
       return;
     }
 
+    this.signal?.throwIfAborted();
+    this.signal?.addEventListener('abort', () => this.stop(), { once: true });
+
     // Open input if not already open
     if (!this.input) {
       if (!this.inputUrl) {
@@ -604,10 +661,9 @@ export class FMP4Stream {
           this.processBoxMode(buffer);
         } else {
           // Chunk mode: send raw data immediately
-          this.options.onData(buffer, {
-            isComplete: false,
-            boxes: [],
-          });
+          const info: FMP4Data = { isComplete: false, boxes: [] };
+          this.options.onData(buffer, info);
+          this.pushFragment(buffer, info);
         }
         return buffer.length;
       },
@@ -626,10 +682,11 @@ export class FMP4Stream {
 
     this.runPipeline()
       .then(() => {
-        // Pipeline completed successfully
+        this.endFragments();
         this.options.onClose?.();
       })
       .catch(async (error) => {
+        this.endFragments();
         await this.stop();
         this.options.onClose?.(error);
       });
@@ -654,6 +711,8 @@ export class FMP4Stream {
    * ```
    */
   async stop(): Promise<void> {
+    this.endFragments();
+
     // Stop pipeline if running and wait for completion
     if (this.pipeline && !this.pipeline.isStopped()) {
       this.pipeline.stop();
@@ -685,6 +744,65 @@ export class FMP4Stream {
 
     await this.output?.close();
     this.output = undefined;
+
+    this._initSegment = null;
+    this._initSegmentResolve = null;
+    this._initSegmentPromise = null;
+    this._ftypData = null;
+    this._moovData = null;
+  }
+
+  /**
+   * Async generator that yields media fragments (moof+mdat chunks).
+   *
+   * In box mode, yields only media fragments (chunks containing moof boxes),
+   * NOT the init segment. Use {@link initSegment} to get the ftyp+moov data.
+   *
+   * In chunk mode (boxMode disabled), yields every chunk as-is since
+   * box-level filtering is not possible without box parsing.
+   *
+   * The generator completes when the stream stops or the pipeline ends.
+   *
+   * @yields {FMP4Fragment} Media fragment with data buffer and box info
+   *
+   * @example
+   * ```typescript
+   * const stream = FMP4Stream.create('rtsp://camera/stream', {
+   *   supportedCodecs: 'avc1.640029,mp4a.40.2',
+   *   boxMode: true,
+   * });
+   *
+   * await stream.start();
+   * const init = await stream.initSegment;
+   *
+   * for await (const fragment of stream.fragments()) {
+   *   sendToClient(fragment.data);
+   * }
+   * ```
+   */
+  async *fragments(): AsyncGenerator<FMP4Fragment, void> {
+    this.fragmentQueue = { queue: [], resolve: null, done: false };
+
+    try {
+      while (true) {
+        const result = await new Promise<IteratorResult<FMP4Fragment>>((resolve) => {
+          if (this.fragmentQueue!.queue.length > 0) {
+            resolve({ value: this.fragmentQueue!.queue.shift()!, done: false });
+            return;
+          }
+          if (this.fragmentQueue!.done) {
+            resolve({ value: undefined as any, done: true });
+            return;
+          }
+          this.fragmentQueue!.resolve = resolve;
+        });
+
+        if (result.done) break;
+        yield result.value;
+      }
+    } finally {
+      this.fragmentQueue = null;
+    }
   }
 
   /**
@@ -699,6 +817,7 @@ export class FMP4Stream {
 
     const hasVideo = this.input?.video() !== undefined;
     const hasAudio = this.input?.audio() !== undefined;
+    const opts = this.signal ? { signal: this.signal } : undefined;
 
     if (hasAudio && hasVideo) {
       this.pipeline = pipeline(
@@ -708,6 +827,7 @@ export class FMP4Stream {
           audio: [this.audioDecoder, this.audioFilter, this.audioEncoder],
         },
         this.output,
+        opts,
       );
     } else if (hasVideo) {
       this.pipeline = pipeline(
@@ -716,6 +836,7 @@ export class FMP4Stream {
           video: [this.videoDecoder, this.videoFilter, this.videoEncoder],
         },
         this.output,
+        opts,
       );
     } else if (hasAudio) {
       this.pipeline = pipeline(
@@ -724,6 +845,7 @@ export class FMP4Stream {
           audio: [this.audioDecoder, this.audioFilter, this.audioEncoder],
         },
         this.output,
+        opts,
       );
     } else {
       throw new Error('No audio or video streams found in input');
@@ -832,10 +954,68 @@ export class FMP4Stream {
 
     // If we have complete boxes, send them to the callback
     if (boxes.length > 0) {
-      this.options.onData(chunk.subarray(0, offset), {
-        isComplete: true,
-        boxes,
-      });
+      const boxData = chunk.subarray(0, offset);
+      const info: FMP4Data = { isComplete: true, boxes };
+
+      // onData callback gets everything
+      this.options.onData(boxData, info);
+
+      // Init segment tracking: collect ftyp and moov data
+      if (!this._initSegment) {
+        for (const box of boxes) {
+          if (box.type === 'ftyp' && !this._ftypData) {
+            this._ftypData = chunk.subarray(box.offset, box.offset + box.size);
+          }
+          if (box.type === 'moov' && !this._moovData) {
+            this._moovData = chunk.subarray(box.offset, box.offset + box.size);
+          }
+        }
+        if (this._ftypData && this._moovData) {
+          this._initSegment = Buffer.concat([this._ftypData, this._moovData]);
+          this._initSegmentResolve?.(this._initSegment);
+          this._initSegmentResolve = null;
+        }
+      }
+
+      // fragments() generator gets only media fragments (moof+mdat)
+      const isMediaFragment = boxes.some((b) => b.type === 'moof');
+      if (isMediaFragment) {
+        this.pushFragment(boxData, info);
+      }
+    }
+  }
+
+  /**
+   * Push a fragment to the fragment queue for the async generator.
+   *
+   * @param data - fMP4 data buffer
+   *
+   * @param info - Parsed box information
+   *
+   * @internal
+   */
+  private pushFragment(data: Buffer, info: FMP4Data): void {
+    if (!this.fragmentQueue) return;
+    const fragment: FMP4Fragment = { data, info };
+    if (this.fragmentQueue.resolve) {
+      this.fragmentQueue.resolve({ value: fragment, done: false });
+      this.fragmentQueue.resolve = null;
+    } else {
+      this.fragmentQueue.queue.push(fragment);
+    }
+  }
+
+  /**
+   * Signal the fragment queue that no more fragments will arrive.
+   *
+   * @internal
+   */
+  private endFragments(): void {
+    if (!this.fragmentQueue) return;
+    this.fragmentQueue.done = true;
+    if (this.fragmentQueue.resolve) {
+      this.fragmentQueue.resolve({ value: undefined as any, done: true });
+      this.fragmentQueue.resolve = null;
     }
   }
 }
