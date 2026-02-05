@@ -159,6 +159,25 @@ const parseEnums = (headerPath) => {
 
   // ADDITIONAL: Parse unnamed enums (like AV_BUFFERSRC_FLAG_* in buffersrc.h)
   // Pattern: enum { AV_SOMETHING = value, ... };
+
+  // Mapping table: constant prefix -> type name
+  const anonymousEnumMappings = [
+    // libavfilter/buffersrc.h
+    { prefix: 'AV_BUFFERSRC_FLAG_', typeName: 'AVBufferSrcFlag' },
+    // libavutil/hwcontext.h
+    { prefix: 'AV_HWFRAME_MAP_', typeName: 'AVHWFrameMapFlag' },
+    // libavutil/frame.h
+    { prefix: 'AV_FRAME_CROP_', typeName: 'AVFrameCropFlag' },
+    // libavutil/hwcontext_vaapi.h
+    { prefix: 'AV_VAAPI_DRIVER_QUIRK_', typeName: 'AVVaapiDriverQuirk' },
+    // libavutil/hwcontext_drm.h
+    { prefix: 'AV_DRM_MAX_', typeName: 'AVDRMMax' },
+    // libavutil/opt.h
+    { prefix: 'AV_OPT_FLAG_IMPLICIT_', typeName: 'AVOptFlagImplicit' },
+    // libavcodec/codec.h
+    { prefix: 'AV_CODEC_HW_CONFIG_METHOD_', typeName: 'AVCodecHWConfigMethod' },
+  ];
+
   const unnamedEnumPattern = /enum\s*{\s*([^}]+)}\s*;/gs;
   while ((match = unnamedEnumPattern.exec(content)) !== null) {
     const enumContent = match[1];
@@ -185,17 +204,25 @@ const parseEnums = (headerPath) => {
             currentValue = parseInt(explicitValue);
           } else if (/^0x[0-9a-fA-F]+$/.test(explicitValue)) {
             currentValue = parseInt(explicitValue, 16);
+          } else if (/^\(?\s*\d+U?\s*<<\s*\d+\s*\)?$/.test(explicitValue)) {
+            // Handle bit shift expressions like (1 << 0), 1 << 1, (1U << 2)
+            const shiftMatch = explicitValue.match(/(\d+)U?\s*<<\s*(\d+)/);
+            if (shiftMatch) {
+              const base = parseInt(shiftMatch[1]);
+              const shift = parseInt(shiftMatch[2]);
+              currentValue = base << shift;
+            }
           }
         }
 
         // Find a matching enum name based on the constant prefix
-        // e.g., AV_BUFFERSRC_FLAG_* -> AVBufferSrcFlag
         let enumName = null;
-
-        if (name.startsWith('AV_BUFFERSRC_FLAG_')) {
-          enumName = 'AVBufferSrcFlag';
+        for (const mapping of anonymousEnumMappings) {
+          if (name.startsWith(mapping.prefix)) {
+            enumName = mapping.typeName;
+            break;
+          }
         }
-        // Add more patterns here if needed
 
         if (enumName) {
           if (!enums[enumName]) {
@@ -733,20 +760,6 @@ export type EOFSignal = typeof EOF;
       }
     }
     output += '\n';
-  }
-
-  // Add hardware configuration method constants
-  // These are defined as anonymous enum values in codec.h
-  if (!processedTypes.has('AVCodecHWConfigMethod')) {
-    output += '// ============================================================================\n';
-    output += '// AV_CODEC_HW_CONFIG_METHOD - Hardware configuration methods\n';
-    output += '// ============================================================================\n\n';
-    output += 'export const AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX = 0x01;\n';
-    output += 'export const AV_CODEC_HW_CONFIG_METHOD_HW_FRAMES_CTX = 0x02;\n';
-    output += 'export const AV_CODEC_HW_CONFIG_METHOD_INTERNAL = 0x04;\n';
-    output += 'export const AV_CODEC_HW_CONFIG_METHOD_AD_HOC = 0x08;\n';
-    output += '\n';
-    processedTypes.add('AVCodecHWConfigMethod');
   }
 
   // Extract and process AVERROR constants from error.h and grouped constants

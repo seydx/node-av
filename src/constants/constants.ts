@@ -67,6 +67,14 @@ export const AV_PICTURE_STRUCTURE_TOP_FIELD = 1 as AVPictureStructure;
 export const AV_PICTURE_STRUCTURE_BOTTOM_FIELD = 2 as AVPictureStructure;
 export const AV_PICTURE_STRUCTURE_FRAME = 3 as AVPictureStructure;
 
+// libavcodec/codec.h
+export type AVCodecHWConfigMethod = number & { readonly [__ffmpeg_brand]: 'AVCodecHWConfigMethod' };
+
+export const AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX = 1 as AVCodecHWConfigMethod;
+export const AV_CODEC_HW_CONFIG_METHOD_HW_FRAMES_CTX = 2 as AVCodecHWConfigMethod;
+export const AV_CODEC_HW_CONFIG_METHOD_INTERNAL = 4 as AVCodecHWConfigMethod;
+export const AV_CODEC_HW_CONFIG_METHOD_AD_HOC = 8 as AVCodecHWConfigMethod;
+
 // libavcodec/codec_id.h
 export type AVCodecID = number & { readonly [__ffmpeg_brand]: 'AVCodecID' };
 
@@ -951,6 +959,11 @@ export const AV_AFD_4_3_SP_14_9 = 13 as AVActiveFormatDescription;
 export const AV_AFD_16_9_SP_14_9 = 14 as AVActiveFormatDescription;
 export const AV_AFD_SP_4_3 = 15 as AVActiveFormatDescription;
 
+// libavutil/frame.h
+export type AVFrameCropFlag = number & { readonly [__ffmpeg_brand]: 'AVFrameCropFlag' };
+
+export const AV_FRAME_CROP_UNALIGNED = 1 as AVFrameCropFlag;
+
 // libavutil/hdr_dynamic_metadata.h
 export type AVHDRPlusOverlapProcessOption = number & { readonly [__ffmpeg_brand]: 'AVHDRPlusOverlapProcessOption' };
 
@@ -993,10 +1006,31 @@ export type AVHWFrameTransferDirection = number & { readonly [__ffmpeg_brand]: '
 export const AV_HWFRAME_TRANSFER_DIRECTION_FROM = 0 as AVHWFrameTransferDirection;
 export const AV_HWFRAME_TRANSFER_DIRECTION_TO = 1 as AVHWFrameTransferDirection;
 
+// libavutil/hwcontext.h
+export type AVHWFrameMapFlag = number & { readonly [__ffmpeg_brand]: 'AVHWFrameMapFlag' };
+
+export const AV_HWFRAME_MAP_READ = 1 as AVHWFrameMapFlag;
+export const AV_HWFRAME_MAP_WRITE = 2 as AVHWFrameMapFlag;
+export const AV_HWFRAME_MAP_OVERWRITE = 4 as AVHWFrameMapFlag;
+export const AV_HWFRAME_MAP_DIRECT = 8 as AVHWFrameMapFlag;
+
 // libavutil/hwcontext_d3d12va.h
 export type AVD3D12VAFrameFlags = number & { readonly [__ffmpeg_brand]: 'AVD3D12VAFrameFlags' };
 
 export const AV_D3D12VA_FRAME_FLAG_NONE = 0 as AVD3D12VAFrameFlags;
+
+// libavutil/hwcontext_drm.h
+export type AVDRMMax = number & { readonly [__ffmpeg_brand]: 'AVDRMMax' };
+
+export const AV_DRM_MAX_PLANES = 4 as AVDRMMax;
+
+// libavutil/hwcontext_vaapi.h
+export type AVVaapiDriverQuirk = number & { readonly [__ffmpeg_brand]: 'AVVaapiDriverQuirk' };
+
+export const AV_VAAPI_DRIVER_QUIRK_USER_SET = 1 as AVVaapiDriverQuirk;
+export const AV_VAAPI_DRIVER_QUIRK_RENDER_PARAM_BUFFERS = 2 as AVVaapiDriverQuirk;
+export const AV_VAAPI_DRIVER_QUIRK_ATTRIB_MEMTYPE = 4 as AVVaapiDriverQuirk;
+export const AV_VAAPI_DRIVER_QUIRK_SURFACE_ATTRIBUTES = 8 as AVVaapiDriverQuirk;
 
 // libavutil/iamf.h
 export type AVIAMFAnimationType = number & { readonly [__ffmpeg_brand]: 'AVIAMFAnimationType' };
@@ -1091,6 +1125,11 @@ export const AV_OPT_TYPE_BOOL = 18 as AVOptionTypeBool;
 export const AV_OPT_TYPE_CHLAYOUT = 19 as AVOptionTypeChLayout;
 export const AV_OPT_TYPE_UINT = 20 as AVOptionTypeUint;
 export const AV_OPT_TYPE_BINARY_INT_ARRAY = 25 as AVOptionTypeBinaryIntArray; // For int arrays like pix_fmts
+
+// libavutil/opt.h
+export type AVOptFlagImplicit = number & { readonly [__ffmpeg_brand]: 'AVOptFlagImplicit' };
+
+export const AV_OPT_FLAG_IMPLICIT_KEY = 1 as AVOptFlagImplicit;
 
 // libavutil/pixfmt.h
 export type AVPixelFormat = number & { readonly [__ffmpeg_brand]: 'AVPixelFormat' };
@@ -2339,15 +2378,6 @@ export type AVThreadType = number & { readonly [__ffmpeg_brand]: 'AVThreadType' 
 
 export const FF_THREAD_FRAME = 1 as AVThreadType;
 export const FF_THREAD_SLICE = 2 as AVThreadType;
-
-// ============================================================================
-// AV_CODEC_HW_CONFIG_METHOD - Hardware configuration methods
-// ============================================================================
-
-export const AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX = 0x01;
-export const AV_CODEC_HW_CONFIG_METHOD_HW_FRAMES_CTX = 0x02;
-export const AV_CODEC_HW_CONFIG_METHOD_INTERNAL = 0x04;
-export const AV_CODEC_HW_CONFIG_METHOD_AD_HOC = 0x08;
 
 // Error codes
 export type AVError = number & { readonly [__ffmpeg_brand]: 'AVError' };
