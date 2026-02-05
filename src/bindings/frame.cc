@@ -2,7 +2,11 @@
 #include "hardware_frames_context.h"
 #include "hardware_device_context.h"
 #include "dictionary.h"
+
+// Platform-specific GPU texture imports
+#if defined(__APPLE__) || defined(_WIN32) || defined(__linux__)
 #include "gpu_texture.h"
+#endif
 
 namespace ffmpeg {
 
@@ -1163,6 +1167,7 @@ Napi::Value Frame::ApplyCropping(const Napi::CallbackInfo& info) {
 Napi::Value Frame::ImportIOSurface(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
+#ifdef __APPLE__
   if (!frame_) {
     return Napi::Number::New(env, AVERROR(EINVAL));
   }
@@ -1182,11 +1187,17 @@ Napi::Value Frame::ImportIOSurface(const Napi::CallbackInfo& info) {
 
   int ret = importIOSurface(frame_, buffer.Data(), buffer.Length(), framesCtx->Get());
   return Napi::Number::New(env, ret);
+#else
+  // IOSurface is only available on macOS
+  Napi::Error::New(env, "importIOSurface is only available on macOS").ThrowAsJavaScriptException();
+  return Napi::Number::New(env, AVERROR(ENOSYS));
+#endif
 }
 
 Napi::Value Frame::ImportD3D11Texture(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
+#ifdef _WIN32
   if (!frame_) {
     return Napi::Number::New(env, AVERROR(EINVAL));
   }
@@ -1206,11 +1217,17 @@ Napi::Value Frame::ImportD3D11Texture(const Napi::CallbackInfo& info) {
 
   int ret = importD3D11Texture(frame_, buffer.Data(), buffer.Length(), deviceCtx->Get());
   return Napi::Number::New(env, ret);
+#else
+  // D3D11 is only available on Windows
+  Napi::Error::New(env, "importD3D11Texture is only available on Windows").ThrowAsJavaScriptException();
+  return Napi::Number::New(env, AVERROR(ENOSYS));
+#endif
 }
 
 Napi::Value Frame::ImportDmaBuf(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
+#ifdef __linux__
   if (!frame_) {
     return Napi::Number::New(env, AVERROR(EINVAL));
   }
@@ -1251,6 +1268,11 @@ Napi::Value Frame::ImportDmaBuf(const Napi::CallbackInfo& info) {
   int ret = importDmaBuf(frame_, fds, strides, offsets, sizes,
                           numPlanes, width, height, modifier, swFormat);
   return Napi::Number::New(env, ret);
+#else
+  // DMA-BUF is only available on Linux
+  Napi::Error::New(env, "importDmaBuf is only available on Linux").ThrowAsJavaScriptException();
+  return Napi::Number::New(env, AVERROR(ENOSYS));
+#endif
 }
 
 Napi::Value Frame::Dispose(const Napi::CallbackInfo& info) {

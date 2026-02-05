@@ -4,7 +4,26 @@ extern "C" {
 #include <libavutil/hwcontext_drm.h>
 }
 
-#include <drm_fourcc.h>
+// DRM fourcc format codes - inline definitions to avoid libdrm header dependency
+// These are stable kernel ABI and won't change
+#ifndef DRM_FORMAT_ARGB8888
+#define DRM_FORMAT_ARGB8888 0x34325241 // 'AR24'
+#endif
+#ifndef DRM_FORMAT_ABGR8888
+#define DRM_FORMAT_ABGR8888 0x34324241 // 'AB24'
+#endif
+#ifndef DRM_FORMAT_XRGB8888
+#define DRM_FORMAT_XRGB8888 0x34325258 // 'XR24'
+#endif
+#ifndef DRM_FORMAT_XBGR8888
+#define DRM_FORMAT_XBGR8888 0x34324258 // 'XB24'
+#endif
+#ifndef DRM_FORMAT_BGRA8888
+#define DRM_FORMAT_BGRA8888 0x41524742 // 'BGRA'
+#endif
+#ifndef DRM_FORMAT_RGBA8888
+#define DRM_FORMAT_RGBA8888 0x41424752 // 'RGBA'
+#endif
 
 namespace ffmpeg {
 
