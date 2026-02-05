@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [5.2.1] - 2026-02-05
+
 ### Added
 
 #### SharedTexture - Electron GPU Texture Import
