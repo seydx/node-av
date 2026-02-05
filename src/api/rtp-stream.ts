@@ -99,6 +99,14 @@ export interface RTPStreamOptions {
     channels?: number;
     encoderOptions?: EncoderOptions['options'];
   };
+
+  /**
+   * AbortSignal for cancellation.
+   *
+   * When aborted, the stream stops gracefully, equivalent to calling stop().
+   * If already aborted when start() is called, throws AbortError.
+   */
+  signal?: AbortSignal;
 }
 
 /**
@@ -134,7 +142,7 @@ export interface RTPStreamOptions {
  * @see {@link HardwareContext} For GPU acceleration
  */
 export class RTPStream {
-  private options: Required<RTPStreamOptions>;
+  private options: Required<Omit<RTPStreamOptions, 'signal'>>;
   private inputUrl: string | null;
   private inputOptions: DemuxerOptions;
   private input?: Demuxer;
@@ -148,6 +156,7 @@ export class RTPStream {
   private audioFilter?: FilterAPI;
   private audioEncoder?: Encoder;
   private pipeline?: PipelineControl;
+  private signal?: AbortSignal;
   private supportedVideoCodecs: Set<AVCodecID | FFVideoEncoder>;
   private supportedAudioCodecs: Set<AVCodecID | FFAudioEncoder>;
 
@@ -181,6 +190,8 @@ export class RTPStream {
         ...options.inputOptions?.options,
       },
     };
+
+    this.signal = options.signal;
 
     options.supportedVideoCodecs = options.supportedVideoCodecs?.filter(Boolean);
     options.supportedAudioCodecs = options.supportedAudioCodecs?.filter(Boolean);
@@ -324,6 +335,9 @@ export class RTPStream {
     if (this.pipeline) {
       return;
     }
+
+    this.signal?.throwIfAborted();
+    this.signal?.addEventListener('abort', () => this.stop(), { once: true });
 
     if (!this.input) {
       if (!this.inputUrl) {
@@ -598,6 +612,7 @@ export class RTPStream {
 
     const hasVideo = this.input.video() !== undefined && this.videoOutput !== undefined;
     const hasAudio = this.input.audio() !== undefined && this.audioOutput !== undefined;
+    const opts = this.signal ? { signal: this.signal } : undefined;
 
     if (hasAudio && hasVideo) {
       this.pipeline = pipeline(
@@ -610,6 +625,7 @@ export class RTPStream {
           video: this.videoOutput!,
           audio: this.audioOutput!,
         },
+        opts,
       );
     } else if (hasVideo) {
       this.pipeline = pipeline(
@@ -618,6 +634,7 @@ export class RTPStream {
           video: [this.videoDecoder, this.videoFilter, this.videoEncoder],
         },
         this.videoOutput!,
+        opts,
       );
     } else if (hasAudio) {
       this.pipeline = pipeline(
@@ -626,6 +643,7 @@ export class RTPStream {
           audio: [this.audioDecoder, this.audioFilter, this.audioEncoder],
         },
         this.audioOutput!,
+        opts,
       );
     } else {
       throw new Error('No audio or video streams found in input');
