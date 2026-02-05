@@ -501,7 +501,7 @@ NodeAV provides direct bindings to FFmpeg's C APIs, which work with raw memory p
 
 NodeAV fully supports Electron applications. The prebuilt binaries are ABI-compatible with Electron, so no native rebuild is required during packaging. Both the native bindings and the bundled FFmpeg CLI binaries work seamlessly within Electron's main process.
 
-Two complete examples are available: one using [Electron Forge](https://github.com/seydx/node-av/tree/main/examples/electron/forge) and one using [Electron Builder](https://github.com/seydx/node-av/tree/main/examples/electron/builder).
+NodeAV also supports Electron's [offscreen rendering with shared textures](https://www.electronjs.org/docs/latest/tutorial/offscreen-rendering), enabling zero-copy GPU texture import for hardware-accelerated encoding. See the [Electron Builder](https://github.com/seydx/node-av/tree/main/examples/electron/builder) and [Electron Forge](https://github.com/seydx/node-av/tree/main/examples/electron/forge) examples for complete implementations.
 
 If you encounter module resolution errors like `Cannot find module 'lib/binary-stream'`, add this override to your project's `package.json`:
 
@@ -519,6 +519,8 @@ If you encounter module resolution errors like `Cannot find module 'lib/binary-s
 |---------|--------|---------------|----------------|
 | `browser-fmp4` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/browser/fmp4) |
 | `browser-webrtc` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/browser/webrtc) |
+| `electron-builder` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/electron/builder) |
+| `electron-forge` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/electron/forge) |
 | `api-abort-signal` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-abort-signal.ts) |
 | `api-dash` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-dash.ts) |
 | `api-device-capture` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-device-capture.ts) |
