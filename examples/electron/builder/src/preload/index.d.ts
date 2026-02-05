@@ -11,6 +11,12 @@ interface NodeAvAPI {
     message?: string
     error?: string
   }>
+  testGpuTexture: () => Promise<{
+    success?: boolean
+    error?: string
+    steps?: string[]
+    frameInfo?: Record<string, unknown>
+  }>
 }
 
 declare global {

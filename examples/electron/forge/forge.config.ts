@@ -19,7 +19,9 @@ const config: ForgeConfig = {
       return !keep;
     },
   },
-  rebuildConfig: {},
+  rebuildConfig: {
+    onlyModules: [],
+  },
   makers: [new MakerSquirrel({}), new MakerZIP({}, ['darwin']), new MakerRpm({}), new MakerDeb({})],
   plugins: [
     new VitePlugin({

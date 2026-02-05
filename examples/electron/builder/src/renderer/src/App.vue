@@ -63,6 +63,25 @@ async function getHardwareInfo(): Promise<void> {
     setError(`Error: ${error}`)
   }
 }
+
+async function testGpuTexture(): Promise<void> {
+  setLoading('Testing GPU texture import (IOSurface → Frame)...')
+  try {
+    const result = await window.nodeAv.testGpuTexture()
+    if (result.error) {
+      const stepsText = result.steps?.length ? '\n\nSteps:\n' + result.steps.join('\n') : ''
+      setError(`Error: ${result.error}${stepsText}`)
+    } else {
+      const stepsText = result.steps?.join('\n') || ''
+      const frameText = result.frameInfo
+        ? '\n\nFrame Info:\n' + JSON.stringify(result.frameInfo, null, 2)
+        : ''
+      setSuccess(`GPU Texture Import: SUCCESS!\n\n${stepsText}${frameText}`)
+    }
+  } catch (error) {
+    setError(`Error: ${error}`)
+  }
+}
 </script>
 
 <template>
@@ -76,6 +95,7 @@ async function getHardwareInfo(): Promise<void> {
       <button @click="getFFmpegInfo">FFmpeg Info</button>
       <button @click="getFFmpegCli">FFmpeg CLI</button>
       <button @click="getHardwareInfo">Detect Hardware</button>
+      <button @click="testGpuTexture">Test GPU Texture</button>
     </div>
 
     <div class="output-container">

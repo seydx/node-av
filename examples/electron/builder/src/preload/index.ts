@@ -13,7 +13,13 @@ const nodeAv = {
     pixelFormat?: number
     message?: string
     error?: string
-  }> => ipcRenderer.invoke('get-hardware-info')
+  }> => ipcRenderer.invoke('get-hardware-info'),
+  testGpuTexture: (): Promise<{
+    success?: boolean
+    error?: string
+    steps?: string[]
+    frameInfo?: Record<string, unknown>
+  }> => ipcRenderer.invoke('test-gpu-texture')
 }
 
 if (process.contextIsolated) {

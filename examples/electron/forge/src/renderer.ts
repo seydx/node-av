@@ -13,6 +13,12 @@ declare global {
         message?: string;
         error?: string;
       }>;
+      testGpuTexture: () => Promise<{
+        success?: boolean;
+        error?: string;
+        steps?: string[];
+        frameInfo?: Record<string, unknown>;
+      }>;
     };
   }
 }
@@ -20,6 +26,7 @@ declare global {
 const btnInfo = document.getElementById('btn-info');
 const btnCli = document.getElementById('btn-cli');
 const btnHardware = document.getElementById('btn-hardware');
+const btnGpuTexture = document.getElementById('btn-gpu-texture');
 const output = document.getElementById('output')!;
 
 function setLoading(message: string) {
@@ -76,6 +83,25 @@ btnHardware?.addEventListener('click', async () => {
           `Type ID:      ${result.type}\n` +
           `Pixel Format: ${result.pixelFormat}`
       );
+    }
+  } catch (error) {
+    setError(`Error: ${error}`);
+  }
+});
+
+btnGpuTexture?.addEventListener('click', async () => {
+  setLoading('Testing GPU texture import (IOSurface → Frame)...');
+  try {
+    const result = await window.nodeAv.testGpuTexture();
+    if (result.error) {
+      const stepsText = result.steps?.length ? '\n\nSteps:\n' + result.steps.join('\n') : '';
+      setError(`Error: ${result.error}${stepsText}`);
+    } else {
+      const stepsText = result.steps?.join('\n') || '';
+      const frameText = result.frameInfo
+        ? '\n\nFrame Info:\n' + JSON.stringify(result.frameInfo, null, 2)
+        : '';
+      setSuccess(`GPU Texture Import: SUCCESS!\n\n${stepsText}${frameText}`);
     }
   } catch (error) {
     setError(`Error: ${error}`);

@@ -41,7 +41,7 @@
   },
   "dependencies": {
     "electron-squirrel-startup": "^1.0.1",
-    "node-av": "5.1.1"
+    "node-av": "file:../../.."
   },
   "overrides": {
     "@shinyoshiaki/binary-data": "npm:@seydx/binary-data@0.6.2"
