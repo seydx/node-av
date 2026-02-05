@@ -38,7 +38,7 @@
     "build": "npm run generate && npm run build:tests && npm run build:examples && npm run build:tsc && npm run build:native",
     "build:benchmarks": "tsc -p tsconfig.benchmarks.json",
     "build:examples": "tsc -p tsconfig.examples.json",
-    "build:native": "node-gyp rebuild && cpy --flat build/Release/node-av.node binary/",
+    "build:native": "node-gyp rebuild && cpy --flat build/Release/node-av.node binary/ && node scripts/copy-native-to-platform.js",
     "build:tests": "tsc -p tsconfig.tests.json",
     "build:tsc": "rimraf dist && npm run generate:ffmpeg-version && tsc -p tsconfig.build.json && cpy --flat src/api/data/* dist/api/data --parents",
     "clean": "rimraf dist && node-gyp clean && npm run generate && npm run format && npm run lint:fix && npm run build:tests && npm run build:examples && npm run build:tsc",
