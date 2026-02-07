@@ -576,17 +576,19 @@ export class HardwareContext implements Disposable {
    * @see {@link findSupportedCodecs} For all supported codecs
    */
   supportsCodec(codecId: AVCodecID, isEncoder = false): boolean {
-    // Try to find the codec
-    const codec = isEncoder ? Codec.findEncoder(codecId) : Codec.findDecoder(codecId);
-    if (!codec) {
-      return false;
+    const codecs = Codec.getCodecList();
+
+    for (const codec of codecs) {
+      if (codec.id !== codecId) continue;
+      if (isEncoder && !codec.isEncoder()) continue;
+      if (!isEncoder && !codec.isDecoder()) continue;
+
+      if (isEncoder ? codec.isHardwareAcceleratedEncoder(this._deviceType) : codec.isHardwareAcceleratedDecoder(this._deviceType)) {
+        return true;
+      }
     }
 
-    if (isEncoder) {
-      return codec.isHardwareAcceleratedEncoder(this._deviceType);
-    } else {
-      return codec.isHardwareAcceleratedDecoder(this._deviceType);
-    }
+    return false;
   }
 
   /**
@@ -615,17 +617,22 @@ export class HardwareContext implements Disposable {
    * @see {@link supportsCodec} For basic codec support
    */
   supportsPixelFormat(codecId: AVCodecID, pixelFormat: AVPixelFormat, isEncoder = false): boolean {
-    const codec = isEncoder ? Codec.findEncoder(codecId) : Codec.findDecoder(codecId);
-    if (!codec) {
-      return false;
+    const codecs = Codec.getCodecList();
+
+    for (const codec of codecs) {
+      if (codec.id !== codecId) continue;
+      if (isEncoder && !codec.isEncoder()) continue;
+      if (!isEncoder && !codec.isDecoder()) continue;
+
+      if (isEncoder ? codec.isHardwareAcceleratedEncoder(this._deviceType) : codec.isHardwareAcceleratedDecoder(this._deviceType)) {
+        const pixelFormats = codec.pixelFormats ?? [];
+        if (pixelFormats.some((fmt) => fmt === pixelFormat)) {
+          return true;
+        }
+      }
     }
 
-    const pixelFormats = codec.pixelFormats ?? [];
-    if (pixelFormats.length === 0) {
-      return false;
-    }
-
-    return pixelFormats.some((fmt) => fmt === pixelFormat);
+    return false;
   }
 
   /**
