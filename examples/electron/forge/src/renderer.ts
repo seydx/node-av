@@ -19,6 +19,11 @@ declare global {
         steps?: string[];
         frameInfo?: Record<string, unknown>;
       }>;
+      testBackPressure: () => Promise<{
+        success?: boolean;
+        error?: string;
+        logs?: string[];
+      }>;
     };
   }
 }
@@ -27,6 +32,7 @@ const btnInfo = document.getElementById('btn-info');
 const btnCli = document.getElementById('btn-cli');
 const btnHardware = document.getElementById('btn-hardware');
 const btnGpuTexture = document.getElementById('btn-gpu-texture');
+const btnBackPressure = document.getElementById('btn-back-pressure');
 const output = document.getElementById('output')!;
 
 function setLoading(message: string) {
@@ -102,6 +108,20 @@ btnGpuTexture?.addEventListener('click', async () => {
         ? '\n\nFrame Info:\n' + JSON.stringify(result.frameInfo, null, 2)
         : '';
       setSuccess(`GPU Texture Import: SUCCESS!\n\n${stepsText}${frameText}`);
+    }
+  } catch (error) {
+    setError(`Error: ${error}`);
+  }
+});
+
+btnBackPressure?.addEventListener('click', async () => {
+  setLoading('Running back pressure demo (this takes a few seconds)...');
+  try {
+    const result = await window.nodeAv.testBackPressure();
+    if (result.error) {
+      setError(`Error: ${result.error}\n\n${result.logs?.join('\n') || ''}`);
+    } else {
+      setSuccess(result.logs?.join('\n') || 'Done');
     }
   } catch (error) {
     setError(`Error: ${error}`);

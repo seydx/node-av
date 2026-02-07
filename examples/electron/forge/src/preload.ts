@@ -5,4 +5,5 @@ contextBridge.exposeInMainWorld('nodeAv', {
   getFFmpegCliVersion: () => ipcRenderer.invoke('get-ffmpeg-cli-version'),
   getHardwareInfo: () => ipcRenderer.invoke('get-hardware-info'),
   testGpuTexture: () => ipcRenderer.invoke('test-gpu-texture'),
+  testBackPressure: () => ipcRenderer.invoke('test-back-pressure'),
 });

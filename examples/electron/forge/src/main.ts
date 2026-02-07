@@ -225,6 +225,163 @@ ipcMain.handle('test-gpu-texture', async () => {
   }
 });
 
+// IPC handler for back pressure demo
+ipcMain.handle('test-back-pressure', async () => {
+  const logs: string[] = [];
+  const log = (msg: string) => logs.push(msg);
+
+  try {
+    const platform = process.platform;
+
+    // Hardware + SharedTexture setup (same as test-gpu-texture)
+    const hwType =
+      platform === 'darwin'
+        ? AV_HWDEVICE_TYPE_VIDEOTOOLBOX
+        : platform === 'win32'
+          ? AV_HWDEVICE_TYPE_D3D11VA
+          : AV_HWDEVICE_TYPE_DRM;
+
+    const hw = await HardwareContext.create(hwType);
+    const sharedTexture = SharedTexture.create(hw);
+
+    // Offscreen window with shared textures
+    const offscreen = new BrowserWindow({
+      show: false,
+      width: 640,
+      height: 480,
+      webPreferences: {
+        offscreen: {
+          useSharedTexture: true,
+        },
+      },
+    });
+
+    const TOTAL_FRAMES = 30;
+    const SIMULATED_ENCODE_MS = 200;
+    let frameCount = 0;
+    const startTime = performance.now();
+    const receivedTimes: number[] = [];
+
+    // Queue + sequential processing to demonstrate back pressure
+    const queue: { frame: ReturnType<typeof sharedTexture.importTexture>; texture: Electron.OffscreenSharedTexture; receivedAt: number; frameNum: number }[] = [];
+    let processing = false;
+
+    log(`Back Pressure Demo — ${TOTAL_FRAMES} frames, ${SIMULATED_ENCODE_MS}ms simulated encode, 60fps requested`);
+    log(`Pool capacity: 10 frames (Electron internal limit)`);
+    log('');
+
+    const result = await new Promise<{ success: boolean; error?: string }>((resolve) => {
+      const timeout = setTimeout(() => {
+        offscreen.destroy();
+        resolve({ success: false, error: 'Timeout after 30s — not enough paint events received' });
+      }, 30000);
+
+      async function processQueue() {
+        processing = true;
+        while (queue.length > 0) {
+          const { frame, texture, receivedAt, frameNum } = queue.shift()!;
+
+          // Simulated encode delay
+          await new Promise((r) => setTimeout(r, SIMULATED_ENCODE_MS));
+
+          const releasedAt = performance.now() - startTime;
+          log(
+            `Frame ${String(frameNum).padStart(2)}: received=${String(receivedAt.toFixed(0)).padStart(6)}ms, ` +
+              `released=${String(releasedAt.toFixed(0)).padStart(6)}ms, ` +
+              `held=${String((releasedAt - receivedAt).toFixed(0)).padStart(5)}ms`,
+          );
+
+          frame.free();
+          texture.release(); // ← Back Pressure: Electron can reuse this pool slot now
+
+          if (frameNum >= TOTAL_FRAMES) {
+            clearTimeout(timeout);
+            offscreen.destroy();
+            resolve({ success: true });
+            return;
+          }
+        }
+        processing = false;
+      }
+
+      offscreen.webContents.on('paint', (event) => {
+        const texture = event.texture;
+
+        if (!texture?.textureInfo || frameCount >= TOTAL_FRAMES) {
+          try {
+            texture?.release?.();
+          } catch {
+            // ignore
+          }
+          return;
+        }
+
+        frameCount++;
+        const receivedAt = performance.now() - startTime;
+        receivedTimes.push(receivedAt);
+
+        const frame = sharedTexture.importTexture(texture.textureInfo, {
+          pts: BigInt(frameCount),
+          timeBase: { num: 1, den: 60 },
+        });
+
+        queue.push({ frame, texture, receivedAt, frameNum: frameCount });
+        if (!processing) processQueue();
+      });
+
+      offscreen.webContents.on('did-finish-load', () => {
+        offscreen.webContents.setFrameRate(60);
+        offscreen.webContents.startPainting();
+      });
+
+      // Animated gradient to ensure continuous paint events
+      offscreen.loadURL(
+        'data:text/html,' +
+          encodeURIComponent(
+            '<style>body{margin:0;width:100vw;height:100vh;background:linear-gradient(135deg,red,blue);animation:shift 2s linear infinite}' +
+              '@keyframes shift{0%{filter:hue-rotate(0deg)}100%{filter:hue-rotate(360deg)}}</style>',
+          ),
+      );
+    });
+
+    sharedTexture.dispose();
+    hw.dispose();
+
+    // Analysis: compute intervals between frame arrivals
+    log('');
+    log('--- Analysis ---');
+    log(`Simulated encode time: ${SIMULATED_ENCODE_MS}ms per frame`);
+    log(`Expected without back pressure (60fps): ~16ms between frames`);
+    log(`Expected with back pressure: ~${SIMULATED_ENCODE_MS}ms between frames`);
+
+    if (receivedTimes.length > 1) {
+      const intervals = receivedTimes.slice(1).map((t, i) => t - receivedTimes[i]);
+
+      // Split into early frames (pool filling) and later frames (back pressure active)
+      const poolSize = Math.min(10, intervals.length);
+      const earlyIntervals = intervals.slice(0, poolSize);
+      const lateIntervals = intervals.slice(poolSize);
+
+      const avg = (arr: number[]) => (arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0);
+
+      log(`First ${poolSize} frames avg interval:  ${avg(earlyIntervals).toFixed(0)}ms (Electron fills pool freely)`);
+      if (lateIntervals.length > 0) {
+        log(`Remaining frames avg interval: ${avg(lateIntervals).toFixed(0)}ms (back pressure active)`);
+        log('');
+        if (avg(lateIntervals) > avg(earlyIntervals) * 2) {
+          log("Conclusion: Electron's texture pool automatically throttles frame delivery!");
+        } else {
+          log('Conclusion: Back pressure effect was minimal (pool may not have filled completely)');
+        }
+      }
+    }
+
+    return { success: result.success, error: result.error, logs };
+  } catch (error) {
+    return { error: String(error), logs };
+  }
+});
+
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
