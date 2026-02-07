@@ -19,7 +19,12 @@ const nodeAv = {
     error?: string
     steps?: string[]
     frameInfo?: Record<string, unknown>
-  }> => ipcRenderer.invoke('test-gpu-texture')
+  }> => ipcRenderer.invoke('test-gpu-texture'),
+  testBackPressure: (): Promise<{
+    success?: boolean
+    error?: string
+    logs?: string[]
+  }> => ipcRenderer.invoke('test-back-pressure')
 }
 
 if (process.contextIsolated) {

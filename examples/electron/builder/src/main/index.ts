@@ -4,6 +4,8 @@ import {
   AV_HWDEVICE_TYPE_D3D11VA,
   AV_HWDEVICE_TYPE_DRM,
   AV_HWDEVICE_TYPE_VIDEOTOOLBOX,
+  Encoder,
+  FF_THREAD_FRAME,
   ffmpegPath,
   getFFmpegInfo,
   HardwareContext,
@@ -88,14 +90,10 @@ ipcMain.handle('test-gpu-texture', async () => {
   const steps: string[] = []
 
   try {
-    // Step 0: Log platform info
     const platform = process.platform
     steps.push(`Platform: ${platform} (${process.arch})`)
 
-    // Step 1: Create hardware context for SharedTexture (platform-specific)
-    // - macOS: VideoToolbox (IOSurface)
-    // - Windows: D3D11VA (DXGI shared handle)
-    // - Linux: DRM (DMA-BUF → DRM PRIME)
+    // Hardware + SharedTexture setup
     const hwType =
       platform === 'darwin'
         ? AV_HWDEVICE_TYPE_VIDEOTOOLBOX
@@ -104,15 +102,15 @@ ipcMain.handle('test-gpu-texture', async () => {
           : AV_HWDEVICE_TYPE_DRM
 
     steps.push(`Creating hardware context (type=${hwType})...`)
-    const hw = await HardwareContext.create(hwType)
+    using hw = HardwareContext.create(hwType)
+    if (!hw) throw new Error('Failed to create hardware context')
     steps.push(`Hardware created: ${hw.deviceTypeName}`)
 
-    // Step 2: Create SharedTexture
     steps.push('Creating SharedTexture...')
-    const sharedTexture = SharedTexture.create(hw)
+    using sharedTexture = SharedTexture.create(hw)
     steps.push('SharedTexture created')
 
-    // Step 3: Create offscreen BrowserWindow with shared textures
+    // Offscreen window
     steps.push('Creating offscreen BrowserWindow with shared textures...')
     const offscreen = new BrowserWindow({
       show: false,
@@ -126,97 +124,41 @@ ipcMain.handle('test-gpu-texture', async () => {
     })
     steps.push('Offscreen window created')
 
-    // Step 4: Wait for first paint with texture
+    // Wait for first paint event with a valid texture
     steps.push('Loading page and waiting for paint event with GPU texture...')
 
-    const result = await new Promise<{
-      success: boolean
-      error?: string
-      frameInfo?: Record<string, unknown>
-      textureSteps: string[]
-    }>((resolve) => {
-      const textureSteps: string[] = []
-      let resolved = false
+    const { texture, paintSteps } = await new Promise<{
+      texture: Electron.OffscreenSharedTexture
+      paintSteps: string[]
+    }>((resolve, reject) => {
+      const paintSteps: string[] = []
 
-      // Timeout after 10s
       const timeout = setTimeout(() => {
-        if (!resolved) {
-          resolved = true
-          offscreen.destroy()
-          resolve({ success: false, error: 'Timeout waiting for paint event', textureSteps })
-        }
+        offscreen.destroy()
+        reject(new Error('Timeout waiting for paint event'))
       }, 10000)
 
       offscreen.webContents.on('paint', (event, dirty) => {
-        if (resolved) return
+        const tex = event.texture
+        paintSteps.push(`Paint event fired! dirty=${JSON.stringify(dirty)}, hasTexture=${!!tex}`)
 
-        const texture = event.texture
-
-        // Debug: log what we actually receive
-        textureSteps.push(
-          `Paint event fired! dirty=${JSON.stringify(dirty)}, hasTexture=${!!texture}`
-        )
-
-        if (!texture || !texture.textureInfo) {
-          textureSteps.push('No texture on event — skipping')
+        if (!tex?.textureInfo) {
+          paintSteps.push('No texture on event — skipping')
           try {
-            texture?.release?.()
+            tex?.release?.()
           } catch {
-            // ignore
+            /* ignore */
           }
           return
         }
 
-        resolved = true
         clearTimeout(timeout)
-
-        try {
-          const textureInfo = texture.textureInfo
-          textureSteps.push(
-            `Received texture: pixelFormat=${textureInfo.pixelFormat}, size=${textureInfo.codedSize?.width}x${textureInfo.codedSize?.height}`
-          )
-
-          // Step 5: Import the texture as a Frame using SharedTexture (one line!)
-          textureSteps.push('Importing texture via SharedTexture...')
-          const frame = sharedTexture.importTexture(textureInfo, {
-            pts: 0n,
-            timeBase: { num: 1, den: 30 }
-          })
-
-          textureSteps.push(
-            `Frame imported! width=${frame.width}, height=${frame.height}, format=${frame.format}, isHwFrame=${frame.isHwFrame()}`
-          )
-
-          const frameInfo = {
-            width: frame.width,
-            height: frame.height,
-            format: frame.format,
-            isHwFrame: frame.isHwFrame(),
-            isSwFrame: frame.isSwFrame(),
-            pts: frame.pts.toString()
-          }
-
-          // Cleanup
-          frame.free()
-          texture.release()
-          offscreen.destroy()
-
-          resolve({ success: true, frameInfo, textureSteps })
-        } catch (err) {
-          textureSteps.push(`Error: ${err}`)
-          try {
-            texture?.release?.()
-          } catch {
-            /* ignore */
-          }
-          offscreen.destroy()
-          resolve({ success: false, error: String(err), textureSteps })
-        }
+        offscreen.webContents.stopPainting()
+        resolve({ texture: tex, paintSteps })
       })
 
-      // Load a page and explicitly start painting once loaded
       offscreen.webContents.on('did-finish-load', () => {
-        textureSteps.push('Page loaded, starting painting...')
+        paintSteps.push('Page loaded, starting painting...')
         offscreen.webContents.setFrameRate(30)
         offscreen.webContents.startPainting()
         offscreen.webContents.invalidate()
@@ -226,18 +168,232 @@ ipcMain.handle('test-gpu-texture', async () => {
       )
     })
 
-    // Cleanup
+    steps.push(...paintSteps)
+    const textureInfo = texture.textureInfo
+    steps.push(
+      `Received texture: pixelFormat=${textureInfo.pixelFormat}, size=${textureInfo.codedSize?.width}x${textureInfo.codedSize?.height}`
+    )
+
+    // Import texture as Frame (zero-copy)
+    steps.push('Importing texture via SharedTexture...')
+    using frame = sharedTexture.importTexture(textureInfo, {
+      pts: 0n,
+      timeBase: { num: 1, den: 30 }
+    })
+
+    steps.push(
+      `Frame imported! width=${frame.width}, height=${frame.height}, format=${frame.format}, colorRange=${frame.colorRange}, isHwFrame=${frame.isHwFrame()}`
+    )
+
+    const frameInfo = {
+      width: frame.width,
+      height: frame.height,
+      format: frame.format,
+      colorRange: frame.colorRange,
+      isHwFrame: frame.isHwFrame(),
+      isSwFrame: frame.isSwFrame(),
+      pts: frame.pts.toString()
+    }
+
+    // Encode the imported frame with hardware encoder
+    steps.push('Testing hardware encoding of imported frame...')
+    const encoderCodec = hw.getEncoderCodec('h264')
+
+    if (encoderCodec) {
+      steps.push(`Encoder codec: ${encoderCodec.name}`)
+      using encoder = await Encoder.create(encoderCodec, { threadType: FF_THREAD_FRAME })
+
+      const packets = await encoder.encodeAll(frame)
+      let totalPackets = packets.length
+
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      for await (using _packet of encoder.flushPackets()) {
+        totalPackets++
+      }
+
+      steps.push(`Encoding succeeded! Got ${totalPackets} packet(s)`)
+    } else {
+      steps.push('No hardware H.264 encoder available — skipping encode test')
+    }
+
+    texture.release()
+    offscreen.destroy()
+
+    return { steps, success: true, frameInfo }
+  } catch (error) {
+    return { error: String(error), steps }
+  }
+})
+
+// IPC handler for back pressure demo
+ipcMain.handle('test-back-pressure', async () => {
+  const logs: string[] = []
+  const log = (msg: string): void => {
+    logs.push(msg)
+  }
+
+  try {
+    const platform = process.platform
+
+    // Hardware + SharedTexture setup
+    const hwType =
+      platform === 'darwin'
+        ? AV_HWDEVICE_TYPE_VIDEOTOOLBOX
+        : platform === 'win32'
+          ? AV_HWDEVICE_TYPE_D3D11VA
+          : AV_HWDEVICE_TYPE_DRM
+
+    const hw = HardwareContext.create(hwType)
+    if (!hw) throw new Error('Failed to create hardware context')
+    const sharedTexture = SharedTexture.create(hw)
+
+    // Offscreen window with shared textures
+    const offscreen = new BrowserWindow({
+      show: false,
+      width: 640,
+      height: 480,
+      webPreferences: {
+        offscreen: {
+          useSharedTexture: true
+        }
+      }
+    })
+
+    const TOTAL_FRAMES = 30
+    const SIMULATED_ENCODE_MS = 200
+    let frameCount = 0
+    const startTime = performance.now()
+    const receivedTimes: number[] = []
+
+    // Queue + sequential processing to demonstrate back pressure
+    const queue: {
+      frame: ReturnType<typeof sharedTexture.importTexture>
+      texture: Electron.OffscreenSharedTexture
+      receivedAt: number
+      frameNum: number
+    }[] = []
+    let processing = false
+
+    log(
+      `Back Pressure Demo — ${TOTAL_FRAMES} frames, ${SIMULATED_ENCODE_MS}ms simulated encode, 60fps requested`
+    )
+    log(`Pool capacity: 10 frames (Electron internal limit)`)
+    log('')
+
+    const result = await new Promise<{ success: boolean; error?: string }>((resolve) => {
+      const timeout = setTimeout(() => {
+        offscreen.destroy()
+        resolve({ success: false, error: 'Timeout after 30s — not enough paint events received' })
+      }, 30000)
+
+      async function processQueue(): Promise<void> {
+        processing = true
+        while (queue.length > 0) {
+          const { frame, texture, receivedAt, frameNum } = queue.shift()!
+
+          // Simulated encode delay
+          await new Promise((r) => setTimeout(r, SIMULATED_ENCODE_MS))
+
+          const releasedAt = performance.now() - startTime
+          log(
+            `Frame ${String(frameNum).padStart(2)}: received=${String(receivedAt.toFixed(0)).padStart(6)}ms, ` +
+              `released=${String(releasedAt.toFixed(0)).padStart(6)}ms, ` +
+              `held=${String((releasedAt - receivedAt).toFixed(0)).padStart(5)}ms`
+          )
+
+          frame.free()
+          texture.release() // ← Back Pressure: Electron can reuse this pool slot now
+
+          if (frameNum >= TOTAL_FRAMES) {
+            clearTimeout(timeout)
+            offscreen.destroy()
+            resolve({ success: true })
+            return
+          }
+        }
+        processing = false
+      }
+
+      offscreen.webContents.on('paint', (event) => {
+        const texture = event.texture
+
+        if (!texture?.textureInfo || frameCount >= TOTAL_FRAMES) {
+          try {
+            texture?.release?.()
+          } catch {
+            // ignore
+          }
+          return
+        }
+
+        frameCount++
+        const receivedAt = performance.now() - startTime
+        receivedTimes.push(receivedAt)
+
+        const frame = sharedTexture.importTexture(texture.textureInfo, {
+          pts: BigInt(frameCount),
+          timeBase: { num: 1, den: 60 }
+        })
+
+        queue.push({ frame, texture, receivedAt, frameNum: frameCount })
+        if (!processing) processQueue()
+      })
+
+      offscreen.webContents.on('did-finish-load', () => {
+        offscreen.webContents.setFrameRate(60)
+        offscreen.webContents.startPainting()
+      })
+
+      // Animated gradient to ensure continuous paint events
+      offscreen.loadURL(
+        'data:text/html,' +
+          encodeURIComponent(
+            '<style>body{margin:0;width:100vw;height:100vh;background:linear-gradient(135deg,red,blue);animation:shift 2s linear infinite}' +
+              '@keyframes shift{0%{filter:hue-rotate(0deg)}100%{filter:hue-rotate(360deg)}}</style>'
+          )
+      )
+    })
+
     sharedTexture.dispose()
     hw.dispose()
 
-    return {
-      steps: [...steps, ...result.textureSteps],
-      success: result.success,
-      error: result.error,
-      frameInfo: result.frameInfo
+    // Analysis: compute intervals between frame arrivals
+    log('')
+    log('--- Analysis ---')
+    log(`Simulated encode time: ${SIMULATED_ENCODE_MS}ms per frame`)
+    log(`Expected without back pressure (60fps): ~16ms between frames`)
+    log(`Expected with back pressure: ~${SIMULATED_ENCODE_MS}ms between frames`)
+
+    if (receivedTimes.length > 1) {
+      const intervals = receivedTimes.slice(1).map((t, i) => t - receivedTimes[i])
+
+      // Split into early frames (pool filling) and later frames (back pressure active)
+      const poolSize = Math.min(10, intervals.length)
+      const earlyIntervals = intervals.slice(0, poolSize)
+      const lateIntervals = intervals.slice(poolSize)
+
+      const avg = (arr: number[]): number =>
+        arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0
+
+      log(
+        `First ${poolSize} frames avg interval:  ${avg(earlyIntervals).toFixed(0)}ms (Electron fills pool freely)`
+      )
+      if (lateIntervals.length > 0) {
+        log(
+          `Remaining frames avg interval: ${avg(lateIntervals).toFixed(0)}ms (back pressure active)`
+        )
+        log('')
+        if (avg(lateIntervals) > avg(earlyIntervals) * 2) {
+          log("Conclusion: Electron's texture pool automatically throttles frame delivery!")
+        } else {
+          log('Conclusion: Back pressure effect was minimal (pool may not have filled completely)')
+        }
+      }
     }
+
+    return { success: result.success, error: result.error, logs }
   } catch (error) {
-    return { error: String(error), steps }
+    return { error: String(error), logs }
   }
 })
 

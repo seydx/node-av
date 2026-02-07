@@ -17,6 +17,11 @@ interface NodeAvAPI {
     steps?: string[]
     frameInfo?: Record<string, unknown>
   }>
+  testBackPressure: () => Promise<{
+    success?: boolean
+    error?: string
+    logs?: string[]
+  }>
 }
 
 declare global {

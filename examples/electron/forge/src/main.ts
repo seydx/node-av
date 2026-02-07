@@ -4,6 +4,8 @@ import {
   AV_HWDEVICE_TYPE_D3D11VA,
   AV_HWDEVICE_TYPE_DRM,
   AV_HWDEVICE_TYPE_VIDEOTOOLBOX,
+  Encoder,
+  FF_THREAD_FRAME,
   ffmpegPath,
   getFFmpegInfo,
   HardwareContext,
@@ -84,14 +86,10 @@ ipcMain.handle('test-gpu-texture', async () => {
   const steps: string[] = [];
 
   try {
-    // Step 0: Log platform info
     const platform = process.platform;
     steps.push(`Platform: ${platform} (${process.arch})`);
 
-    // Step 1: Create hardware context for SharedTexture (platform-specific)
-    // - macOS: VideoToolbox (IOSurface)
-    // - Windows: D3D11VA (DXGI shared handle)
-    // - Linux: DRM (DMA-BUF → DRM PRIME)
+    // Hardware + SharedTexture setup
     const hwType =
       platform === 'darwin'
         ? AV_HWDEVICE_TYPE_VIDEOTOOLBOX
@@ -100,15 +98,15 @@ ipcMain.handle('test-gpu-texture', async () => {
           : AV_HWDEVICE_TYPE_DRM;
 
     steps.push(`Creating hardware context (type=${hwType})...`);
-    const hw = await HardwareContext.create(hwType);
+    using hw = HardwareContext.create(hwType);
+    if (!hw) throw new Error('Failed to create hardware context');
     steps.push(`Hardware created: ${hw.deviceTypeName}`);
 
-    // Step 2: Create SharedTexture
     steps.push('Creating SharedTexture...');
-    const sharedTexture = SharedTexture.create(hw);
+    using sharedTexture = SharedTexture.create(hw);
     steps.push('SharedTexture created');
 
-    // Step 3: Create offscreen BrowserWindow with shared textures
+    // Offscreen window
     steps.push('Creating offscreen BrowserWindow with shared textures...');
     const offscreen = new BrowserWindow({
       show: false,
@@ -122,87 +120,37 @@ ipcMain.handle('test-gpu-texture', async () => {
     });
     steps.push('Offscreen window created');
 
-    // Step 4: Wait for first paint with texture
+    // Wait for first paint event with a valid texture
     steps.push('Loading page and waiting for paint event with GPU texture...');
 
-    const result = await new Promise<{
-      success: boolean;
-      error?: string;
-      frameInfo?: Record<string, unknown>;
-      textureSteps: string[];
-    }>((resolve) => {
-      const textureSteps: string[] = [];
-      let resolved = false;
+    const { texture, paintSteps } = await new Promise<{
+      texture: Electron.OffscreenSharedTexture;
+      paintSteps: string[];
+    }>((resolve, reject) => {
+      const paintSteps: string[] = [];
 
-      // Timeout after 10s
       const timeout = setTimeout(() => {
-        if (!resolved) {
-          resolved = true;
-          offscreen.destroy();
-          resolve({ success: false, error: 'Timeout waiting for paint event', textureSteps });
-        }
+        offscreen.destroy();
+        reject(new Error('Timeout waiting for paint event'));
       }, 10000);
 
-      offscreen.webContents.on('paint', (event, dirty, _image) => {
-        if (resolved) return;
+      offscreen.webContents.on('paint', (event, dirty) => {
+        const tex = event.texture;
+        paintSteps.push(`Paint event fired! dirty=${JSON.stringify(dirty)}, hasTexture=${!!tex}`);
 
-        const texture = event.texture;
-
-        // Debug: log what we actually receive
-        textureSteps.push(`Paint event fired! dirty=${JSON.stringify(dirty)}, hasTexture=${!!texture}`);
-
-        if (!texture || !texture.textureInfo) {
-          textureSteps.push('No texture on event — skipping');
-          try { 
-            texture?.release?.(); 
-          } catch {
-            // ignore
-          }
+        if (!tex?.textureInfo) {
+          paintSteps.push('No texture on event — skipping');
+          try { tex?.release?.(); } catch { /* ignore */ }
           return;
         }
 
-        resolved = true;
         clearTimeout(timeout);
-
-        try {
-          const textureInfo = texture.textureInfo;
-          textureSteps.push(`Received texture: pixelFormat=${textureInfo.pixelFormat}, size=${textureInfo.codedSize?.width}x${textureInfo.codedSize?.height}`);
-
-          // Step 5: Import the texture as a Frame using SharedTexture (one line!)
-          textureSteps.push('Importing texture via SharedTexture...');
-          const frame = sharedTexture.importTexture(textureInfo, {
-            pts: 0n,
-            timeBase: { num: 1, den: 30 },
-          });
-
-          textureSteps.push(`Frame imported! width=${frame.width}, height=${frame.height}, format=${frame.format}, isHwFrame=${frame.isHwFrame()}`);
-
-          const frameInfo = {
-            width: frame.width,
-            height: frame.height,
-            format: frame.format,
-            isHwFrame: frame.isHwFrame(),
-            isSwFrame: frame.isSwFrame(),
-            pts: frame.pts.toString(),
-          };
-
-          // Cleanup
-          frame.free();
-          texture.release();
-          offscreen.destroy();
-
-          resolve({ success: true, frameInfo, textureSteps });
-        } catch (err) {
-          textureSteps.push(`Error: ${err}`);
-          try { texture?.release?.(); } catch { /* ignore */ }
-          offscreen.destroy();
-          resolve({ success: false, error: String(err), textureSteps });
-        }
+        offscreen.webContents.stopPainting();
+        resolve({ texture: tex, paintSteps });
       });
 
-      // Load a page and explicitly start painting once loaded
       offscreen.webContents.on('did-finish-load', () => {
-        textureSteps.push('Page loaded, starting painting...');
+        paintSteps.push('Page loaded, starting painting...');
         offscreen.webContents.setFrameRate(30);
         offscreen.webContents.startPainting();
         offscreen.webContents.invalidate();
@@ -210,16 +158,53 @@ ipcMain.handle('test-gpu-texture', async () => {
       offscreen.loadURL('data:text/html,<body style="background:linear-gradient(135deg,red,blue);margin:0;width:100vw;height:100vh"></body>');
     });
 
-    // Cleanup
-    sharedTexture.dispose();
-    hw.dispose();
+    steps.push(...paintSteps);
+    const textureInfo = texture.textureInfo;
+    steps.push(`Received texture: pixelFormat=${textureInfo.pixelFormat}, size=${textureInfo.codedSize?.width}x${textureInfo.codedSize?.height}`);
 
-    return {
-      steps: [...steps, ...result.textureSteps],
-      success: result.success,
-      error: result.error,
-      frameInfo: result.frameInfo,
+    // Import texture as Frame (zero-copy)
+    steps.push('Importing texture via SharedTexture...');
+    using frame = sharedTexture.importTexture(textureInfo, {
+      pts: 0n,
+      timeBase: { num: 1, den: 30 },
+    });
+
+    steps.push(`Frame imported! width=${frame.width}, height=${frame.height}, format=${frame.format}, colorRange=${frame.colorRange}, isHwFrame=${frame.isHwFrame()}`);
+
+    const frameInfo = {
+      width: frame.width,
+      height: frame.height,
+      format: frame.format,
+      colorRange: frame.colorRange,
+      isHwFrame: frame.isHwFrame(),
+      isSwFrame: frame.isSwFrame(),
+      pts: frame.pts.toString(),
     };
+
+    // Encode the imported frame with hardware encoder
+    steps.push('Testing hardware encoding of imported frame...');
+    const encoderCodec = hw.getEncoderCodec('h264');
+
+    if (encoderCodec) {
+      steps.push(`Encoder codec: ${encoderCodec.name}`);
+      using encoder = await Encoder.create(encoderCodec, { threadType: FF_THREAD_FRAME });
+
+      const packets = await encoder.encodeAll(frame);
+      let totalPackets = packets.length;
+
+      for await (using _packet of encoder.flushPackets()) {
+        totalPackets++;
+      }
+
+      steps.push(`Encoding succeeded! Got ${totalPackets} packet(s)`);
+    } else {
+      steps.push('No hardware H.264 encoder available — skipping encode test');
+    }
+
+    texture.release();
+    offscreen.destroy();
+
+    return { steps, success: true, frameInfo };
   } catch (error) {
     return { error: String(error), steps };
   }
@@ -241,7 +226,8 @@ ipcMain.handle('test-back-pressure', async () => {
           ? AV_HWDEVICE_TYPE_D3D11VA
           : AV_HWDEVICE_TYPE_DRM;
 
-    const hw = await HardwareContext.create(hwType);
+    const hw = HardwareContext.create(hwType);
+    if (!hw) throw new Error('Failed to create hardware context');
     const sharedTexture = SharedTexture.create(hw);
 
     // Offscreen window with shared textures

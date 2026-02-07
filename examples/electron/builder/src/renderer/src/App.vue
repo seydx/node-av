@@ -82,6 +82,20 @@ async function testGpuTexture(): Promise<void> {
     setError(`Error: ${error}`)
   }
 }
+
+async function testBackPressure(): Promise<void> {
+  setLoading('Running back pressure demo (this takes a few seconds)...')
+  try {
+    const result = await window.nodeAv.testBackPressure()
+    if (result.error) {
+      setError(`Error: ${result.error}\n\n${result.logs?.join('\n') || ''}`)
+    } else {
+      setSuccess(result.logs?.join('\n') || 'Done')
+    }
+  } catch (error) {
+    setError(`Error: ${error}`)
+  }
+}
 </script>
 
 <template>
@@ -96,6 +110,7 @@ async function testGpuTexture(): Promise<void> {
       <button @click="getFFmpegCli">FFmpeg CLI</button>
       <button @click="getHardwareInfo">Detect Hardware</button>
       <button @click="testGpuTexture">Test GPU Texture</button>
+      <button @click="testBackPressure">Back Pressure Demo</button>
     </div>
 
     <div class="output-container">
