@@ -1,10 +1,56 @@
-import { AV_HWFRAME_MAP_READ, AV_HWFRAME_MAP_WRITE, AV_PIX_FMT_BGRA, AV_PIX_FMT_NONE } from '../../constants/constants.js';
+import {
+  AVCOL_PRI_BT2020,
+  AVCOL_PRI_BT470BG,
+  AVCOL_PRI_BT470M,
+  AVCOL_PRI_BT709,
+  AVCOL_PRI_EBU3213,
+  AVCOL_PRI_FILM,
+  AVCOL_PRI_SMPTE170M,
+  AVCOL_PRI_SMPTE240M,
+  AVCOL_PRI_SMPTE428,
+  AVCOL_PRI_SMPTE431,
+  AVCOL_PRI_SMPTE432,
+  AVCOL_PRI_UNSPECIFIED,
+  AVCOL_RANGE_JPEG,
+  AVCOL_RANGE_MPEG,
+  AVCOL_RANGE_UNSPECIFIED,
+  AVCOL_SPC_BT2020_NCL,
+  AVCOL_SPC_BT470BG,
+  AVCOL_SPC_BT709,
+  AVCOL_SPC_FCC,
+  AVCOL_SPC_RGB,
+  AVCOL_SPC_SMPTE170M,
+  AVCOL_SPC_SMPTE240M,
+  AVCOL_SPC_UNSPECIFIED,
+  AVCOL_SPC_YCGCO,
+  AVCOL_TRC_ARIB_STD_B67,
+  AVCOL_TRC_BT1361_ECG,
+  AVCOL_TRC_BT2020_10,
+  AVCOL_TRC_BT2020_12,
+  AVCOL_TRC_BT709,
+  AVCOL_TRC_GAMMA22,
+  AVCOL_TRC_GAMMA28,
+  AVCOL_TRC_IEC61966_2_1,
+  AVCOL_TRC_IEC61966_2_4,
+  AVCOL_TRC_LINEAR,
+  AVCOL_TRC_LOG,
+  AVCOL_TRC_LOG_SQRT,
+  AVCOL_TRC_SMPTE170M,
+  AVCOL_TRC_SMPTE2084,
+  AVCOL_TRC_SMPTE240M,
+  AVCOL_TRC_SMPTE428,
+  AVCOL_TRC_UNSPECIFIED,
+  AV_HWFRAME_MAP_READ,
+  AV_HWFRAME_MAP_WRITE,
+  AV_PIX_FMT_BGRA,
+  AV_PIX_FMT_NONE,
+} from '../../constants/constants.js';
 import { FFmpegError } from '../../lib/error.js';
 import { Frame } from '../../lib/frame.js';
 import { HardwareFramesContext } from '../../lib/hardware-frames-context.js';
 import { PixelFormatUtils } from './pixel-format.js';
 
-import type { AVPixelFormat } from '../../constants/constants.js';
+import type { AVColorPrimaries, AVColorRange, AVColorSpace, AVColorTransferCharacteristic, AVPixelFormat } from '../../constants/constants.js';
 import type { DmaBufPlanes } from '../../lib/frame.js';
 import type { IRational } from '../../lib/types.js';
 import type { HardwareContext } from '../hardware.js';
@@ -25,6 +71,16 @@ export interface SharedTextureHandle {
 }
 
 /**
+ * Electron color space descriptor from textureInfo.colorSpace.
+ */
+export interface TextureColorSpace {
+  range?: 'limited' | 'full' | 'derived' | 'invalid';
+  primaries?: string;
+  transfer?: string;
+  matrix?: string;
+}
+
+/**
  * Electron textureInfo object.
  *
  * Contains GPU texture metadata and platform-specific handle for zero-copy frame import.
@@ -32,6 +88,7 @@ export interface SharedTextureHandle {
 export interface TextureInfo {
   pixelFormat: string;
   codedSize: { width: number; height: number };
+  colorSpace?: TextureColorSpace;
   handle: SharedTextureHandle;
 }
 
@@ -61,6 +118,88 @@ export interface ImportHandleProps {
   pixelFormat?: string | AVPixelFormat;
   pts?: bigint;
   timeBase?: IRational;
+}
+
+const RANGE_MAP: Record<string, AVColorRange> = {
+  full: AVCOL_RANGE_JPEG,
+  limited: AVCOL_RANGE_MPEG,
+};
+
+const PRIMARIES_MAP: Record<string, AVColorPrimaries> = {
+  bt709: AVCOL_PRI_BT709,
+  bt470m: AVCOL_PRI_BT470M,
+  bt470bg: AVCOL_PRI_BT470BG,
+  smpte170m: AVCOL_PRI_SMPTE170M,
+  smpte240m: AVCOL_PRI_SMPTE240M,
+  film: AVCOL_PRI_FILM,
+  bt2020: AVCOL_PRI_BT2020,
+  'smptest428-1': AVCOL_PRI_SMPTE428,
+  'smptest431-2': AVCOL_PRI_SMPTE431,
+  p3: AVCOL_PRI_SMPTE432,
+  'ebu-3213-e': AVCOL_PRI_EBU3213,
+};
+
+const TRANSFER_MAP: Record<string, AVColorTransferCharacteristic> = {
+  bt709: AVCOL_TRC_BT709,
+  'bt709-apple': AVCOL_TRC_BT709,
+  gamma22: AVCOL_TRC_GAMMA22,
+  gamma28: AVCOL_TRC_GAMMA28,
+  smpte170m: AVCOL_TRC_SMPTE170M,
+  smpte240m: AVCOL_TRC_SMPTE240M,
+  linear: AVCOL_TRC_LINEAR,
+  log: AVCOL_TRC_LOG,
+  'log-sqrt': AVCOL_TRC_LOG_SQRT,
+  'iec61966-2-4': AVCOL_TRC_IEC61966_2_4,
+  'bt1361-ecg': AVCOL_TRC_BT1361_ECG,
+  srgb: AVCOL_TRC_IEC61966_2_1,
+  'bt2020-10': AVCOL_TRC_BT2020_10,
+  'bt2020-12': AVCOL_TRC_BT2020_12,
+  pq: AVCOL_TRC_SMPTE2084,
+  'smptest428-1': AVCOL_TRC_SMPTE428,
+  hlg: AVCOL_TRC_ARIB_STD_B67,
+};
+
+const MATRIX_MAP: Record<string, AVColorSpace> = {
+  rgb: AVCOL_SPC_RGB,
+  gbr: AVCOL_SPC_RGB,
+  bt709: AVCOL_SPC_BT709,
+  fcc: AVCOL_SPC_FCC,
+  bt470bg: AVCOL_SPC_BT470BG,
+  smpte170m: AVCOL_SPC_SMPTE170M,
+  smpte240m: AVCOL_SPC_SMPTE240M,
+  ycocg: AVCOL_SPC_YCGCO,
+  'bt2020-ncl': AVCOL_SPC_BT2020_NCL,
+};
+
+/**
+ * @param colorSpace - Electron color space descriptor from textureInfo.colorSpace
+ *
+ * @returns Mapped FFmpeg color properties (colorRange, colorPrimaries, colorTrc, colorSpace) with fallbacks
+ *
+ * @internal
+ */
+function mapColorSpace(colorSpace?: TextureColorSpace): {
+  colorRange: AVColorRange;
+  colorPrimaries: AVColorPrimaries;
+  colorTrc: AVColorTransferCharacteristic;
+  colorSpace: AVColorSpace;
+} {
+  if (!colorSpace) {
+    // Fallback: Electron textures are typically BGRA (full range, sRGB)
+    return {
+      colorRange: AVCOL_RANGE_JPEG,
+      colorPrimaries: AVCOL_PRI_BT709,
+      colorTrc: AVCOL_TRC_IEC61966_2_1,
+      colorSpace: AVCOL_SPC_RGB,
+    };
+  }
+
+  return {
+    colorRange: RANGE_MAP[colorSpace.range ?? ''] ?? AVCOL_RANGE_UNSPECIFIED,
+    colorPrimaries: PRIMARIES_MAP[colorSpace.primaries ?? ''] ?? AVCOL_PRI_UNSPECIFIED,
+    colorTrc: TRANSFER_MAP[colorSpace.transfer ?? ''] ?? AVCOL_TRC_UNSPECIFIED,
+    colorSpace: MATRIX_MAP[colorSpace.matrix ?? ''] ?? AVCOL_SPC_UNSPECIFIED,
+  };
 }
 
 /**
@@ -206,7 +345,7 @@ export class SharedTexture implements Disposable {
     const swFormat = this.resolvePixelFormat(textureInfo.pixelFormat);
     const handle = textureInfo.handle;
 
-    return this.importFromHandle(handle, width, height, swFormat, options);
+    return this.importFromHandle(handle, width, height, swFormat, options, textureInfo.colorSpace);
   }
 
   /**
@@ -274,7 +413,7 @@ export class SharedTexture implements Disposable {
    * const drmFrame = sharedTexture.importTexture(textureInfo, { pts: 0n });
    *
    * // Map to VAAPI for encoding
-   * const vaapiHw = await HardwareContext.create(AV_HWDEVICE_TYPE_VAAPI);
+   * const vaapiHw = HardwareContext.create(AV_HWDEVICE_TYPE_VAAPI);
    * const vaapiFrame = sharedTexture.mapTo(drmFrame, vaapiHw);
    *
    * // Encode with VAAPI encoder
@@ -387,46 +526,62 @@ export class SharedTexture implements Disposable {
    *
    * @param options - Per-frame timing options
    *
+   * @param colorSpace - Electron color space descriptor for mapping to FFmpeg color properties
+   *
    * @returns Hardware Frame referencing the GPU texture
    *
    * @internal
    */
-  private importFromHandle(handle: SharedTextureHandle, width: number, height: number, swFormat: AVPixelFormat, options: TextureFrameOptions): Frame {
-    // macOS — IOSurface
+  private importFromHandle(
+    handle: SharedTextureHandle,
+    width: number,
+    height: number,
+    swFormat: AVPixelFormat,
+    options: TextureFrameOptions,
+    colorSpace?: TextureColorSpace,
+  ): Frame {
+    let frame: Frame;
+
     if (handle.ioSurface && handle.ioSurface.length > 0) {
+      // macOS — IOSurface
       const framesCtx = this.ensureFramesContext(width, height, swFormat);
-      return Frame.fromIOSurface(handle.ioSurface, {
+      frame = Frame.fromIOSurface(handle.ioSurface, {
         hwFramesCtx: framesCtx,
         pts: options.pts,
         timeBase: options.timeBase,
       });
-    }
-
-    // Windows — D3D11 shared texture
-    if (handle.ntHandle && handle.ntHandle.length > 0) {
-      return Frame.fromD3D11Texture(handle.ntHandle, {
+    } else if (handle.ntHandle && handle.ntHandle.length > 0) {
+      // Windows — D3D11 shared texture
+      frame = Frame.fromD3D11Texture(handle.ntHandle, {
         hwDeviceCtx: this._hardware.deviceContext,
         pts: options.pts,
         timeBase: options.timeBase,
       });
-    }
-
-    // Linux — DMA-BUF
-    if (handle.nativePixmap) {
+    } else if (handle.nativePixmap) {
+      // Linux — DMA-BUF
       const dmaBuf: DmaBufPlanes = {
         planes: handle.nativePixmap.planes,
         modifier: handle.nativePixmap.modifier,
       };
-      return Frame.fromDmaBuf(dmaBuf, {
+      frame = Frame.fromDmaBuf(dmaBuf, {
         width,
         height,
         swFormat,
         pts: options.pts,
         timeBase: options.timeBase,
       });
+    } else {
+      throw new Error('SharedTexture: no valid handle found (expected ioSurface, ntHandle, or nativePixmap)');
     }
 
-    throw new Error('SharedTexture: no valid handle found (expected ioSurface, ntHandle, or nativePixmap)');
+    // Map Electron's colorSpace to FFmpeg color properties.
+    const colors = mapColorSpace(colorSpace);
+    frame.colorRange = colors.colorRange;
+    frame.colorPrimaries = colors.colorPrimaries;
+    frame.colorTrc = colors.colorTrc;
+    frame.colorSpace = colors.colorSpace;
+
+    return frame;
   }
 
   /**
