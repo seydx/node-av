@@ -121,8 +121,11 @@ Napi::Value FormatContext::OpenInputSync(const Napi::CallbackInfo& info) {
   const char* urlPtr = url.empty() || url == "dummy" ? nullptr : url.c_str();
   int ret = avformat_open_input(&ctx, urlPtr, fmt, options ? &options : nullptr);
 
+  // Always update — on failure, avformat_open_input frees ctx and sets it to NULL.
+  // Without this, ctx_ would be a dangling pointer after failure.
+  ctx_ = ctx;
+
   if (ret >= 0) {
-    ctx_ = ctx;  // Update the stored context
     is_output_ = false;
   }
 

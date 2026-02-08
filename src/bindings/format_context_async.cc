@@ -54,10 +54,12 @@ public:
 
     result_ = avformat_open_input(&ctx, url, fmt_, options_ ? &options_ : nullptr);
 
+    // Always update — on failure, avformat_open_input frees ctx and sets it to NULL.
+    // Without this, parent_->ctx_ would be a dangling pointer after failure.
+    parent_->ctx_ = ctx;
+
     if (result_ >= 0) {
-      parent_->ctx_ = ctx;
       parent_->is_output_ = false;
-      // Successfully opened
     }
   }
 
