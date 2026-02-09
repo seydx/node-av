@@ -991,8 +991,9 @@ export const AV_HWDEVICE_TYPE_OPENCL = 9 as AVHWDeviceType;
 export const AV_HWDEVICE_TYPE_MEDIACODEC = 10 as AVHWDeviceType;
 export const AV_HWDEVICE_TYPE_VULKAN = 11 as AVHWDeviceType;
 export const AV_HWDEVICE_TYPE_D3D12VA = 12 as AVHWDeviceType;
-export const AV_HWDEVICE_TYPE_AMF = 13 as AVHWDeviceType;
-export const AV_HWDEVICE_TYPE_OHCODEC = 14 as AVHWDeviceType;
+export const AV_HWDEVICE_TYPE_RKMPP = 13 as AVHWDeviceType;
+export const AV_HWDEVICE_TYPE_AMF = 14 as AVHWDeviceType;
+export const AV_HWDEVICE_TYPE_OHCODEC = 15 as AVHWDeviceType;
 
 // libavutil/hwcontext.h
 export type AVHWFrameTransferDirection = number & { readonly [__ffmpeg_brand]: 'AVHWFrameTransferDirection' };
@@ -1396,6 +1397,8 @@ export const AV_PIX_FMT_GBRP10MSBLE = 263 as AVPixelFormat;
 export const AV_PIX_FMT_GBRP12MSBBE = 264 as AVPixelFormat;
 export const AV_PIX_FMT_GBRP12MSBLE = 265 as AVPixelFormat;
 export const AV_PIX_FMT_OHCODEC = 266 as AVPixelFormat;
+export const AV_PIX_FMT_NV15 = 267 as AVPixelFormat;
+export const AV_PIX_FMT_NV20 = 268 as AVPixelFormat;
 
 // libavutil/pixfmt.h
 export type AVColorPrimaries = number & { readonly [__ffmpeg_brand]: 'AVColorPrimaries' };
@@ -2076,6 +2079,7 @@ export const AV_HWACCEL_FLAG_IGNORE_LEVEL = 0x1 as AVHWAccelFlag;
 export const AV_HWACCEL_FLAG_ALLOW_HIGH_DEPTH = 0x2 as AVHWAccelFlag;
 export const AV_HWACCEL_FLAG_ALLOW_PROFILE_MISMATCH = 0x4 as AVHWAccelFlag;
 export const AV_HWACCEL_FLAG_UNSAFE_OUTPUT = 0x8 as AVHWAccelFlag;
+export const AV_HWACCEL_FLAG_LOW_PRIORITY = 0x10 as AVHWAccelFlag;
 
 // AV_HWACCEL_CAP constants (from libavcodec/avcodec.h)
 export type AVHWAccelCap = number & { readonly [__ffmpeg_brand]: 'AVHWAccelCap' };
