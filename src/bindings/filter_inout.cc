@@ -16,10 +16,10 @@ Napi::Object FilterInOut::Init(Napi::Env env, Napi::Object exports) {
     InstanceMethod<&FilterInOut::Free>("free"),
     InstanceMethod(Napi::Symbol::WellKnown(env, "dispose"), &FilterInOut::Dispose),
 
-    InstanceAccessor<&FilterInOut::GetName, &FilterInOut::SetName>("name"),
-    InstanceAccessor<&FilterInOut::GetFilterCtx, &FilterInOut::SetFilterCtx>("filterCtx"),
-    InstanceAccessor<&FilterInOut::GetPadIdx, &FilterInOut::SetPadIdx>("padIdx"),
-    InstanceAccessor<&FilterInOut::GetNext, &FilterInOut::SetNext>("next"),
+    InstanceAccessor("name", &FilterInOut::GetName, &FilterInOut::SetName, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
+    InstanceAccessor("filterCtx", &FilterInOut::GetFilterCtx, &FilterInOut::SetFilterCtx, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
+    InstanceAccessor("padIdx", &FilterInOut::GetPadIdx, &FilterInOut::SetPadIdx, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
+    InstanceAccessor("next", &FilterInOut::GetNext, &FilterInOut::SetNext, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
   });
   
   constructor = Napi::Persistent(func);

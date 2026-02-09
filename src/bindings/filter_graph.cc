@@ -37,10 +37,10 @@ Napi::Object FilterGraph::Init(Napi::Env env, Napi::Object exports) {
 
     InstanceAccessor<&FilterGraph::GetNbFilters>("nbFilters"),
     InstanceAccessor<&FilterGraph::GetFilters>("filters"),
-    InstanceAccessor<&FilterGraph::GetThreadType, &FilterGraph::SetThreadType>("threadType"),
-    InstanceAccessor<&FilterGraph::GetNbThreads, &FilterGraph::SetNbThreads>("nbThreads"),
-    InstanceAccessor<&FilterGraph::GetScaleSwsOpts, &FilterGraph::SetScaleSwsOpts>("scaleSwsOpts"),
-    InstanceAccessor<&FilterGraph::GetAresampleSwrOpts, &FilterGraph::SetAresampleSwrOpts>("aresampleSwrOpts"),
+    InstanceAccessor("threadType", &FilterGraph::GetThreadType, &FilterGraph::SetThreadType, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
+    InstanceAccessor("nbThreads", &FilterGraph::GetNbThreads, &FilterGraph::SetNbThreads, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
+    InstanceAccessor("scaleSwsOpts", &FilterGraph::GetScaleSwsOpts, &FilterGraph::SetScaleSwsOpts, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
+    InstanceAccessor("aresampleSwrOpts", &FilterGraph::GetAresampleSwrOpts, &FilterGraph::SetAresampleSwrOpts, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
   });
   
   constructor = Napi::Persistent(func);

@@ -21,11 +21,11 @@ Napi::Object HardwareFramesContext::Init(Napi::Env env, Napi::Object exports) {
     InstanceMethod<&HardwareFramesContext::Free>("free"),
     InstanceMethod(Napi::Symbol::WellKnown(env, "dispose"), &HardwareFramesContext::Dispose),
 
-    InstanceAccessor<&HardwareFramesContext::GetFormat, &HardwareFramesContext::SetFormat>("format"),
-    InstanceAccessor<&HardwareFramesContext::GetSwFormat, &HardwareFramesContext::SetSwFormat>("swFormat"),
-    InstanceAccessor<&HardwareFramesContext::GetWidth, &HardwareFramesContext::SetWidth>("width"),
-    InstanceAccessor<&HardwareFramesContext::GetHeight, &HardwareFramesContext::SetHeight>("height"),
-    InstanceAccessor<&HardwareFramesContext::GetInitialPoolSize, &HardwareFramesContext::SetInitialPoolSize>("initialPoolSize"),
+    InstanceAccessor("format", &HardwareFramesContext::GetFormat, &HardwareFramesContext::SetFormat, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
+    InstanceAccessor("swFormat", &HardwareFramesContext::GetSwFormat, &HardwareFramesContext::SetSwFormat, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
+    InstanceAccessor("width", &HardwareFramesContext::GetWidth, &HardwareFramesContext::SetWidth, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
+    InstanceAccessor("height", &HardwareFramesContext::GetHeight, &HardwareFramesContext::SetHeight, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
+    InstanceAccessor("initialPoolSize", &HardwareFramesContext::GetInitialPoolSize, &HardwareFramesContext::SetInitialPoolSize, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
     InstanceAccessor<&HardwareFramesContext::GetDeviceRef, nullptr>("deviceRef"),
   });
   

@@ -20,16 +20,16 @@ Napi::Object Packet::Init(Napi::Env env, Napi::Object exports) {
     InstanceMethod<&Packet::FreeSideData>("freeSideData"),
     InstanceMethod<&Packet::Dispose>(Napi::Symbol::WellKnown(env, "dispose")),
 
-    InstanceAccessor<&Packet::GetStreamIndex, &Packet::SetStreamIndex>("streamIndex"),
-    InstanceAccessor<&Packet::GetPts, &Packet::SetPts>("pts"),
-    InstanceAccessor<&Packet::GetDts, &Packet::SetDts>("dts"),
-    InstanceAccessor<&Packet::GetDuration, &Packet::SetDuration>("duration"),
-    InstanceAccessor<&Packet::GetTimeBase, &Packet::SetTimeBase>("timeBase"),
-    InstanceAccessor<&Packet::GetPos, &Packet::SetPos>("pos"),
+    InstanceAccessor("streamIndex", &Packet::GetStreamIndex, &Packet::SetStreamIndex, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
+    InstanceAccessor("pts", &Packet::GetPts, &Packet::SetPts, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
+    InstanceAccessor("dts", &Packet::GetDts, &Packet::SetDts, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
+    InstanceAccessor("duration", &Packet::GetDuration, &Packet::SetDuration, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
+    InstanceAccessor("timeBase", &Packet::GetTimeBase, &Packet::SetTimeBase, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
+    InstanceAccessor("pos", &Packet::GetPos, &Packet::SetPos, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
     InstanceAccessor<&Packet::GetSize>("size"),
-    InstanceAccessor<&Packet::GetFlags, &Packet::SetFlagsAccessor>("flags"),
-    InstanceAccessor<&Packet::GetData, &Packet::SetData>("data"),
-    InstanceAccessor<&Packet::GetIsKeyframe, &Packet::SetIsKeyframe>("isKeyframe"),
+    InstanceAccessor("flags", &Packet::GetFlags, &Packet::SetFlagsAccessor, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
+    InstanceAccessor("data", &Packet::GetData, &Packet::SetData, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
+    InstanceAccessor("isKeyframe", &Packet::GetIsKeyframe, &Packet::SetIsKeyframe, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
   });
   
   constructor = Napi::Persistent(func);

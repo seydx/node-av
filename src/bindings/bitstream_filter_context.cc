@@ -23,7 +23,7 @@ Napi::Object BitStreamFilterContext::Init(Napi::Env env, Napi::Object exports) {
 
     InstanceAccessor<&BitStreamFilterContext::GetInputCodecParameters>("inputCodecParameters"),
     InstanceAccessor<&BitStreamFilterContext::GetOutputCodecParameters>("outputCodecParameters"),
-    InstanceAccessor<&BitStreamFilterContext::GetInputTimeBase, &BitStreamFilterContext::SetInputTimeBase>("inputTimeBase"),
+    InstanceAccessor("inputTimeBase", &BitStreamFilterContext::GetInputTimeBase, &BitStreamFilterContext::SetInputTimeBase, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
     InstanceAccessor<&BitStreamFilterContext::GetOutputTimeBase>("outputTimeBase"),
     InstanceAccessor<&BitStreamFilterContext::GetFilter>("filter"),
   });

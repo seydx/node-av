@@ -44,13 +44,13 @@ Napi::Object FilterContext::Init(Napi::Env env, Napi::Object exports) {
     InstanceMethod<&FilterContext::BuffersinkGetColorRange>("buffersinkGetColorRange"),
     InstanceMethod(Napi::Symbol::WellKnown(env, "dispose"), &FilterContext::Dispose),
 
-    InstanceAccessor<&FilterContext::GetName, &FilterContext::SetName>("name"),
-    InstanceAccessor<&FilterContext::GetExtraHWFrames, &FilterContext::SetExtraHWFrames>("extraHWFrames"),
+    InstanceAccessor("name", &FilterContext::GetName, &FilterContext::SetName, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
+    InstanceAccessor("extraHWFrames", &FilterContext::GetExtraHWFrames, &FilterContext::SetExtraHWFrames, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
     InstanceAccessor<&FilterContext::GetFilter>("filter"),
     InstanceAccessor<&FilterContext::GetGraph>("graph"),
     InstanceAccessor<&FilterContext::GetNbInputs>("nbInputs"),
     InstanceAccessor<&FilterContext::GetNbOutputs>("nbOutputs"),
-    InstanceAccessor<&FilterContext::GetHwDeviceCtx, &FilterContext::SetHwDeviceCtx>("hwDeviceCtx"),
+    InstanceAccessor("hwDeviceCtx", &FilterContext::GetHwDeviceCtx, &FilterContext::SetHwDeviceCtx, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
   });
   
   constructor = Napi::Persistent(func);
