@@ -85,13 +85,13 @@
     "@seydx/node-av-win32-x64-msvc": "^5.2.2-beta.3"
   },
   "devDependencies": {
-    "@stylistic/eslint-plugin": "^5.7.1",
+    "@stylistic/eslint-plugin": "^5.8.0",
     "@types/node": "^25.2.2",
     "@types/node-abi": "^3.0.3",
     "@types/semver": "^7.7.1",
     "@types/unzipper": "^0.10.11",
     "@types/ws": "^8.18.1",
-    "@typescript-eslint/parser": "^8.54.0",
+    "@typescript-eslint/parser": "^8.55.0",
     "concurrently": "^9.2.1",
     "cpy-cli": "^7.0.0",
     "cross-env": "^10.1.0",
@@ -108,8 +108,8 @@
     "typedoc-plugin-markdown": "^4.10.0",
     "typedoc-vitepress-theme": "^1.1.2",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.54.0",
-    "updates": "^17.3.1",
+    "typescript-eslint": "^8.55.0",
+    "updates": "^17.4.0",
     "vitepress": "^2.0.0-alpha.16",
     "ws": "^8.19.0"
   },
