@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, nativeImage } from 'electron';
 import started from 'electron-squirrel-startup';
 import {
   AV_HWDEVICE_TYPE_D3D11VA,
@@ -11,7 +11,11 @@ import {
   HardwareContext,
   SharedTexture,
 } from 'node-av';
+import { Frame } from 'node-av/lib';
+import { AV_PIX_FMT_ARGB, AV_PIX_FMT_BGRA } from 'node-av/constants';
 import { execFile } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 
@@ -364,6 +368,160 @@ ipcMain.handle('test-back-pressure', async () => {
 
     return { success: result.success, error: result.error, logs };
   } catch (error) {
+    return { error: String(error), logs };
+  }
+});
+
+// IPC handler for NSImage benchmark
+ipcMain.handle('benchmark-nsimage', async (_event) => {
+  const logs: string[] = [];
+  const log = (msg: string) => logs.push(msg);
+
+  try {
+    // Capture a page screenshot to get a NativeImage
+    const allWindows = BrowserWindow.getAllWindows();
+    const mainWindow = allWindows[0];
+    if (!mainWindow) throw new Error('No window available');
+
+    const nativeImage = await mainWindow.webContents.capturePage();
+    const size = nativeImage.getSize();
+    log(`Captured page: ${size.width}x${size.height}`);
+
+    const ITERATIONS = 100;
+
+    // --- Benchmark 1: toBitmap() + Frame.fromVideoBuffer() (2 copies) ---
+    log('');
+    log(`--- toBitmap + fromVideoBuffer (${ITERATIONS} iterations) ---`);
+
+    const startBitmap = performance.now();
+    for (let i = 0; i < ITERATIONS; i++) {
+      const bitmap = nativeImage.toBitmap();
+      using _frame = Frame.fromVideoBuffer(Buffer.from(bitmap), {
+        width: size.width,
+        height: size.height,
+        format: AV_PIX_FMT_BGRA,
+      });
+    }
+    const elapsedBitmap = performance.now() - startBitmap;
+    const perFrameBitmap = elapsedBitmap / ITERATIONS;
+    log(`Total: ${elapsedBitmap.toFixed(2)}ms`);
+    log(`Per frame: ${perFrameBitmap.toFixed(3)}ms`);
+
+    // --- Benchmark 2: fromNSImage() zero-copy ---
+    log('');
+    log(`--- fromNSImage zero-copy (${ITERATIONS} iterations) ---`);
+
+    const handle = nativeImage.getNativeHandle();
+    log(`Native handle size: ${handle.length} bytes`);
+
+    const startZeroCopy = performance.now();
+    for (let i = 0; i < ITERATIONS; i++) {
+      using _frame = Frame.fromNSImage(Buffer.from(handle));
+    }
+    const elapsedZeroCopy = performance.now() - startZeroCopy;
+    const perFrameZeroCopy = elapsedZeroCopy / ITERATIONS;
+    log(`Total: ${elapsedZeroCopy.toFixed(2)}ms`);
+    log(`Per frame: ${perFrameZeroCopy.toFixed(3)}ms`);
+
+    // --- Speedup ---
+    const speedup = perFrameBitmap / perFrameZeroCopy;
+    log('');
+    log(`Speedup: ${speedup.toFixed(1)}x faster with fromNSImage`);
+
+    // --- Verification ---
+    log('');
+    log('--- Verification ---');
+    using verifyFrame = Frame.fromNSImage(Buffer.from(handle));
+    log(`Width: ${verifyFrame.width}`);
+    log(`Height: ${verifyFrame.height}`);
+    log(`Format: ${verifyFrame.format}`);
+    log(`AlphaMode: ${verifyFrame.alphaMode}`);
+    log(`isSwFrame: ${verifyFrame.isSwFrame()}`);
+    log(`isHwFrame: ${verifyFrame.isHwFrame()}`);
+
+    return { success: true, logs };
+  } catch (error) {
+    log(`Error: ${error}`);
+    return { error: String(error), logs };
+  }
+});
+
+// Helper: convert ARGB raw buffer to BGRA (for Electron's nativeImage.createFromBitmap)
+function argbToBgra(buf: Buffer): Buffer {
+  const out = Buffer.allocUnsafe(buf.length);
+  for (let i = 0; i < buf.length; i += 4) {
+    out[i] = buf[i + 3];     // B
+    out[i + 1] = buf[i + 2]; // G
+    out[i + 2] = buf[i + 1]; // R
+    out[i + 3] = buf[i];     // A
+  }
+  return out;
+}
+
+// Helper: convert Frame to base64 PNG via Electron nativeImage
+function frameToPngBase64(frame: ReturnType<typeof Frame.fromNSImage>, format: number, width: number, height: number): string {
+  const raw = frame.toBuffer();
+  // Electron's createFromBitmap expects BGRA
+  const bgraBuffer = format === AV_PIX_FMT_ARGB ? argbToBgra(raw) : raw;
+  const img = nativeImage.createFromBitmap(bgraBuffer, { width, height });
+  return img.toPNG().toString('base64');
+}
+
+// IPC handler for NSImage visual verification
+ipcMain.handle('verify-nsimage', async () => {
+  const logs: string[] = [];
+  const log = (msg: string) => logs.push(msg);
+
+  try {
+    const allWindows = BrowserWindow.getAllWindows();
+    const mainWindow = allWindows[0];
+    if (!mainWindow) throw new Error('No window available');
+
+    const captured = await mainWindow.webContents.capturePage();
+    const size = captured.getSize();
+    log(`Captured: ${size.width}x${size.height}`);
+
+    // 1. Reference: direct PNG from Electron
+    const referencePng = captured.toPNG().toString('base64');
+    log('Reference PNG created (nativeImage.toPNG)');
+
+    // 2. fromVideoBuffer path (2 copies: toBitmap + fromBuffer)
+    const bitmap = captured.toBitmap();
+    using vbFrame = Frame.fromVideoBuffer(Buffer.from(bitmap), {
+      width: size.width,
+      height: size.height,
+      format: AV_PIX_FMT_BGRA,
+    });
+    log(`fromVideoBuffer: ${vbFrame.width}x${vbFrame.height}, format=${vbFrame.format}`);
+    const vbPng = frameToPngBase64(vbFrame, vbFrame.format as number, vbFrame.width, vbFrame.height);
+    log('fromVideoBuffer PNG created');
+
+    // 3. fromNSImage path (zero-copy)
+    const handle = captured.getNativeHandle();
+    using nsFrame = Frame.fromNSImage(Buffer.from(handle));
+    log(`fromNSImage: ${nsFrame.width}x${nsFrame.height}, format=${nsFrame.format}, alphaMode=${nsFrame.alphaMode}`);
+    const nsPng = frameToPngBase64(nsFrame, nsFrame.format as number, nsFrame.width, nsFrame.height);
+    log('fromNSImage PNG created');
+
+    // 4. Save to disk as well
+    const outDir = path.join(os.tmpdir(), 'node-av-nsimage-verify');
+    fs.mkdirSync(outDir, { recursive: true });
+    fs.writeFileSync(path.join(outDir, 'reference.png'), captured.toPNG());
+    fs.writeFileSync(path.join(outDir, 'from-video-buffer.png'), Buffer.from(vbPng, 'base64'));
+    fs.writeFileSync(path.join(outDir, 'from-nsimage.png'), Buffer.from(nsPng, 'base64'));
+    log(`Saved to: ${outDir}`);
+
+    return {
+      success: true,
+      logs,
+      images: {
+        reference: referencePng,
+        fromVideoBuffer: vbPng,
+        fromNSImage: nsPng,
+      },
+    };
+  } catch (error) {
+    log(`Error: ${error}`);
     return { error: String(error), logs };
   }
 });

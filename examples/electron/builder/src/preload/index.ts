@@ -24,7 +24,22 @@ const nodeAv = {
     success?: boolean
     error?: string
     logs?: string[]
-  }> => ipcRenderer.invoke('test-back-pressure')
+  }> => ipcRenderer.invoke('test-back-pressure'),
+  benchmarkNSImage: (): Promise<{
+    success?: boolean
+    error?: string
+    logs?: string[]
+  }> => ipcRenderer.invoke('benchmark-nsimage'),
+  verifyNSImage: (): Promise<{
+    success?: boolean
+    error?: string
+    logs?: string[]
+    images?: {
+      reference: string
+      fromVideoBuffer: string
+      fromNSImage: string
+    }
+  }> => ipcRenderer.invoke('verify-nsimage')
 }
 
 if (process.contextIsolated) {

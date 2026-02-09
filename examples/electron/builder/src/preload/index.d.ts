@@ -22,6 +22,21 @@ interface NodeAvAPI {
     error?: string
     logs?: string[]
   }>
+  benchmarkNSImage: () => Promise<{
+    success?: boolean
+    error?: string
+    logs?: string[]
+  }>
+  verifyNSImage: () => Promise<{
+    success?: boolean
+    error?: string
+    logs?: string[]
+    images?: {
+      reference: string
+      fromVideoBuffer: string
+      fromNSImage: string
+    }
+  }>
 }
 
 declare global {

@@ -6,4 +6,6 @@ contextBridge.exposeInMainWorld('nodeAv', {
   getHardwareInfo: () => ipcRenderer.invoke('get-hardware-info'),
   testGpuTexture: () => ipcRenderer.invoke('test-gpu-texture'),
   testBackPressure: () => ipcRenderer.invoke('test-back-pressure'),
+  benchmarkNSImage: () => ipcRenderer.invoke('benchmark-nsimage'),
+  verifyNSImage: () => ipcRenderer.invoke('verify-nsimage'),
 });

@@ -24,6 +24,21 @@ declare global {
         error?: string;
         logs?: string[];
       }>;
+      benchmarkNSImage: () => Promise<{
+        success?: boolean;
+        error?: string;
+        logs?: string[];
+      }>;
+      verifyNSImage: () => Promise<{
+        success?: boolean;
+        error?: string;
+        logs?: string[];
+        images?: {
+          reference: string;
+          fromVideoBuffer: string;
+          fromNSImage: string;
+        };
+      }>;
     };
   }
 }
@@ -33,6 +48,8 @@ const btnCli = document.getElementById('btn-cli');
 const btnHardware = document.getElementById('btn-hardware');
 const btnGpuTexture = document.getElementById('btn-gpu-texture');
 const btnBackPressure = document.getElementById('btn-back-pressure');
+const btnBenchmarkNSImage = document.getElementById('btn-benchmark-nsimage');
+const btnVerifyNSImage = document.getElementById('btn-verify-nsimage');
 const output = document.getElementById('output')!;
 
 function setLoading(message: string) {
@@ -122,6 +139,42 @@ btnBackPressure?.addEventListener('click', async () => {
       setError(`Error: ${result.error}\n\n${result.logs?.join('\n') || ''}`);
     } else {
       setSuccess(result.logs?.join('\n') || 'Done');
+    }
+  } catch (error) {
+    setError(`Error: ${error}`);
+  }
+});
+
+btnBenchmarkNSImage?.addEventListener('click', async () => {
+  setLoading('Running NSImage benchmark (100 iterations)...');
+  try {
+    const result = await window.nodeAv.benchmarkNSImage();
+    if (result.error) {
+      setError(`Error: ${result.error}\n\n${result.logs?.join('\n') || ''}`);
+    } else {
+      setSuccess(result.logs?.join('\n') || 'Done');
+    }
+  } catch (error) {
+    setError(`Error: ${error}`);
+  }
+});
+
+btnVerifyNSImage?.addEventListener('click', async () => {
+  setLoading('Capturing page and creating frames...');
+  try {
+    const result = await window.nodeAv.verifyNSImage();
+    if (result.error) {
+      setError(`Error: ${result.error}\n\n${result.logs?.join('\n') || ''}`);
+    } else if (result.images) {
+      const logsText = result.logs?.join('\n') || '';
+      output.className = '';
+      output.innerHTML =
+        `<div style="white-space:pre;margin-bottom:12px;font-family:monospace">${logsText}</div>` +
+        `<div style="display:flex;gap:12px;flex-wrap:wrap">` +
+        `<div style="text-align:center"><div style="font-weight:bold;margin-bottom:4px">Reference (Electron)</div><img src="data:image/png;base64,${result.images.reference}" style="max-width:250px;border:1px solid #444"></div>` +
+        `<div style="text-align:center"><div style="font-weight:bold;margin-bottom:4px">fromVideoBuffer (2 copies)</div><img src="data:image/png;base64,${result.images.fromVideoBuffer}" style="max-width:250px;border:1px solid #444"></div>` +
+        `<div style="text-align:center"><div style="font-weight:bold;margin-bottom:4px">fromNSImage (zero-copy)</div><img src="data:image/png;base64,${result.images.fromNSImage}" style="max-width:250px;border:1px solid #444"></div>` +
+        `</div>`;
     }
   } catch (error) {
     setError(`Error: ${error}`);

@@ -96,6 +96,45 @@ async function testBackPressure(): Promise<void> {
     setError(`Error: ${error}`)
   }
 }
+
+async function benchmarkNSImage(): Promise<void> {
+  setLoading('Running NSImage benchmark (100 iterations)...')
+  try {
+    const result = await window.nodeAv.benchmarkNSImage()
+    if (result.error) {
+      setError(`Error: ${result.error}\n\n${result.logs?.join('\n') || ''}`)
+    } else {
+      setSuccess(result.logs?.join('\n') || 'Done')
+    }
+  } catch (error) {
+    setError(`Error: ${error}`)
+  }
+}
+
+const verifyHtml = ref('')
+
+async function verifyNSImage(): Promise<void> {
+  setLoading('Capturing page and creating frames...')
+  verifyHtml.value = ''
+  try {
+    const result = await window.nodeAv.verifyNSImage()
+    if (result.error) {
+      setError(`Error: ${result.error}\n\n${result.logs?.join('\n') || ''}`)
+    } else if (result.images) {
+      const logsText = result.logs?.join('\n') || ''
+      outputClass.value = ''
+      output.value = logsText
+      verifyHtml.value =
+        `<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:12px">` +
+        `<div style="text-align:center"><div style="font-weight:bold;margin-bottom:4px">Reference (Electron)</div><img src="data:image/png;base64,${result.images.reference}" style="max-width:250px;border:1px solid #444"></div>` +
+        `<div style="text-align:center"><div style="font-weight:bold;margin-bottom:4px">fromVideoBuffer (2 copies)</div><img src="data:image/png;base64,${result.images.fromVideoBuffer}" style="max-width:250px;border:1px solid #444"></div>` +
+        `<div style="text-align:center"><div style="font-weight:bold;margin-bottom:4px">fromNSImage (zero-copy)</div><img src="data:image/png;base64,${result.images.fromNSImage}" style="max-width:250px;border:1px solid #444"></div>` +
+        `</div>`
+    }
+  } catch (error) {
+    setError(`Error: ${error}`)
+  }
+}
 </script>
 
 <template>
@@ -111,6 +150,8 @@ async function testBackPressure(): Promise<void> {
       <button @click="getHardwareInfo">Detect Hardware</button>
       <button @click="testGpuTexture">Test GPU Texture</button>
       <button @click="testBackPressure">Back Pressure Demo</button>
+      <button @click="benchmarkNSImage">NSImage Benchmark</button>
+      <button @click="verifyNSImage">Verify NSImage</button>
     </div>
 
     <div class="output-container">
@@ -119,6 +160,7 @@ async function testBackPressure(): Promise<void> {
         <span>Output</span>
       </div>
       <pre :class="outputClass">{{ output }}</pre>
+      <div v-if="verifyHtml" v-html="verifyHtml"></div>
     </div>
   </div>
 </template>
