@@ -85,9 +85,14 @@ const parseEnums = (headerPath) => {
     const enumName = match[1];
     const enumContent = match[2];
 
-    // Accept enum names starting with AV or Sws (for SwsFlags, SwsDither, etc.)
+    // Accept enum names starting with AV, Sws, or specific enums like AVAlphaMode
     if (!enumName.startsWith('AV') && !enumName.startsWith('Sws')) {
       continue;
+    }
+
+    // Skip _NB sentinel values for AVAlphaMode
+    if (enumName === 'AVAlphaMode') {
+      // We'll handle _NB filtering per-value below
     }
 
     const values = [];
@@ -102,9 +107,9 @@ const parseEnums = (headerPath) => {
       const cleanLine = line.trim();
       if (!cleanLine) continue;
 
-      // Match enum values (including AVCOL_*, AVDISCARD_*, AVCHROMA_LOC_*, FF_SUB_CHARENC_MODE_*, SWS_*)
+      // Match enum values (including AVCOL_*, AVDISCARD_*, AVCHROMA_LOC_*, AVALPHA_MODE_*, FF_SUB_CHARENC_MODE_*, SWS_*)
       const valueMatch = cleanLine.match(
-        /^\s*(AV_[A-Z0-9_]+|AVMEDIA_[A-Z0-9_]+|AVCOL_[A-Z0-9_]+|AVDISCARD_[A-Z0-9_]+|FF_LEVEL_[A-Z0-9_]+|AVCHROMA_LOC_[A-Z0-9_]+|FF_SUB_CHARENC_MODE_[A-Z0-9_]+|SWS_[A-Z0-9_]+|SWR_[A-Z0-9_]+)\s*(?:=\s*(.+?))?$/,
+        /^\s*(AV_[A-Z0-9_]+|AVMEDIA_[A-Z0-9_]+|AVCOL_[A-Z0-9_]+|AVDISCARD_[A-Z0-9_]+|FF_LEVEL_[A-Z0-9_]+|AVCHROMA_LOC_[A-Z0-9_]+|AVALPHA_MODE_[A-Z0-9_]+|FF_SUB_CHARENC_MODE_[A-Z0-9_]+|SWS_[A-Z0-9_]+|SWR_[A-Z0-9_]+)\s*(?:=\s*(.+?))?$/,
       );
       if (valueMatch) {
         let name = valueMatch[1];
@@ -144,7 +149,7 @@ const parseEnums = (headerPath) => {
         }
 
         // Skip _NB (boundary markers)
-        if (name.endsWith('HWDEVICE_TYPE_NB')) {
+        if (name.endsWith('_NB') || name.endsWith('HWDEVICE_TYPE_NB')) {
           continue;
         }
 

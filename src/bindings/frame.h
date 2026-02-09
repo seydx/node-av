@@ -111,6 +111,9 @@ private:
   Napi::Value GetChromaLocation(const Napi::CallbackInfo& info);
   void SetChromaLocation(const Napi::CallbackInfo& info, const Napi::Value& value);
 
+  Napi::Value GetAlphaMode(const Napi::CallbackInfo& info);
+  void SetAlphaMode(const Napi::CallbackInfo& info, const Napi::Value& value);
+
   Napi::Value GetData(const Napi::CallbackInfo& info);
   Napi::Value GetExtendedData(const Napi::CallbackInfo& info);
 

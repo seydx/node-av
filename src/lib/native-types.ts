@@ -1,4 +1,5 @@
 import type {
+  AVAlphaMode,
   AVBufferSrcFlag,
   AVChromaLocation,
   AVCodecCap,
@@ -116,6 +117,7 @@ export interface NativeFrame extends Disposable {
   colorTrc: AVColorTransferCharacteristic;
   colorSpace: AVColorSpace;
   chromaLocation: AVChromaLocation;
+  alphaMode: AVAlphaMode;
   hwFramesCtx: NativeHardwareFramesContext | null;
   flags: number;
   decodeErrorFlags: number;

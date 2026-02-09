@@ -5,6 +5,7 @@ import { HardwareFramesContext } from './hardware-frames-context.js';
 import { Rational } from './rational.js';
 
 import type {
+  AVAlphaMode,
   AVChromaLocation,
   AVColorPrimaries,
   AVColorRange,
@@ -31,6 +32,7 @@ export interface VideoFrame {
   timeBase?: IRational;
   sampleAspectRatio?: IRational;
   pts?: bigint;
+  alphaMode?: AVAlphaMode;
 }
 
 /**
@@ -183,6 +185,10 @@ export class Frame implements Disposable, NativeWrapper<NativeFrame> {
 
     if (props.sampleAspectRatio) {
       frame.sampleAspectRatio = new Rational(props.sampleAspectRatio.num, props.sampleAspectRatio.den);
+    }
+
+    if (props.alphaMode !== undefined) {
+      frame.alphaMode = props.alphaMode;
     }
 
     const ret = frame.getBuffer();
@@ -661,6 +667,24 @@ export class Frame implements Disposable, NativeWrapper<NativeFrame> {
 
   set chromaLocation(value: AVChromaLocation) {
     this.native.chromaLocation = value;
+  }
+
+  /**
+   * Alpha channel mode (premultiplied vs straight).
+   *
+   * Specifies how the alpha channel relates to color values:
+   * - AVALPHA_MODE_UNSPECIFIED: Unknown or no alpha channel
+   * - AVALPHA_MODE_PREMULTIPLIED: RGB values are multiplied by alpha (e.g., Electron's NativeImage.toBitmap())
+   * - AVALPHA_MODE_STRAIGHT: RGB values are independent of alpha (FFmpeg default)
+   *
+   * Direct mapping to AVFrame->alpha_mode.
+   */
+  get alphaMode(): AVAlphaMode {
+    return this.native.alphaMode;
+  }
+
+  set alphaMode(value: AVAlphaMode) {
+    this.native.alphaMode = value;
   }
 
   /**

@@ -61,6 +61,7 @@ Napi::Object Frame::Init(Napi::Env env, Napi::Object exports) {
     InstanceAccessor("colorTrc", &Frame::GetColorTrc, &Frame::SetColorTrc, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
     InstanceAccessor("colorSpace", &Frame::GetColorSpace, &Frame::SetColorSpace, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
     InstanceAccessor("chromaLocation", &Frame::GetChromaLocation, &Frame::SetChromaLocation, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
+    InstanceAccessor("alphaMode", &Frame::GetAlphaMode, &Frame::SetAlphaMode, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
     InstanceAccessor<&Frame::GetData>("data"),
     InstanceAccessor<&Frame::GetExtendedData>("extendedData"),
     InstanceAccessor<&Frame::GetIsWritable>("isWritable"),
@@ -775,6 +776,20 @@ Napi::Value Frame::GetChromaLocation(const Napi::CallbackInfo& info) {
 void Frame::SetChromaLocation(const Napi::CallbackInfo& info, const Napi::Value& value) {
   if (frame_) {
     frame_->chroma_location = static_cast<AVChromaLocation>(value.As<Napi::Number>().Int32Value());
+  }
+}
+
+Napi::Value Frame::GetAlphaMode(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  if (!frame_) {
+    return Napi::Number::New(env, AVALPHA_MODE_UNSPECIFIED);
+  }
+  return Napi::Number::New(env, frame_->alpha_mode);
+}
+
+void Frame::SetAlphaMode(const Napi::CallbackInfo& info, const Napi::Value& value) {
+  if (frame_) {
+    frame_->alpha_mode = static_cast<AVAlphaMode>(value.As<Napi::Number>().Int32Value());
   }
 }
 
