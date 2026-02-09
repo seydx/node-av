@@ -14,14 +14,13 @@ namespace ffmpeg {
 // macOS — available when __APPLE__ is defined
 int importIOSurface(AVFrame* frame, const uint8_t* handleData, size_t handleSize,
                     AVBufferRef* hwFramesRef);
+int importNSImage(AVFrame* frame, const uint8_t* handleData, size_t handleSize);
 
 // Windows — available when _WIN32 is defined
 int importD3D11Texture(AVFrame* frame, const uint8_t* handleData, size_t handleSize,
                        AVBufferRef* hwDeviceRef);
 
 // Linux — available when __linux__ is defined
-// Creates AV_PIX_FMT_DRM_PRIME frame from DMA-BUF (all architectures)
-// swFormat: AVPixelFormat for the pixel layout, converted to DRM fourcc
 int importDmaBuf(AVFrame* frame, int* fds, int* strides, int* offsets, int* sizes,
                  int numPlanes, int width, int height, uint64_t modifier,
                  int swFormat);

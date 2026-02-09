@@ -36,6 +36,7 @@ Napi::Object Frame::Init(Napi::Env env, Napi::Object exports) {
     InstanceMethod<&Frame::GetMetadata>("getMetadata"),
     InstanceMethod<&Frame::ApplyCropping>("applyCropping"),
     InstanceMethod<&Frame::ImportIOSurface>("importIOSurface"),
+    InstanceMethod<&Frame::ImportNSImage>("importNSImage"),
     InstanceMethod<&Frame::ImportD3D11Texture>("importD3D11Texture"),
     InstanceMethod<&Frame::ImportDmaBuf>("importDmaBuf"),
     InstanceMethod<&Frame::Dispose>(Napi::Symbol::WellKnown(env, "dispose")),
@@ -1205,6 +1206,28 @@ Napi::Value Frame::ImportIOSurface(const Napi::CallbackInfo& info) {
 #else
   // IOSurface is only available on macOS
   Napi::Error::New(env, "importIOSurface is only available on macOS").ThrowAsJavaScriptException();
+  return Napi::Number::New(env, AVERROR(ENOSYS));
+#endif
+}
+
+Napi::Value Frame::ImportNSImage(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+#ifdef __APPLE__
+  if (!frame_) {
+    return Napi::Number::New(env, AVERROR(EINVAL));
+  }
+
+  if (info.Length() < 1 || !info[0].IsBuffer()) {
+    Napi::TypeError::New(env, "Expected (buffer)").ThrowAsJavaScriptException();
+    return Napi::Number::New(env, AVERROR(EINVAL));
+  }
+
+  Napi::Buffer<uint8_t> buffer = info[0].As<Napi::Buffer<uint8_t>>();
+  int ret = importNSImage(frame_, buffer.Data(), buffer.Length());
+  return Napi::Number::New(env, ret);
+#else
+  Napi::Error::New(env, "importNSImage is only available on macOS").ThrowAsJavaScriptException();
   return Napi::Number::New(env, AVERROR(ENOSYS));
 #endif
 }
