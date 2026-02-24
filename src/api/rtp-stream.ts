@@ -444,6 +444,15 @@ export class RTPStream {
 
     const videoTimestampIncrement = 90000 / fps;
 
+    // Build RTP muxer options for video
+    const videoMuxerOptions: Record<string, string | number> = {};
+    if (this.options.video.ssrc !== undefined) {
+      videoMuxerOptions.ssrc = this.options.video.ssrc;
+    }
+    if (this.options.video.payloadType !== undefined) {
+      videoMuxerOptions.payload_type = this.options.video.payloadType;
+    }
+
     // Setup video output
     this.videoOutput = await Muxer.open(
       {
@@ -454,16 +463,6 @@ export class RTPStream {
           }
 
           const rtpPacket = RtpPacket.deSerialize(buffer);
-
-          // Set SSRC (synchronization source identifier)
-          if (this.options.video.ssrc !== undefined) {
-            rtpPacket.header.ssrc = this.options.video.ssrc;
-          }
-
-          // Set payload type
-          if (this.options.video.payloadType !== undefined) {
-            rtpPacket.header.payloadType = this.options.video.payloadType;
-          }
 
           // Fix sequence number - ensure continuous sequence
           rtpPacket.header.sequenceNumber = videoSequenceNumber;
@@ -488,6 +487,7 @@ export class RTPStream {
         copyInitialNonkeyframes: true,
         format: 'rtp',
         maxPacketSize: this.options.video.mtu,
+        options: videoMuxerOptions,
       },
     );
 
@@ -550,6 +550,15 @@ export class RTPStream {
 
     // Setup audio output if available
     if (audioStream) {
+      // Build RTP muxer options for audio
+      const audioMuxerOptions: Record<string, string | number> = {};
+      if (this.options.audio.ssrc !== undefined) {
+        audioMuxerOptions.ssrc = this.options.audio.ssrc;
+      }
+      if (this.options.audio.payloadType !== undefined) {
+        audioMuxerOptions.payload_type = this.options.audio.payloadType;
+      }
+
       this.audioOutput = await Muxer.open(
         {
           write: (buffer: Buffer) => {
@@ -559,16 +568,6 @@ export class RTPStream {
             }
 
             const rtpPacket = RtpPacket.deSerialize(buffer);
-
-            // Set SSRC (synchronization source identifier)
-            if (this.options.audio.ssrc !== undefined) {
-              rtpPacket.header.ssrc = this.options.audio.ssrc;
-            }
-
-            // Set payload type
-            if (this.options.audio.payloadType !== undefined) {
-              rtpPacket.header.payloadType = this.options.audio.payloadType;
-            }
 
             // Fix sequence number - ensure continuous sequence
             rtpPacket.header.sequenceNumber = audioSequenceNumber;
@@ -583,6 +582,7 @@ export class RTPStream {
           copyInitialNonkeyframes: true,
           format: 'rtp',
           maxPacketSize: this.options.audio.mtu,
+          options: audioMuxerOptions,
         },
       );
     }
