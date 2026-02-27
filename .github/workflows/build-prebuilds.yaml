@@ -225,7 +225,7 @@ jobs:
 
       - name: Upload FFmpeg cache as artifact
         if: inputs.upload_caches == true
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: ffmpeg-cache-windows-${{ matrix.os.arch }}
           path: C:\ffmpeg-cache-${{ matrix.os.arch }}
@@ -358,7 +358,7 @@ jobs:
 
       - name: Upload Prebuild
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: prebuild-windows-mingw-${{ matrix.os.arch }}
           path: prebuilds/
@@ -366,7 +366,7 @@ jobs:
 
       - name: Upload FFmpeg binary
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: ffmpeg-v${{ steps.ffmpeg-version.outputs.version }}-win-${{ matrix.os.arch }}-jellyfin.zip
           path: ffmpeg-binary-win-${{ matrix.os.arch }}-jellyfin/
@@ -444,7 +444,7 @@ jobs:
 
       - name: Upload FFmpeg cache as artifact
         if: inputs.upload_caches == true
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: ffmpeg-cache-windows-msvc-${{ matrix.os.arch }}
           path: ffmpeg-msvc/
@@ -519,7 +519,7 @@ jobs:
 
       - name: Upload prebuilds
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: prebuild-win32-msvc-${{ matrix.os.arch }}
           path: prebuilds/
@@ -527,7 +527,7 @@ jobs:
 
       - name: Upload FFmpeg binary
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: ffmpeg-v${{ steps.ffmpeg-version.outputs.version }}-win-${{ matrix.os.arch }}.zip
           path: ffmpeg-binary-win-${{ matrix.os.arch }}/
@@ -688,7 +688,7 @@ jobs:
 
       - name: Upload FFmpeg cache as artifact
         if: inputs.upload_caches == true
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: ffmpeg-cache-linux-${{ matrix.arch }}
           path: /opt/ffbuild/prefix
@@ -789,7 +789,7 @@ jobs:
 
       - name: Upload Prebuild
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: prebuild-linux-${{ matrix.arch }}
           path: prebuilds/
@@ -797,7 +797,7 @@ jobs:
 
       - name: Upload FFmpeg binary
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: ffmpeg-v${{ steps.ffmpeg-version.outputs.version }}-linux-${{ matrix.arch }}-jellyfin.zip
           path: ffmpeg-binary-linux-${{ matrix.arch }}-jellyfin/
@@ -913,7 +913,7 @@ jobs:
 
       - name: Upload FFmpeg cache as artifact
         if: inputs.upload_caches == true
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: ffmpeg-cache-macos-${{ matrix.arch }}
           path: /opt/ffbuild/prefix
@@ -987,7 +987,7 @@ jobs:
 
       - name: Upload Prebuild
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: prebuild-macos-${{ matrix.arch }}
           path: prebuilds/
@@ -995,7 +995,7 @@ jobs:
 
       - name: Upload FFmpeg binary
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: ffmpeg-v${{ steps.ffmpeg-version.outputs.version }}-macos-${{ matrix.arch }}-jellyfin.zip
           path: ffmpeg-binary-macos-${{ matrix.arch }}-jellyfin/
