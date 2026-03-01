@@ -3,8 +3,12 @@
 
 extern "C" {
 #include <libavutil/avutil.h>
+#include <libavutil/bprint.h>
 #include <libavcodec/avcodec.h>
 #include <libavcodec/bsf.h>
+#include <libavformat/avformat.h>
+#include <libavformat/avc.h>
+#include <libavformat/hevc.h>
 
 // Internal FFmpeg headers for codec-specific parsing
 #define register  // C++17 doesn't support 'register' keyword
@@ -32,6 +36,8 @@ Napi::Object CodecParameters::Init(Napi::Env env, Napi::Object exports) {
     InstanceMethod<&CodecParameters::GetCodedSideData>("getCodedSideData"),
     InstanceMethod<&CodecParameters::AddCodedSideData>("addCodedSideData"),
     InstanceMethod<&CodecParameters::GetAllCodedSideData>("getAllCodedSideData"),
+    InstanceMethod<&CodecParameters::GetCodecString>("getCodecString"),
+    InstanceMethod<&CodecParameters::GetDecoderConfigurationRecord>("getDecoderConfigurationRecord"),
     InstanceMethod<&CodecParameters::Dispose>(Napi::Symbol::WellKnown(env, "dispose")),
 
     InstanceAccessor("codecType", &CodecParameters::GetCodecType, &CodecParameters::SetCodecType, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
@@ -1414,6 +1420,157 @@ Napi::Value CodecParameters::GetCodecProperties(const Napi::CallbackInfo& info) 
 
   // Return the props field from descriptor
   return Napi::Number::New(env, desc->props);
+}
+
+Napi::Value CodecParameters::GetCodecString(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+  if (!params_) {
+    return env.Null();
+  }
+
+  // Try av_mime_codec_str first (handles all codecs)
+  AVBPrint bp;
+  av_bprint_init(&bp, 0, AV_BPRINT_SIZE_AUTOMATIC);
+
+  AVRational framerate = {0, 1};
+  int ret = av_mime_codec_str(params_, framerate, &bp);
+
+  if (ret >= 0 && av_bprint_is_complete(&bp) && bp.len > 0) {
+    Napi::Value result = Napi::String::New(env, bp.str, bp.len);
+    av_bprint_finalize(&bp, NULL);
+    return result;
+  }
+  av_bprint_finalize(&bp, NULL);
+
+  // Fallback: build codec string from extradata for H.264/HEVC
+  // av_mime_codec_str fails when profile/level are not set in codecpar
+  // (common with RTSP streams using low probesize)
+  if (!params_->extradata || params_->extradata_size <= 0) {
+    return env.Null();
+  }
+
+  if (params_->codec_id == AV_CODEC_ID_H264) {
+    // Convert to avcC format if needed, then read profile/constraints/level
+    AVIOContext *pb = NULL;
+    uint8_t *buf = NULL;
+
+    ret = avio_open_dyn_buf(&pb);
+    if (ret < 0) return env.Null();
+
+    ret = ff_isom_write_avcc(pb, params_->extradata, params_->extradata_size);
+    int size = avio_close_dyn_buf(pb, &buf);
+
+    if (ret < 0 || size < 4) {
+      av_free(buf);
+      return env.Null();
+    }
+
+    // avcC: byte 1 = profile_idc, byte 2 = constraint_set_flags, byte 3 = level_idc
+    char str[32];
+    snprintf(str, sizeof(str), "avc1.%02x%02x%02x", buf[1], buf[2], buf[3]);
+    av_free(buf);
+    return Napi::String::New(env, str);
+  }
+
+  if (params_->codec_id == AV_CODEC_ID_HEVC) {
+    // Convert to hvcC format if needed, then parse header fields
+    AVIOContext *pb = NULL;
+    uint8_t *buf = NULL;
+
+    ret = avio_open_dyn_buf(&pb);
+    if (ret < 0) return env.Null();
+
+    ret = ff_isom_write_hvcc(pb, params_->extradata, params_->extradata_size, 1, NULL);
+    int size = avio_close_dyn_buf(pb, &buf);
+
+    if (ret < 0 || size < 13) {
+      av_free(buf);
+      return env.Null();
+    }
+
+    // hvcC header:
+    // byte 1: (profile_space << 6) | (tier_flag << 5) | profile_idc
+    // bytes 2-5: profile_compatibility_flags (32-bit BE)
+    // bytes 6-11: constraint_indicator_flags (6 bytes)
+    // byte 12: level_idc
+    int profile_space = (buf[1] >> 6) & 0x03;
+    int tier_flag = (buf[1] >> 5) & 0x01;
+    int profile_idc = buf[1] & 0x1f;
+    uint32_t compat = ((uint32_t)buf[2] << 24) | ((uint32_t)buf[3] << 16) |
+                      ((uint32_t)buf[4] << 8) | buf[5];
+    int level_idc = buf[12];
+
+    const char *prefix = "";
+    if (profile_space == 1) prefix = "A";
+    else if (profile_space == 2) prefix = "B";
+    else if (profile_space == 3) prefix = "C";
+
+    char tier = tier_flag ? 'H' : 'L';
+
+    // Find last non-zero constraint byte
+    int last_non_zero = -1;
+    for (int i = 5; i >= 0; i--) {
+      if (buf[6 + i] != 0) {
+        last_non_zero = i;
+        break;
+      }
+    }
+
+    // Use hvc1 if codec_tag matches, otherwise hev1
+    const char *tag = (params_->codec_tag == MKTAG('h','v','c','1')) ? "hvc1" : "hev1";
+
+    char str[128];
+    int pos = snprintf(str, sizeof(str), "%s.%s%d.%X.%c%d",
+                       tag, prefix, profile_idc, compat, tier, level_idc);
+
+    for (int i = 0; i <= last_non_zero; i++) {
+      pos += snprintf(str + pos, sizeof(str) - pos, ".%02X", buf[6 + i]);
+    }
+
+    av_free(buf);
+    return Napi::String::New(env, str);
+  }
+
+  return env.Null();
+}
+
+Napi::Value CodecParameters::GetDecoderConfigurationRecord(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+  if (!params_ || !params_->extradata || params_->extradata_size <= 0) {
+    return env.Null();
+  }
+
+  AVIOContext *pb = NULL;
+  uint8_t *buf = NULL;
+  int ret;
+
+  ret = avio_open_dyn_buf(&pb);
+  if (ret < 0) {
+    return env.Null();
+  }
+
+  if (params_->codec_id == AV_CODEC_ID_H264) {
+    ret = ff_isom_write_avcc(pb, params_->extradata, params_->extradata_size);
+  } else if (params_->codec_id == AV_CODEC_ID_HEVC) {
+    ret = ff_isom_write_hvcc(pb, params_->extradata, params_->extradata_size, 1, NULL);
+  } else {
+    // For other codecs (AV1, VP9, etc.), extradata is already in the correct format
+    avio_write(pb, params_->extradata, params_->extradata_size);
+    ret = 0;
+  }
+
+  int size = avio_close_dyn_buf(pb, &buf);
+
+  if (ret < 0 || size <= 0) {
+    av_free(buf);
+    return env.Null();
+  }
+
+  Napi::Buffer<uint8_t> result = Napi::Buffer<uint8_t>::Copy(env, buf, size);
+  av_free(buf);
+  return result;
 }
 
 Napi::Value CodecParameters::Dispose(const Napi::CallbackInfo& info) {

@@ -710,6 +710,60 @@ export class CodecParameters implements NativeWrapper<NativeCodecParameters> {
   }
 
   /**
+   * Get RFC 6381 codec string.
+   *
+   * Returns a codec string suitable for MIME type parameters and WebCodecs
+   * configuration (e.g., `avc1.64001f`, `hev1.1.6.L93.B0`, `mp4a.40.2`).
+   *
+   * Direct mapping to av_mime_codec_str().
+   *
+   * @returns Codec string, or null if not available
+   *
+   * @example
+   * ```typescript
+   * const codecString = codecpar.getCodecString();
+   * if (codecString) {
+   *   console.log(`Codec: ${codecString}`);
+   *   // Use with WebCodecs
+   *   const supported = await VideoDecoder.isConfigSupported({
+   *     codec: codecString,
+   *   });
+   * }
+   * ```
+   */
+  getCodecString(): string | null {
+    return this.native.getCodecString();
+  }
+
+  /**
+   * Get decoder configuration record (avcC/hvcC binary blob).
+   *
+   * Returns the decoder configuration record in ISOM/MP4 format, suitable
+   * for use as the `description` field in WebCodecs `VideoDecoder.configure()`.
+   * For H.264, converts Annex B extradata to avcC format.
+   * For HEVC, converts Annex B extradata to hvcC format.
+   * For other codecs (AV1, VP9, etc.), returns raw extradata as-is.
+   *
+   * @returns Configuration record buffer, or null if no extradata
+   *
+   * @example
+   * ```typescript
+   * const dcr = codecpar.getDecoderConfigurationRecord();
+   * if (dcr) {
+   *   // Use with WebCodecs
+   *   const decoder = new VideoDecoder({ ... });
+   *   decoder.configure({
+   *     codec: codecpar.getCodecString()!,
+   *     description: dcr,
+   *   });
+   * }
+   * ```
+   */
+  getDecoderConfigurationRecord(): Buffer | null {
+    return this.native.getDecoderConfigurationRecord();
+  }
+
+  /**
    * Convert to JSON representation.
    *
    * Returns all codec parameters as a plain object.

@@ -44,6 +44,8 @@ private:
   Napi::Value FromContext(const Napi::CallbackInfo& info);
   Napi::Value ToContext(const Napi::CallbackInfo& info);
   Napi::Value ParseExtradata(const Napi::CallbackInfo& info);
+  Napi::Value GetCodecString(const Napi::CallbackInfo& info);
+  Napi::Value GetDecoderConfigurationRecord(const Napi::CallbackInfo& info);
   Napi::Value ToJSON(const Napi::CallbackInfo& info);
   Napi::Value GetCodedSideData(const Napi::CallbackInfo& info);
   Napi::Value AddCodedSideData(const Napi::CallbackInfo& info);
