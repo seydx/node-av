@@ -30,7 +30,7 @@
     "@electron-toolkit/tsconfig": "^2.0.0",
     "@types/node": "^25.1.0",
     "@vitejs/plugin-vue": "^6.0.2",
-    "electron": "^40.0.0",
+    "electron": "^40.8.5",
     "electron-builder": "^26.6.0",
     "electron-vite": "^5.0.0",
     "eslint": "^9.39.1",
