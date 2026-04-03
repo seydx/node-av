@@ -31,7 +31,7 @@
     "@types/electron-squirrel-startup": "^1.0.2",
     "@typescript-eslint/eslint-plugin": "^8.54.0",
     "@typescript-eslint/parser": "^8.54.0",
-    "electron": "40.0.0",
+    "electron": "40.8.5",
     "eslint": "^9.39.2",
     "eslint-plugin-import": "^2.32.0",
     "rimraf": "^6.1.2",
