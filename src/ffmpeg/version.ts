@@ -4,4 +4,4 @@
  * DO NOT EDIT MANUALLY
  */
 
-export const FFMPEG_VERSION = '8.0';
+export const FFMPEG_VERSION = '8.1';
