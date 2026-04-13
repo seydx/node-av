@@ -16,7 +16,7 @@ export type FFAudioEncoder = FFEncoderCodec & { readonly __type: 'audio' };
 export type FFSubtitleEncoder = FFEncoderCodec & { readonly __type: 'subtitle' };
 
 // ============================================================================
-// VIDEO ENCODERS (135 software, 45 hardware)
+// VIDEO ENCODERS (137 software, 45 hardware)
 // ============================================================================
 
 // Software video encoders
@@ -108,6 +108,7 @@ export const FF_ENCODER_MSVIDEO1 = 'msvideo1' as FFVideoEncoder;
 export const FF_ENCODER_PAM = 'pam' as FFVideoEncoder;
 export const FF_ENCODER_PBM = 'pbm' as FFVideoEncoder;
 export const FF_ENCODER_PCX = 'pcx' as FFVideoEncoder;
+export const FF_ENCODER_PDV = 'pdv' as FFVideoEncoder;
 export const FF_ENCODER_PFM = 'pfm' as FFVideoEncoder;
 export const FF_ENCODER_PGM = 'pgm' as FFVideoEncoder;
 export const FF_ENCODER_PGMYUV = 'pgmyuv' as FFVideoEncoder;
@@ -117,6 +118,7 @@ export const FF_ENCODER_PPM = 'ppm' as FFVideoEncoder;
 export const FF_ENCODER_PRORES = 'prores' as FFVideoEncoder;
 export const FF_ENCODER_PRORES_AW = 'prores_aw' as FFVideoEncoder;
 export const FF_ENCODER_PRORES_KS = 'prores_ks' as FFVideoEncoder;
+export const FF_ENCODER_PRORES_KS_VULKAN = 'prores_ks_vulkan' as FFVideoEncoder;
 export const FF_ENCODER_QOI = 'qoi' as FFVideoEncoder;
 export const FF_ENCODER_QTRLE = 'qtrle' as FFVideoEncoder;
 export const FF_ENCODER_R10K = 'r10k' as FFVideoEncoder;
