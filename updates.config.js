@@ -1,3 +1,3 @@
 export default {
-  exclude: ['eslint'],
+  exclude: ['eslint', 'typescript'],
 };
