@@ -269,7 +269,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: "*.zip"
           body_path: release_notes.md
