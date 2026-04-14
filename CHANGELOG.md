@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [5.2.3] - 2026-04-14
+
 ### Changed
 
 - Updated FFmpeg with new encoders, JPEG-XS support, swscale Vulkan support, and more
