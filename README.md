@@ -8,7 +8,7 @@
 [![npm downloads](https://img.shields.io/npm/dt/node-av.svg)](https://www.npmjs.com/package/node-av)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Ready-blue.svg)](https://www.typescriptlang.org/)
-[![FFmpeg](https://img.shields.io/badge/FFmpeg-8-green.svg)](https://ffmpeg.org)
+[![FFmpeg](https://img.shields.io/badge/FFmpeg-8.1-green.svg)](https://ffmpeg.org)
 [![Platform](https://img.shields.io/badge/platform-Windows%20(MSVC%20%7C%20MinGW)%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](https://github.com/seydx/node-av)
 
 Native Node.js bindings for FFmpeg with full TypeScript support. Provides direct access to FFmpeg's C APIs through N-API. Includes both raw FFmpeg bindings for full control and higher-level abstractions. Automatic resource management via Disposable pattern, hardware acceleration support and prebuilt binaries for Windows, Linux, and macOS.
