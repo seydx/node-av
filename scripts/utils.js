@@ -5,7 +5,7 @@
  */
 
 import { execSync } from 'child_process';
-import { existsSync } from 'fs';
+import { existsSync, readdirSync, readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -172,4 +172,88 @@ export const getFFmpegLinkPaths = () => {
     .join(' ');
 
   return { includePaths, libPaths };
+};
+
+/**
+ * Build a map from FFCodec C identifier to the
+ * runtime codec name from `.p.name` by scanning libavcodec/*.c.
+ *
+ * The C identifier and runtime name differ for a handful of codecs
+ * (libvpx VP8/VP9, libaom-av1, libzvbi_teletextdec, libxevd, ...). Only the
+ * runtime name is accepted by avcodec_find_{encoder,decoder}_by_name().
+ *
+ * @param {string} ffmpegPath - Path to FFmpeg source root
+ * @param {{ scanPatches?: boolean }} [options] - When scanPatches is true, also
+ *   parses debian/patches/*.patch for codec definitions added by patches (only
+ *   useful if the tree is not yet patched; harmless otherwise).
+ * @returns {Map<string, string>} Map of "<id>_(encoder|decoder)" -> runtime name
+ */
+export const buildCodecNameIndex = (ffmpegPath, { scanPatches = false } = {}) => {
+  const index = new Map();
+
+  // Match a full FFCodec struct: [const] FFCodec ff_<id>_(encoder|decoder) = { ... };
+  // The body capture is non-greedy and terminated by a line ending in `};`.
+  const blockRe = /(?:const\s+)?FFCodec\s+ff_(\w+_(?:encoder|decoder))\s*=\s*\{([\s\S]*?)\n\}\s*;/g;
+  const nameRe = /\.p\.name\s*=\s*"([^"]+)"/;
+
+  const addFromContent = (content) => {
+    blockRe.lastIndex = 0;
+    let m;
+    while ((m = blockRe.exec(content)) !== null) {
+      const symbol = m[1];
+      const nm = m[2].match(nameRe);
+      if (nm && !index.has(symbol)) {
+        index.set(symbol, nm[1]);
+      }
+    }
+  };
+
+  const walk = (dir) => {
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+      } else if (entry.isFile() && (entry.name.endsWith('.c') || entry.name.endsWith('.h'))) {
+        // .h scan covers cases like aac/aacdec_latm.h which defines a codec inline.
+        try {
+          addFromContent(readFileSync(full, 'utf8'));
+        } catch {
+          // unreadable - skip
+        }
+      }
+    }
+  };
+
+  const libavcodec = join(ffmpegPath, 'libavcodec');
+  if (existsSync(libavcodec)) {
+    walk(libavcodec);
+  }
+
+  if (scanPatches) {
+    const patchesDir = join(ffmpegPath, 'debian', 'patches');
+    if (existsSync(patchesDir)) {
+      for (const file of readdirSync(patchesDir).filter((f) => f.endsWith('.patch'))) {
+        try {
+          const raw = readFileSync(join(patchesDir, file), 'utf8');
+          // Strip leading '+' from added lines so the struct-block regex can match
+          const added = raw
+            .split('\n')
+            .filter((l) => l.startsWith('+') && !l.startsWith('+++'))
+            .map((l) => l.slice(1))
+            .join('\n');
+          addFromContent(added);
+        } catch {
+          // unreadable - skip
+        }
+      }
+    }
+  }
+
+  return index;
 };

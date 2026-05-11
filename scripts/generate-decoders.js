@@ -11,7 +11,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import { getFFmpegPath } from './utils.js';
+import { buildCodecNameIndex, getFFmpegPath } from './utils.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -184,6 +184,20 @@ const toConstantName = (name) => {
 const generateTypeScript = (includePatches = false) => {
   const decoders = extractDecoders(includePatches);
 
+  // Build C-identifier -> runtime codec name map by scanning codec definitions.
+  // For most codecs the two match; for libvpx VP8/VP9, libaom-av1, libxevd etc.
+  // they differ and only the runtime name works with avcodec_find_decoder_by_name().
+  const codecNameIndex = buildCodecNameIndex(FFMPEG_PATH, { scanPatches: includePatches });
+  const codecName = (cId) => codecNameIndex.get(`${cId}_decoder`) ?? cId;
+
+  // Codecs defined via token-pasting macros (PCM/ADPCM/CUVID/QSV/AT/MF/MediaCodec/V4L2M2M)
+  // can't be resolved by regex — but the macro stringifies the same token used in the C id,
+  // so the C-identifier equals the runtime .p.name and the fallback is correct.
+  const unresolved = decoders.filter((d) => !codecNameIndex.has(`${d}_decoder`));
+  if (unresolved.length > 0) {
+    console.log(`Info: ${unresolved.length} decoder(s) resolved via C-identifier fallback (macro-defined codecs).`);
+  }
+
   console.log(`\nFound ${decoders.length} decoders in FFmpeg source`);
 
   // Categorize decoders
@@ -241,7 +255,7 @@ export type FFSubtitleDecoder = FFDecoderCodec & { readonly __type: 'subtitle' }
     output += '// Software video decoders\n';
     for (const decoder of videoSw.sort()) {
       const constName = toConstantName(decoder);
-      output += `export const ${constName} = '${decoder}' as FFVideoDecoder;\n`;
+      output += `export const ${constName} = '${codecName(decoder)}' as FFVideoDecoder;\n`;
     }
     output += '\n';
   }
@@ -263,7 +277,7 @@ export type FFSubtitleDecoder = FFDecoderCodec & { readonly __type: 'subtitle' }
       output += `\n// ${hwType}\n`;
       for (const decoder of decoders.sort()) {
         const constName = toConstantName(decoder);
-        output += `export const ${constName} = '${decoder}' as FFVideoDecoder;\n`;
+        output += `export const ${constName} = '${codecName(decoder)}' as FFVideoDecoder;\n`;
       }
     }
     output += '\n';
@@ -278,7 +292,7 @@ export type FFSubtitleDecoder = FFDecoderCodec & { readonly __type: 'subtitle' }
     output += '// Software audio decoders\n';
     for (const decoder of audioSw.sort()) {
       const constName = toConstantName(decoder);
-      output += `export const ${constName} = '${decoder}' as FFAudioDecoder;\n`;
+      output += `export const ${constName} = '${codecName(decoder)}' as FFAudioDecoder;\n`;
     }
     output += '\n';
   }
@@ -287,7 +301,7 @@ export type FFSubtitleDecoder = FFDecoderCodec & { readonly __type: 'subtitle' }
     output += '// Hardware audio decoders\n';
     for (const decoder of audioHw.sort()) {
       const constName = toConstantName(decoder);
-      output += `export const ${constName} = '${decoder}' as FFAudioDecoder;\n`;
+      output += `export const ${constName} = '${codecName(decoder)}' as FFAudioDecoder;\n`;
     }
     output += '\n';
   }
@@ -300,7 +314,7 @@ export type FFSubtitleDecoder = FFDecoderCodec & { readonly __type: 'subtitle' }
 
     for (const decoder of subtitleDecoders.sort()) {
       const constName = toConstantName(decoder);
-      output += `export const ${constName} = '${decoder}' as FFSubtitleDecoder;\n`;
+      output += `export const ${constName} = '${codecName(decoder)}' as FFSubtitleDecoder;\n`;
     }
     output += '\n';
   }
