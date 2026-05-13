@@ -109,9 +109,9 @@
     "typedoc-vitepress-theme": "^1.1.2",
     "typescript": "5.9.3",
     "typescript-eslint": "^8.59.3",
-    "updates": "^17.16.10",
+    "updates": "^17.16.11",
     "vitepress": "^2.0.0-alpha.17",
-    "ws": "^8.20.0"
+    "ws": "^8.20.1"
   },
   "overrides": {
     "werift": {
