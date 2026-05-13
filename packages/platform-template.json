@@ -4,14 +4,8 @@
   "description": "node-av (PLATFORM binary)",
   "author": "seydx (https://github.com/seydx/node-av)",
   "type": "module",
-  "files": ["node-av.node.zip", "node-av.node", "install.js"],
+  "files": ["node-av.node"],
   "main": "node-av.node",
-  "scripts": {
-    "postinstall": "node install.js"
-  },
-  "dependencies": {
-    "unzipper": "^0.12.3"
-  },
   "os": ["OS_VALUE"],
   "cpu": ["CPU_VALUE"],
   "engines": {

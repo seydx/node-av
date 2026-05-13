@@ -72,14 +72,11 @@ jobs:
         run: |
           node scripts/create-platform-packages.js
 
-          # Compress and copy prebuilds to platform packages (already named node-av.node)
+          # Copy prebuilds to platform packages (already named node-av.node).
           for platform in darwin-x64 darwin-arm64 linux-x64 linux-arm64 win32-x64-mingw win32-arm64-mingw win32-x64-msvc win32-arm64-msvc; do
             if [ -d "prebuilds/$platform" ]; then
-              # Create ZIP containing the .node file
-              cd "prebuilds/$platform"
-              zip -9 "../../packages/$platform/node-av.node.zip" node-av.node
-              cd ../..
-              echo "Compressed and copied binary for $platform"
+              cp "prebuilds/$platform/node-av.node" "packages/$platform/node-av.node"
+              echo "Copied binary for $platform"
             fi
           done
 
