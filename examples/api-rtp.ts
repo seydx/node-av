@@ -30,7 +30,7 @@
 
 import { AV_CODEC_ID_H264, AV_CODEC_ID_HEVC, AV_CODEC_ID_OPUS, AV_CODEC_ID_VP8, AV_CODEC_ID_VP9, AV_HWDEVICE_TYPE_NONE } from '../src/constants/constants.js';
 import { FF_ENCODER_LIBOPUS, FF_ENCODER_LIBVPX_VP8, FF_ENCODER_LIBVPX_VP9, FF_ENCODER_LIBX264, FF_ENCODER_LIBX265 } from '../src/constants/encoders.js';
-import { RTPStream } from '../src/index.js';
+import { RTPStream } from '../src/webrtc/index.js';
 import { prepareTestEnvironment } from './index.js';
 
 import type { RtpPacket } from 'werift';

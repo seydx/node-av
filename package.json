@@ -31,6 +31,11 @@
       "types": "./dist/ffmpeg/index.d.ts",
       "require": "./dist/ffmpeg/index.js",
       "default": "./dist/ffmpeg/index.js"
+    },
+    "./webrtc": {
+      "types": "./dist/webrtc/index.d.ts",
+      "require": "./dist/webrtc/index.js",
+      "default": "./dist/webrtc/index.js"
     }
   },
   "scripts": {
@@ -71,10 +76,10 @@
     "update": "updates --update ./"
   },
   "dependencies": {
-    "unzipper": "^0.12.3",
-    "werift": "^0.23.0"
+    "unzipper": "^0.12.3"
   },
   "optionalDependencies": {
+    "werift": "^0.23.0",
     "@seydx/node-av-darwin-arm64": "^5.2.4",
     "@seydx/node-av-darwin-x64": "^5.2.4",
     "@seydx/node-av-linux-arm64": "^5.2.4",

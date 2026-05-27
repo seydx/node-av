@@ -22,10 +22,12 @@ import { resolve } from 'path';
 
 import { AV_CODEC_ID_AAC, AV_CODEC_ID_OPUS, AV_CODEC_ID_PCM_ALAW, AV_CODEC_ID_PCM_MULAW, AV_CODEC_ID_PCM_S16LE } from '../src/constants/constants.js';
 import { FF_ENCODER_LIBFDK_AAC } from '../src/constants/encoders.js';
-import { Dictionary, FFmpegError, FormatContext, RTPStream } from '../src/index.js';
+import { Dictionary, FFmpegError, FormatContext } from '../src/index.js';
+import { RTPStream } from '../src/webrtc/index.js';
 
 import type { RtpPacket } from 'werift';
-import type { AVCodecID, FFAudioEncoder, RTPStreamOptions } from '../src/index.js';
+import type { AVCodecID, FFAudioEncoder } from '../src/index.js';
+import type { RTPStreamOptions } from '../src/webrtc/index.js';
 
 // Codec name to ID mapping
 const CODEC_MAP: Record<string, AVCodecID | FFAudioEncoder> = {

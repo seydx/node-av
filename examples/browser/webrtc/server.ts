@@ -4,7 +4,10 @@ import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { WebSocket, WebSocketServer } from 'ws';
 
-import { type Demuxer, DeviceAPI, WebRTCStream } from '../../../src/index.js';
+import { DeviceAPI } from '../../../src/index.js';
+import { WebRTCStream } from '../../../src/webrtc/index.js';
+
+import type { Demuxer } from '../../../src/index.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 

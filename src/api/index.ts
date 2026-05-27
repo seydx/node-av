@@ -33,12 +33,6 @@ export { BitStreamFilterAPI, type BitstreamFilterOptions } from './bitstream-fil
 // Pipeline
 export { pipeline, type NamedInputs, type NamedOutputs, type NamedStages, type PipelineControl, type PipelineOptions, type StreamName } from './pipeline.js';
 
-// WebRTC Stream
-export { WebRTCStream, type WebRTCCodecInfo, type WebRTCStreamOptions } from './webrtc-stream.js';
-
-// RTP Stream
-export { RTPStream, type RTPStreamOptions } from './rtp-stream.js';
-
 // fMP4 Stream
 export { FMP4_CODECS, FMP4Stream, type FMP4Data, type FMP4Fragment, type FMP4StreamOptions, type MP4Box, type MP4BoxType } from './fmp4-stream.js';
 
@@ -48,6 +42,3 @@ export { WhisperTranscriber, type WhisperSegment, type WhisperTranscriberOptions
 // Utilities
 export * from './utilities/index.js';
 export * from './utils.js';
-
-// Re-export werift
-export { MediaStreamTrack, RTCIceCandidate, RTCPeerConnection, RTCRtpCodecParameters, RTCSessionDescription, RtpPacket, type PeerConfig } from 'werift';

@@ -3,7 +3,6 @@ import { closeSync, openSync, readSync } from 'fs';
 import { open } from 'fs/promises';
 import { Readable } from 'node:stream';
 import { resolve } from 'path';
-import { RtpPacket } from 'werift';
 
 import {
   AV_NOPTS_VALUE,
@@ -34,6 +33,7 @@ import { DELTA_THRESHOLD, DTS_ERROR_THRESHOLD, IO_BUFFER_SIZE, MAX_INPUT_QUEUE_S
 import { IOStream } from './io-stream.js';
 import { StreamingUtils } from './utilities/streaming.js';
 
+import type { RtpPacket } from 'werift';
 import type { AVMediaType, AVPixelFormat, AVSampleFormat, AVSeekFlag, AVSeekWhence } from '../constants/index.js';
 import type { Stream } from '../lib/stream.js';
 import type { IRational } from '../lib/types.js';
@@ -1150,7 +1150,7 @@ export class Demuxer implements AsyncDisposable, Disposable {
         if (!port) {
           throw new Error(`No port found for stream index ${streamIndex}. Available streams: ${ports.length}`);
         }
-        const data = rtpPacket instanceof RtpPacket ? rtpPacket.serialize() : rtpPacket;
+        const data = Buffer.isBuffer(rtpPacket) ? rtpPacket : rtpPacket.serialize();
         udpSocket.send(data, port, '127.0.0.1');
       };
 
@@ -1275,7 +1275,7 @@ export class Demuxer implements AsyncDisposable, Disposable {
         if (!port) {
           throw new Error(`No port found for stream index ${streamIndex}. Available streams: ${ports.length}`);
         }
-        const data = rtpPacket instanceof RtpPacket ? rtpPacket.serialize() : rtpPacket;
+        const data = Buffer.isBuffer(rtpPacket) ? rtpPacket : rtpPacket.serialize();
         udpSocket.send(data, port, '127.0.0.1');
       };
 
@@ -2307,13 +2307,13 @@ export class Demuxer implements AsyncDisposable, Disposable {
     let disableDiscontinuityCorrection = this.options.copyTs;
 
     // Rescale packet DTS to AV_TIME_BASE for comparison
-    const pktDts = avRescaleQRnd(packet.dts, packet.timeBase, AV_TIME_BASE_Q, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX) as any);
+    const pktDts = avRescaleQRnd(packet.dts, packet.timeBase, AV_TIME_BASE_Q, AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX);
 
     // PTS wrap-around detection
     // Only applies when copyTs is enabled and stream has limited timestamp bits
     if (this.options.copyTs && state.nextDts !== AV_NOPTS_VALUE && fmtIsDiscont && stream.ptsWrapBits < 60) {
       // Calculate wrapped DTS by adding 2^pts_wrap_bits to packet DTS
-      const wrapDts = avRescaleQRnd(packet.dts + (1n << BigInt(stream.ptsWrapBits)), packet.timeBase, AV_TIME_BASE_Q, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX) as any);
+      const wrapDts = avRescaleQRnd(packet.dts + (1n << BigInt(stream.ptsWrapBits)), packet.timeBase, AV_TIME_BASE_Q, AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX);
 
       // If wrapped DTS is closer to predicted nextDts, enable correction
       const wrapDelta = wrapDts > state.nextDts ? wrapDts - state.nextDts : state.nextDts - wrapDts;
