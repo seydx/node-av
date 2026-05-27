@@ -354,6 +354,7 @@ export const AV_CODEC_ID_JPEGXL_ANIM = 272 as AVCodecID;
 export const AV_CODEC_ID_APV = 273 as AVCodecID;
 export const AV_CODEC_ID_PRORES_RAW = 274 as AVCodecID;
 export const AV_CODEC_ID_JPEGXS = 275 as AVCodecID;
+export const AV_CODEC_ID_WEBP_ANIM = 276 as AVCodecID;
 export const AV_CODEC_ID_FIRST_AUDIO = 65536 as AVCodecID;
 export const AV_CODEC_ID_PCM_S16LE = 65536 as AVCodecID;
 export const AV_CODEC_ID_PCM_S16BE = 65537 as AVCodecID;
@@ -730,6 +731,7 @@ export const AV_PKT_DATA_LCEVC = 37 as AVPacketSideDataType;
 export const AV_PKT_DATA_3D_REFERENCE_DISPLAYS = 38 as AVPacketSideDataType;
 export const AV_PKT_DATA_RTCP_SR = 39 as AVPacketSideDataType;
 export const AV_PKT_DATA_EXIF = 40 as AVPacketSideDataType;
+export const AV_PKT_DATA_DYNAMIC_HDR_SMPTE_2094_APP5 = 41 as AVPacketSideDataType;
 
 // libavcodec/packet.h
 export type AVSideDataParamChangeFlags = number & { readonly [__ffmpeg_brand]: 'AVSideDataParamChangeFlags' };
@@ -775,6 +777,7 @@ export const AV_STREAM_GROUP_PARAMS_IAMF_AUDIO_ELEMENT = 1 as AVStreamGroupParam
 export const AV_STREAM_GROUP_PARAMS_IAMF_MIX_PRESENTATION = 2 as AVStreamGroupParamsType;
 export const AV_STREAM_GROUP_PARAMS_TILE_GRID = 3 as AVStreamGroupParamsType;
 export const AV_STREAM_GROUP_PARAMS_LCEVC = 4 as AVStreamGroupParamsType;
+export const AV_STREAM_GROUP_PARAMS_TREF = 5 as AVStreamGroupParamsType;
 
 // libavformat/avlanguage.h
 export type AVLangCodespace = number & { readonly [__ffmpeg_brand]: 'AVLangCodespace' };
@@ -943,6 +946,9 @@ export const AV_FRAME_DATA_VIEW_ID = 29 as AVFrameSideDataType;
 export const AV_FRAME_DATA_3D_REFERENCE_DISPLAYS = 30 as AVFrameSideDataType;
 export const AV_FRAME_DATA_EXIF = 31 as AVFrameSideDataType;
 export const AV_FRAME_DATA_DYNAMIC_HDR_SMPTE_2094_APP5 = 32 as AVFrameSideDataType;
+export const AV_FRAME_DATA_IAMF_MIX_GAIN_PARAM = 33 as AVFrameSideDataType;
+export const AV_FRAME_DATA_IAMF_DEMIXING_INFO_PARAM = 34 as AVFrameSideDataType;
+export const AV_FRAME_DATA_IAMF_RECON_GAIN_INFO_PARAM = 35 as AVFrameSideDataType;
 
 // libavutil/frame.h
 export type AVActiveFormatDescription = number & { readonly [__ffmpeg_brand]: 'AVActiveFormatDescription' };
@@ -1744,6 +1750,7 @@ export const AV_CODEC_FLAG2_NO_OUTPUT = 0x4 as AVCodecFlag2;
 export const AV_CODEC_FLAG2_LOCAL_HEADER = 0x8 as AVCodecFlag2;
 export const AV_CODEC_FLAG2_CHUNKS = 0x8000 as AVCodecFlag2;
 export const AV_CODEC_FLAG2_IGNORE_CROP = 0x10000 as AVCodecFlag2;
+export const AV_CODEC_FLAG2_FIXED_FRAME_SIZE = 0x20000 as AVCodecFlag2;
 export const AV_CODEC_FLAG2_SHOW_ALL = 0x400000 as AVCodecFlag2;
 export const AV_CODEC_FLAG2_EXPORT_MVS = 0x10000000 as AVCodecFlag2;
 export const AV_CODEC_FLAG2_SKIP_MANUAL = 0x20000000 as AVCodecFlag2;
@@ -1883,12 +1890,16 @@ export const AVFMT_NOGENSEARCH = 16384 as AVFormatConstants;
 export const AVFMT_NO_BYTE_SEEK = 32768 as AVFormatConstants;
 export const AVFMT_TS_NONSTRICT = 131072 as AVFormatConstants;
 export const AVFMT_TS_NEGATIVE = 262144 as AVFormatConstants;
+export const AVFMT_FIXED_FRAMESIZE = 524288 as AVFormatConstants;
 export const AVFMT_SEEK_TO_PTS = 67108864 as AVFormatConstants;
 export const AVFMT_EVENT_FLAG_METADATA_UPDATED = 1 as AVFormatConstants;
 export const AVFMT_AVOID_NEG_TS_AUTO = -1 as AVFormatConstants;
 export const AVFMT_AVOID_NEG_TS_DISABLED = 0 as AVFormatConstants;
 export const AVFMT_AVOID_NEG_TS_MAKE_NON_NEGATIVE = 1 as AVFormatConstants;
 export const AVFMT_AVOID_NEG_TS_MAKE_ZERO = 2 as AVFormatConstants;
+export const AVFMT_PROGCOPY_MATCH_BY_ID = 0x1 as AVFormatConstants;
+export const AVFMT_PROGCOPY_MATCH_BY_INDEX = 0x2 as AVFormatConstants;
+export const AVFMT_PROGCOPY_OVERWRITE = 0x100 as AVFormatConstants;
 
 // AVSTREAM_EVENT_FLAG constants (from libavformat/avformat.h)
 export type AVStreamEventFlag = number & { readonly [__ffmpeg_brand]: 'AVStreamEventFlag' };
