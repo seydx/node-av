@@ -104,14 +104,16 @@ console.log(`Bumping version from ${currentVersion} to ${newVersion}`);
 // Update main package version
 packageJson.version = newVersion;
 
-// Update optionalDependencies to match main package version with caret range
+// Update the platform binary packages (@seydx/node-av-*) to match the main
+// package version. Ignore third-party optional deps.
 const optionalDeps = packageJson.optionalDependencies;
 for (const dep in optionalDeps) {
-  // Update to new version with caret range
-  optionalDeps[dep] = `^${newVersion}`;
+  if (dep.startsWith('@seydx/node-av-')) {
+    optionalDeps[dep] = `^${newVersion}`;
+  }
 }
 
-console.log('Updated optionalDependencies to ^' + newVersion);
+console.log('Updated platform package versions to ^' + newVersion);
 
 // Write updated package.json
 writeFileSync(packagePath, JSON.stringify(packageJson, null, 2) + '\n');
