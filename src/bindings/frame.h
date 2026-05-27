@@ -137,6 +137,7 @@ private:
   Napi::Value ApplyCropping(const Napi::CallbackInfo& info);
 
   Napi::Value ImportIOSurface(const Napi::CallbackInfo& info);
+  Napi::Value ExportIOSurface(const Napi::CallbackInfo& info);
   Napi::Value ImportNSImage(const Napi::CallbackInfo& info);
   Napi::Value ImportD3D11Texture(const Napi::CallbackInfo& info);
   Napi::Value ImportDmaBuf(const Napi::CallbackInfo& info);

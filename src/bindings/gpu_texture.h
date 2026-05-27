@@ -15,6 +15,7 @@ namespace ffmpeg {
 int importIOSurface(AVFrame* frame, const uint8_t* handleData, size_t handleSize,
                     AVBufferRef* hwFramesRef);
 int importNSImage(AVFrame* frame, const uint8_t* handleData, size_t handleSize);
+int exportIOSurface(AVFrame* frame, uint8_t* outHandle, size_t outSize);
 
 // Windows — available when _WIN32 is defined
 int importD3D11Texture(AVFrame* frame, const uint8_t* handleData, size_t handleSize,

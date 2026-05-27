@@ -36,6 +36,7 @@ Napi::Object Frame::Init(Napi::Env env, Napi::Object exports) {
     InstanceMethod<&Frame::GetMetadata>("getMetadata"),
     InstanceMethod<&Frame::ApplyCropping>("applyCropping"),
     InstanceMethod<&Frame::ImportIOSurface>("importIOSurface"),
+    InstanceMethod<&Frame::ExportIOSurface>("exportIOSurface"),
     InstanceMethod<&Frame::ImportNSImage>("importNSImage"),
     InstanceMethod<&Frame::ImportD3D11Texture>("importD3D11Texture"),
     InstanceMethod<&Frame::ImportDmaBuf>("importDmaBuf"),
@@ -1207,6 +1208,29 @@ Napi::Value Frame::ImportIOSurface(const Napi::CallbackInfo& info) {
   // IOSurface is only available on macOS
   Napi::Error::New(env, "importIOSurface is only available on macOS").ThrowAsJavaScriptException();
   return Napi::Number::New(env, AVERROR(ENOSYS));
+#endif
+}
+
+Napi::Value Frame::ExportIOSurface(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+#ifdef __APPLE__
+  if (!frame_) {
+    return env.Null();
+  }
+
+  // IOSurfaceRef is a pointer; store it as a raw pointer-sized handle
+  uint8_t handle[sizeof(void*)] = {0};
+  int ret = exportIOSurface(frame_, handle, sizeof(handle));
+  if (ret < 0) {
+    // Not a decoded VideoToolbox frame (or no backing IOSurface)
+    return env.Null();
+  }
+
+  return Napi::Buffer<uint8_t>::Copy(env, handle, sizeof(handle));
+#else
+  // IOSurface is only available on macOS
+  return env.Null();
 #endif
 }
 

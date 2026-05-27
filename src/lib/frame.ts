@@ -1494,6 +1494,38 @@ export class Frame implements Disposable, NativeWrapper<NativeFrame> {
   }
 
   /**
+   * Export the IOSurface backing a decoded VideoToolbox frame (macOS only).
+   *
+   * Returns the `IOSurfaceRef` carried by an `AV_PIX_FMT_VIDEOTOOLBOX` frame as
+   * an 8-byte pointer Buffer — the same handle format accepted by
+   * {@link Frame.fromIOSurface}. This enables zero-copy interop with Metal /
+   * CoreVideo (e.g. feeding a hardware-decoded frame into a GPU compositor)
+   * without a GPU→CPU readback.
+   *
+   * Returns `null` when the frame is not a decoded VideoToolbox hardware frame,
+   * has no backing IOSurface, or on non-macOS platforms.
+   *
+   * **Lifetime:** the IOSurface stays owned by the frame's `CVPixelBuffer`.
+   * Keep this `Frame` alive while using the handle. If the surface must outlive
+   * the frame, retain it separately (e.g. `IOSurfaceIncrementUseCount`).
+   *
+   * @returns IOSurfaceRef pointer as Buffer, or null if not available
+   *
+   * @example
+   * ```typescript
+   * const handle = frame.exportIOSurface();
+   * if (handle) {
+   *   // Pass to a Metal-based compositor; keep `frame` alive while in use.
+   * }
+   * ```
+   *
+   * @see {@link fromIOSurface} For the inverse (import) direction
+   */
+  exportIOSurface(): Buffer | null {
+    return this.native.exportIOSurface();
+  }
+
+  /**
    * Get frame side data.
    *
    * Retrieves additional data associated with the frame

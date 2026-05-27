@@ -9,10 +9,12 @@ import {
   AV_FRAME_DATA_MASTERING_DISPLAY_METADATA,
   AV_FRAME_DATA_MOTION_VECTORS,
   AV_FRAME_DATA_STEREO3D,
+  AV_HWDEVICE_TYPE_VIDEOTOOLBOX,
   AV_NOPTS_VALUE,
   AV_PICTURE_TYPE_I,
   AV_PICTURE_TYPE_P,
   AV_PIX_FMT_RGB24,
+  AV_PIX_FMT_VIDEOTOOLBOX,
   AV_PIX_FMT_YUV420P,
   AV_SAMPLE_FMT_FLT,
   AV_SAMPLE_FMT_FLTP,
@@ -22,9 +24,14 @@ import {
   AVCOL_RANGE_JPEG,
   AVCOL_SPC_BT709,
   AVCOL_TRC_BT709,
+  Decoder,
+  Demuxer,
   Frame,
+  HardwareContext,
   Rational,
 } from '../src/index.js';
+
+import { getInputFile, skipInCI } from './index.js';
 
 describe('Frame', () => {
   let frame: Frame;
@@ -641,6 +648,49 @@ describe('Frame', () => {
       // Unallocated frame has neither data nor hw_frames_ctx
       assert.equal(frame.isSwFrame(), false, 'Unallocated frame should not be software');
       assert.equal(frame.isHwFrame(), false, 'Unallocated frame should not be hardware');
+    });
+
+    it('should return null from exportIOSurface for a software frame', () => {
+      frame.alloc();
+      frame.format = AV_PIX_FMT_YUV420P;
+      frame.width = 640;
+      frame.height = 480;
+      frame.allocBuffer();
+
+      // Software (non-VideoToolbox) frames have no backing IOSurface.
+      // On non-macOS platforms this is also null. The positive path requires
+      // an actual hardware-decoded VideoToolbox frame.
+      assert.equal(frame.exportIOSurface(), null, 'Software frame should not expose an IOSurface');
+    });
+
+    it('should return null from exportIOSurface for an unallocated frame', () => {
+      frame.alloc();
+      assert.equal(frame.exportIOSurface(), null, 'Unallocated frame should not expose an IOSurface');
+    });
+
+    it('should export an IOSurface from a decoded VideoToolbox frame', skipInCI, async () => {
+      using hw = HardwareContext.create(AV_HWDEVICE_TYPE_VIDEOTOOLBOX);
+      if (!hw) {
+        console.log('VideoToolbox not available - skipping');
+        return;
+      }
+
+      await using input = await Demuxer.open(getInputFile('video.mp4'));
+      const videoStream = input.video();
+      assert.ok(videoStream, 'Should have video stream');
+
+      using decoder = await Decoder.create(videoStream, { hardware: hw });
+
+      let handle: Buffer | null = null;
+      for await (using decoded of decoder.frames(input.packets(videoStream.index))) {
+        if (decoded?.format === AV_PIX_FMT_VIDEOTOOLBOX) {
+          handle = decoded.exportIOSurface();
+          break;
+        }
+      }
+
+      assert.ok(handle, 'Should export an IOSurface from a VideoToolbox frame');
+      assert.equal(handle.length, 8, 'IOSurface handle should be an 8-byte pointer');
     });
 
     it('should transfer data between frames (async)', async () => {

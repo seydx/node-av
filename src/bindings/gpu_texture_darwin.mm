@@ -66,6 +66,28 @@ int importIOSurface(AVFrame* frame, const uint8_t* handleData, size_t handleSize
   return 0;
 }
 
+int exportIOSurface(AVFrame* frame, uint8_t* outHandle, size_t outSize) {
+  if (!frame || !outHandle || outSize < sizeof(IOSurfaceRef)) {
+    return AVERROR(EINVAL);
+  }
+
+  // Only decoded VideoToolbox frames carry a CVPixelBuffer in data[3]
+  if (frame->format != AV_PIX_FMT_VIDEOTOOLBOX || !frame->data[3]) {
+    return AVERROR(EINVAL);
+  }
+
+  CVPixelBufferRef pixelBuffer = (CVPixelBufferRef)frame->data[3];
+  IOSurfaceRef ioSurface = CVPixelBufferGetIOSurface(pixelBuffer);
+  if (!ioSurface) {
+    return AVERROR(EINVAL);
+  }
+
+  // The IOSurface remains owned by the frame's CVPixelBuffer. The caller must
+  // keep the frame alive while using the handle
+  *(IOSurfaceRef*)outHandle = ioSurface;
+  return 0;
+}
+
 int importNSImage(AVFrame* frame, const uint8_t* handleData, size_t handleSize) {
   if (!frame || !handleData || handleSize < sizeof(NSImage*)) {
     return AVERROR(EINVAL);
