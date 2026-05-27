@@ -4,6 +4,52 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Breaking Changes
+
+#### WebRTC / RTP moved to the `node-av/webrtc` subpath
+
+`WebRTCStream`, `RTPStream`, and the re-exported werift primitives (`RTCPeerConnection`, `MediaStreamTrack`, `RtpPacket`, `RTCSessionDescription`, `RTCIceCandidate`, `RTCRtpCodecParameters`, `PeerConfig`) are no longer exported from the main package. They now live under the dedicated `node-av/webrtc` entry point.
+
+This removes the werift dependency chain from the core import graph.
+
+`werift` is now an **optional dependency** — only required when using `node-av/webrtc`.
+
+**Migration:**
+```typescript
+// Before
+import { WebRTCStream, RTPStream, RTCPeerConnection } from 'node-av';
+
+// After
+import { WebRTCStream, RTPStream, RTCPeerConnection } from 'node-av/webrtc';
+```
+
+### Added
+
+#### `Frame.exportIOSurface()` — zero-copy IOSurface export (macOS)
+
+Exports the `IOSurfaceRef` backing a decoded VideoToolbox frame as an 8-byte pointer `Buffer` — the inverse of `Frame.fromIOSurface()`. Enables zero-copy interop with Metal / CoreVideo (e.g. feeding hardware-decoded frames into a GPU compositor) without a GPU → CPU readback.
+
+```typescript
+const handle = frame.exportIOSurface();
+if (handle) {
+  // Pass to a Metal-based compositor; keep `frame` alive while using the handle.
+}
+```
+
+Returns `null` for non-VideoToolbox frames and on non-macOS platforms. The IOSurface stays owned by the frame's `CVPixelBuffer`, so the frame must be kept alive while the handle is in use.
+
+### Changed
+
+- Synced FFmpeg with the latest master (~700 upstream commits) — numerous bug fixes, stability and performance improvements. Highlights relevant to node-av users:
+  - **Animated WebP** — new demuxer and decoding support
+  - **ProRes RAW** — VideoToolbox (Apple) and Vulkan hardware decoding
+  - **APV** (Samsung Advanced Professional Video) — hardware decoding and `liboapv` encoder
+  - **HE-AAC (DAB+)** — decoding of 960-frame streams
+  - **FFV1 on Vulkan** — GPU encoding/decoding, including 32-bit float video
+  - New filters: `transpose_cuda` (CUDA transpose), `frc_amf` (AMD frame rate converter)
+  - Faster VVC/H.266 and HEVC decoding (AArch64 NEON, x86 SSSE3)
+- Regenerated constants, encoders, and decoders from updated FFmpeg headers
+
 ## [5.2.3] - 2026-04-14
 
 ### Changed
