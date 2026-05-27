@@ -79,7 +79,7 @@
     "unzipper": "^0.12.3"
   },
   "optionalDependencies": {
-    "werift": "^6.0.0-beta.1",
+    "werift": "^0.23.0",
     "@seydx/node-av-darwin-arm64": "^6.0.0-beta.1",
     "@seydx/node-av-darwin-x64": "^6.0.0-beta.1",
     "@seydx/node-av-linux-arm64": "^6.0.0-beta.1",
@@ -116,6 +116,7 @@
     "typescript-eslint": "^8.60.0",
     "updates": "^17.17.2",
     "vitepress": "^2.0.0-alpha.17",
+    "werift": "^0.23.0",
     "ws": "^8.21.0"
   },
   "overrides": {
