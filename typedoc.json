@@ -9,7 +9,8 @@
     "./src/lib/index.ts",
     "./src/lib/native-types.ts",
     "./src/constants/index.ts",
-    "./src/ffmpeg/index.ts"
+    "./src/ffmpeg/index.ts",
+    "./src/webrtc/index.ts"
   ],
   "exclude": [
     "**/*.test.ts",

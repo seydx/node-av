@@ -31,6 +31,10 @@ export default defineConfig({
         text: 'FFmpeg',
         items: typedocSidebar[2].items,
       },
+      {
+        text: 'WebRTC',
+        items: typedocSidebar[4].items,
+      },
     ],
 
     search: {
