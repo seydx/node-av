@@ -1265,7 +1265,7 @@ export class BitStreamFilterAPI implements Disposable {
       })();
 
       // Return control without pipeTo (terminal stage)
-      return new SchedulerControl<Packet>(this as unknown as SchedulableComponent<Packet>);
+      return new SchedulerControl<Packet>(this);
     } else {
       // BitStreamFilterAPI
       const t = target as unknown as SchedulableComponent<Packet>;
@@ -1286,7 +1286,7 @@ export class BitStreamFilterAPI implements Disposable {
       })();
 
       // Return scheduler for chaining (target is now the last component)
-      return new Scheduler<Packet>(this as unknown as SchedulableComponent<Packet>, t);
+      return new Scheduler<Packet>(this, t);
     }
   }
 }

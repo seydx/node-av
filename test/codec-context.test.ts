@@ -932,12 +932,12 @@ describe('CodecContext', () => {
         assert.equal(ctx.flags, AVFLAG_NONE);
 
         ctx.setFlags(AV_CODEC_FLAG_QSCALE, AV_CODEC_FLAG_PSNR);
-        assert.equal(ctx.flags, (AV_CODEC_FLAG_QSCALE | AV_CODEC_FLAG_PSNR) as AVCodecFlag);
+        assert.equal(ctx.flags, (AV_CODEC_FLAG_QSCALE | AV_CODEC_FLAG_PSNR));
       });
 
       it('should clear single flag using clearFlags', () => {
         ctx.setFlags(AV_CODEC_FLAG_QSCALE, AV_CODEC_FLAG_PSNR);
-        assert.equal(ctx.flags, (AV_CODEC_FLAG_QSCALE | AV_CODEC_FLAG_PSNR) as AVCodecFlag);
+        assert.equal(ctx.flags, (AV_CODEC_FLAG_QSCALE | AV_CODEC_FLAG_PSNR));
 
         ctx.clearFlags(AV_CODEC_FLAG_PSNR);
         assert.equal(ctx.flags, AV_CODEC_FLAG_QSCALE);
@@ -945,7 +945,7 @@ describe('CodecContext', () => {
 
       it('should clear multiple flags using clearFlags', () => {
         ctx.setFlags(AV_CODEC_FLAG_QSCALE, AV_CODEC_FLAG_PSNR);
-        assert.equal(ctx.flags, (AV_CODEC_FLAG_QSCALE | AV_CODEC_FLAG_PSNR) as AVCodecFlag);
+        assert.equal(ctx.flags, (AV_CODEC_FLAG_QSCALE | AV_CODEC_FLAG_PSNR));
 
         ctx.clearFlags(AV_CODEC_FLAG_QSCALE, AV_CODEC_FLAG_PSNR);
         assert.equal(ctx.flags, AVFLAG_NONE);
@@ -956,12 +956,12 @@ describe('CodecContext', () => {
         assert.equal(ctx.flags, AV_CODEC_FLAG_QSCALE);
 
         ctx.setFlags(AV_CODEC_FLAG_PSNR);
-        assert.equal(ctx.flags, (AV_CODEC_FLAG_QSCALE | AV_CODEC_FLAG_PSNR) as AVCodecFlag);
+        assert.equal(ctx.flags, (AV_CODEC_FLAG_QSCALE | AV_CODEC_FLAG_PSNR));
       });
 
       it('should support direct flag assignment (backward compatibility)', () => {
         ctx.flags = (AV_CODEC_FLAG_QSCALE | AV_CODEC_FLAG_PSNR) as AVCodecFlag;
-        assert.equal(ctx.flags, (AV_CODEC_FLAG_QSCALE | AV_CODEC_FLAG_PSNR) as AVCodecFlag);
+        assert.equal(ctx.flags, (AV_CODEC_FLAG_QSCALE | AV_CODEC_FLAG_PSNR));
 
         ctx.flags = AVFLAG_NONE;
         assert.equal(ctx.flags, AVFLAG_NONE);

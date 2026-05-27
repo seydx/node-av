@@ -803,7 +803,7 @@ export class DeviceAPI {
     }
     if (format === 'v4l2' && options.v4l2) {
       if (options.v4l2.inputFormat) {
-        formatOptions.input_format = options.v4l2.inputFormat as string;
+        formatOptions.input_format = options.v4l2.inputFormat;
       }
     }
     if (format === 'dshow' && options.dshow) {

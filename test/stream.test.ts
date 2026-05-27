@@ -92,7 +92,7 @@ describe('Stream', () => {
 
       // Set disposition flags
       stream.disposition = (AV_DISPOSITION_DEFAULT | AV_DISPOSITION_ATTACHED_PIC) as any;
-      assert.equal(stream.disposition, (AV_DISPOSITION_DEFAULT | AV_DISPOSITION_ATTACHED_PIC) as any);
+      assert.equal(stream.disposition, (AV_DISPOSITION_DEFAULT | AV_DISPOSITION_ATTACHED_PIC));
     });
 
     it('should get and set discard', () => {
@@ -375,12 +375,12 @@ describe('Stream', () => {
       assert.equal(stream.eventFlags, 0);
 
       stream.setEventFlags(AVSTREAM_EVENT_FLAG_METADATA_UPDATED, AVSTREAM_EVENT_FLAG_NEW_PACKETS);
-      assert.equal(stream.eventFlags, (AVSTREAM_EVENT_FLAG_METADATA_UPDATED | AVSTREAM_EVENT_FLAG_NEW_PACKETS) as AVStreamEventFlag);
+      assert.equal(stream.eventFlags, (AVSTREAM_EVENT_FLAG_METADATA_UPDATED | AVSTREAM_EVENT_FLAG_NEW_PACKETS));
     });
 
     it('should clear single event flag using clearEventFlags', () => {
       stream.setEventFlags(AVSTREAM_EVENT_FLAG_METADATA_UPDATED, AVSTREAM_EVENT_FLAG_NEW_PACKETS);
-      assert.equal(stream.eventFlags, (AVSTREAM_EVENT_FLAG_METADATA_UPDATED | AVSTREAM_EVENT_FLAG_NEW_PACKETS) as AVStreamEventFlag);
+      assert.equal(stream.eventFlags, (AVSTREAM_EVENT_FLAG_METADATA_UPDATED | AVSTREAM_EVENT_FLAG_NEW_PACKETS));
 
       stream.clearEventFlags(AVSTREAM_EVENT_FLAG_NEW_PACKETS);
       assert.equal(stream.eventFlags, AVSTREAM_EVENT_FLAG_METADATA_UPDATED);
@@ -388,7 +388,7 @@ describe('Stream', () => {
 
     it('should clear multiple event flags using clearEventFlags', () => {
       stream.setEventFlags(AVSTREAM_EVENT_FLAG_METADATA_UPDATED, AVSTREAM_EVENT_FLAG_NEW_PACKETS);
-      assert.equal(stream.eventFlags, (AVSTREAM_EVENT_FLAG_METADATA_UPDATED | AVSTREAM_EVENT_FLAG_NEW_PACKETS) as AVStreamEventFlag);
+      assert.equal(stream.eventFlags, (AVSTREAM_EVENT_FLAG_METADATA_UPDATED | AVSTREAM_EVENT_FLAG_NEW_PACKETS));
 
       stream.clearEventFlags(AVSTREAM_EVENT_FLAG_METADATA_UPDATED, AVSTREAM_EVENT_FLAG_NEW_PACKETS);
       assert.equal(stream.eventFlags, 0);
@@ -399,12 +399,12 @@ describe('Stream', () => {
       assert.equal(stream.eventFlags, AVSTREAM_EVENT_FLAG_METADATA_UPDATED);
 
       stream.setEventFlags(AVSTREAM_EVENT_FLAG_NEW_PACKETS);
-      assert.equal(stream.eventFlags, (AVSTREAM_EVENT_FLAG_METADATA_UPDATED | AVSTREAM_EVENT_FLAG_NEW_PACKETS) as AVStreamEventFlag);
+      assert.equal(stream.eventFlags, (AVSTREAM_EVENT_FLAG_METADATA_UPDATED | AVSTREAM_EVENT_FLAG_NEW_PACKETS));
     });
 
     it('should support direct event flag assignment (backward compatibility)', () => {
       stream.eventFlags = (AVSTREAM_EVENT_FLAG_METADATA_UPDATED | AVSTREAM_EVENT_FLAG_NEW_PACKETS) as AVStreamEventFlag;
-      assert.equal(stream.eventFlags, (AVSTREAM_EVENT_FLAG_METADATA_UPDATED | AVSTREAM_EVENT_FLAG_NEW_PACKETS) as AVStreamEventFlag);
+      assert.equal(stream.eventFlags, (AVSTREAM_EVENT_FLAG_METADATA_UPDATED | AVSTREAM_EVENT_FLAG_NEW_PACKETS));
 
       stream.eventFlags = 0 as AVStreamEventFlag;
       assert.equal(stream.eventFlags, 0);
