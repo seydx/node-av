@@ -45,6 +45,7 @@ export {
   type ImportHandleProps,
   type SharedTextureHandle,
   type SharedTextureOptions,
+  type TextureColorSpace,
   type TextureFrameOptions,
   type TextureInfo,
 } from './electron-shared-texture.js';

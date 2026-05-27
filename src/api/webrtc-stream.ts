@@ -120,7 +120,6 @@ export interface WebRTCStreamOptions extends Omit<RTPStreamOptions, 'onVideoPack
  *
  * @see {@link RTPStream} For library-agnostic RTP streaming
  * @see {@link Demuxer} For input media handling
- * @see {@link HardwareContext} For GPU acceleration
  */
 export class WebRTCStream {
   private stream!: RTPStream;

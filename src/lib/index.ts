@@ -1,7 +1,7 @@
 export type * from './types.js';
 
 // Format Context
-export { FormatContext } from './format-context.js';
+export { FormatContext, type RTSPStreamInfo } from './format-context.js';
 
 // Codec Context
 export { CodecContext } from './codec-context.js';

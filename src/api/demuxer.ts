@@ -606,7 +606,8 @@ export class Demuxer implements AsyncDisposable, Disposable {
    * ```
    *
    * @see {@link DemuxerOptions} For configuration options
-   * @see {@link RawData} For raw data input
+   * @see {@link VideoRawData} For raw video data input
+   * @see {@link AudioRawData} For raw audio data input
    * @see {@link IOInputCallbacks} For custom I/O interface
    */
   static async open(input: string | Buffer, options?: DemuxerOptions): Promise<Demuxer>;

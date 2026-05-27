@@ -23,7 +23,7 @@ export { HardwareContext, type BaseCodecName, type HardwareOptions } from './har
 export { DeviceAPI, type CameraOptions, type DeviceOptions, type MicrophoneOptions, type ScreenCaptureOptions } from './device.js';
 
 // Filter
-export { FilterComplexAPI, type FilterComplexInput, type FilterComplexOutput } from './filter-complex.js';
+export { FilterComplexAPI, type FilterComplexInput, type FilterComplexOptions, type FilterComplexOutput } from './filter-complex.js';
 export { FilterPreset, type FilterSupport } from './filter-presets.js';
 export { FilterAPI, type FilterOptions } from './filter.js';
 

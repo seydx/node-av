@@ -122,14 +122,16 @@ export class Codec implements NativeWrapper<NativeCodec> {
    *
    * @example
    * ```typescript
+   * import { FF_DECODER_H264, FF_DECODER_H264_CUVID } from 'node-av/constants';
+   *
    * // Find specific H.264 decoder
-   * const decoder = Codec.findDecoderByName('h264_cuvid');
+   * const decoder = Codec.findDecoderByName(FF_DECODER_H264_CUVID);
    * if (decoder) {
    *   console.log('Found NVIDIA hardware decoder');
    * }
    *
    * // Find software decoder
-   * const sw = Codec.findDecoderByName('h264');
+   * const sw = Codec.findDecoderByName(FF_DECODER_H264);
    * ```
    *
    * @see {@link findDecoder} To find by codec ID
@@ -186,6 +188,8 @@ export class Codec implements NativeWrapper<NativeCodec> {
    *
    * @example
    * ```typescript
+   * import { FF_ENCODER_H264_NVENC, FF_ENCODER_LIBX264 } from 'node-av/constants';
+   *
    * // Find specific H.264 encoder
    * const x264 = Codec.findEncoderByName(FF_ENCODER_LIBX264);
    * if (x264) {
@@ -193,7 +197,7 @@ export class Codec implements NativeWrapper<NativeCodec> {
    * }
    *
    * // Find hardware encoder
-   * const nvenc = Codec.findEncoderByName('h264_nvenc');
+   * const nvenc = Codec.findEncoderByName(FF_ENCODER_H264_NVENC);
    * ```
    *
    * @see {@link findEncoder} To find by codec ID
@@ -512,7 +516,9 @@ export class Codec implements NativeWrapper<NativeCodec> {
    *
    * @example
    * ```typescript
-   * const codec = Codec.findDecoderByName('h264_cuvid');
+   * import { FF_DECODER_H264_CUVID } from 'node-av/constants';
+   *
+   * const codec = Codec.findDecoderByName(FF_DECODER_H264_CUVID);
    * if (codec?.hasHardwareAcceleration()) {
    *   console.log('Hardware acceleration available');
    * }
