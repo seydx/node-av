@@ -3,13 +3,14 @@ import { BitStreamFilterContext } from '../lib/bitstream-filter-context.js';
 import { BitStreamFilter } from '../lib/bitstream-filter.js';
 import { FFmpegError } from '../lib/error.js';
 import { Packet } from '../lib/packet.js';
+import { Stream } from '../lib/stream.js';
 import { PACKET_THREAD_QUEUE_SIZE } from './constants.js';
+import { Encoder } from './encoder.js';
 import { Muxer } from './muxer.js';
 import { AsyncQueue } from './utilities/async-queue.js';
 import { Scheduler, SchedulerControl } from './utilities/scheduler.js';
 
 import type { BsfName, BsfOptionsFor } from '../constants/index.js';
-import type { Stream } from '../lib/stream.js';
 import type { SchedulableComponent } from './utilities/scheduler.js';
 
 /**
@@ -79,7 +80,8 @@ export interface BitstreamFilterOptions<N extends string = string> {
 export class BitStreamFilterAPI implements Disposable {
   private ctx: BitStreamFilterContext;
   private bsf: BitStreamFilter;
-  private stream: Stream;
+  private source: Stream | Encoder | BitStreamFilterAPI;
+  private initialized = false;
   private packet: Packet;
   private isClosed = false;
 
@@ -96,14 +98,14 @@ export class BitStreamFilterAPI implements Disposable {
    *
    * @param ctx - Filter context
    *
-   * @param stream - Associated stream
+   * @param source - Input source for lazy parameter resolution
    *
    * @internal
    */
-  private constructor(bsf: BitStreamFilter, ctx: BitStreamFilterContext, stream: Stream) {
+  private constructor(bsf: BitStreamFilter, ctx: BitStreamFilterContext, source: Stream | Encoder | BitStreamFilterAPI) {
     this.bsf = bsf;
     this.ctx = ctx;
-    this.stream = stream;
+    this.source = source;
 
     this.packet = new Packet();
     this.packet.alloc();
@@ -113,51 +115,43 @@ export class BitStreamFilterAPI implements Disposable {
   }
 
   /**
-   * Create a bitstream filter for a stream.
+   * Create a bitstream filter.
    *
-   * Initializes filter with stream codec parameters.
-   * Configures time base and prepares for packet processing.
+   * The input source provides the codec parameters the filter is configured with.
+   * Pass a {@link Stream} to filter its packets directly (stream copy), or an
+   * {@link Encoder} to filter that encoder's output (transcode) - parameters are
+   * derived from the encoder once it is open. Another {@link BitStreamFilterAPI}
+   * may be passed to chain filters.
+   *
+   * Initialization is lazy: filter options are validated immediately, but the
+   * input parameters are bound and the filter is initialized on the first packet,
+   * so an `Encoder` source (opened lazily on its first frame) is ready in time.
    *
    * Direct mapping to av_bsf_get_by_name() and av_bsf_alloc().
    *
    * @param filterName - Name of the bitstream filter
    *
-   * @param stream - Stream to apply filter to
+   * @param source - Input source: a `Stream` (copy), `Encoder` (transcode), or upstream filter (chain)
    *
    * @param filterOptions - Optional filter-specific options
    *
    * @returns Configured bitstream filter
    *
-   * @throws {Error} If initialization fails
-   *
-   * @throws {FFmpegError} If allocation or initialization fails
+   * @throws {FFmpegError} If the filter is not found, allocation fails, or an option is invalid
    *
    * @example
    * ```typescript
-   * // H.264 MP4 to Annex B conversion
+   * // Stream copy: H.264 MP4 to Annex B conversion
    * const filter = BitStreamFilterAPI.create('h264_mp4toannexb', videoStream);
    * ```
    *
    * @example
    * ```typescript
-   * // AAC ADTS to ASC conversion
-   * const filter = BitStreamFilterAPI.create('aac_adtstoasc', audioStream);
-   * ```
-   *
-   * @example
-   * ```typescript
-   * // Remove AUDs from H.264 stream
-   * const filter = BitStreamFilterAPI.create('h264_metadata', stream, {
-   *   options: { aud: 'remove' }
+   * // Transcode: derive parameters from the encoder's output
+   * const filter = BitStreamFilterAPI.create('h264_metadata', encoder, {
+   *   options: { aud: 'remove', level: '4.1' },
    * });
-   * ```
-   *
-   * @example
-   * ```typescript
-   * // Set H.264 level
-   * const filter = BitStreamFilterAPI.create('h264_metadata', stream, {
-   *   options: { level: 51 }
-   * });
+   * pipeline(input, decoder, encoder, filter, output);
    * ```
    *
    * @see {@link BitStreamFilter.getByName} For filter discovery
@@ -166,11 +160,11 @@ export class BitStreamFilterAPI implements Disposable {
   // eslint-disable-next-line space-before-function-paren
   static create<const N extends BsfName | (string & {}) = BsfName | (string & {})>(
     filterName: N,
-    stream: Stream,
+    source: Stream | Encoder | BitStreamFilterAPI,
     filterOptions?: BitstreamFilterOptions<N>,
   ): BitStreamFilterAPI {
-    if (!stream) {
-      throw new Error('Stream is required');
+    if (!source) {
+      throw new Error('A source (Stream, Encoder, or BitStreamFilterAPI) is required');
     }
 
     // Find the bitstream filter
@@ -185,16 +179,8 @@ export class BitStreamFilterAPI implements Disposable {
     FFmpegError.throwIfError(allocRet, 'Failed to allocate bitstream filter context');
 
     try {
-      // Copy codec parameters from stream
-      if (!ctx.inputCodecParameters) {
-        throw new Error('Failed to get input codec parameters from filter context');
-      }
-      stream.codecpar.copy(ctx.inputCodecParameters);
-
-      // Set time base
-      ctx.inputTimeBase = stream.timeBase;
-
-      // Apply filter-specific options before init
+      // Apply (and validate) filter-specific options now; input parameters and
+      // init() are deferred to ensureInitialized() on the first packet.
       if (filterOptions?.options) {
         for (const [key, value] of Object.entries(filterOptions.options as Record<string, string | number | boolean | bigint | undefined | null>)) {
           const ret = ctx.setOption(key, value);
@@ -202,11 +188,7 @@ export class BitStreamFilterAPI implements Disposable {
         }
       }
 
-      // Initialize the filter
-      const initRet = ctx.init();
-      FFmpegError.throwIfError(initRet, 'Failed to initialize bitstream filter');
-
-      const bsfApi = new BitStreamFilterAPI(filter, ctx, stream);
+      const bsfApi = new BitStreamFilterAPI(filter, ctx, source);
 
       if (filterOptions?.signal) {
         filterOptions.signal.throwIfAborted();
@@ -279,6 +261,47 @@ export class BitStreamFilterAPI implements Disposable {
   }
 
   /**
+   * Check if the filter has been initialized.
+   *
+   * Initialization is lazy and happens on the first processed packet, after
+   * which {@link outputCodecParameters} reflect the filter's output.
+   *
+   * @example
+   * ```typescript
+   * if (filter.isInitialized) {
+   *   const params = filter.outputCodecParameters;
+   * }
+   * ```
+   */
+  get isInitialized(): boolean {
+    return this.initialized;
+  }
+
+  /**
+   * Get associated stream.
+   *
+   * Returns the stream this filter was created for. Only available when the
+   * filter was created from a {@link Stream}; filters created from an `Encoder`
+   * derive their parameters from the encoder's output instead.
+   *
+   * @returns Associated stream
+   *
+   * @throws {Error} If the filter was not created from a stream
+   *
+   * @example
+   * ```typescript
+   * const stream = filter.getStream();
+   * console.log(`Filtering stream ${stream.index}`);
+   * ```
+   */
+  getStream(): Stream {
+    if (!(this.source instanceof Stream)) {
+      throw new Error('No associated stream: this bitstream filter derives its parameters from an upstream component');
+    }
+    return this.source;
+  }
+
+  /**
    * Send a packet to the filter.
    *
    * Sends a packet to the filter for processing.
@@ -336,6 +359,8 @@ export class BitStreamFilterAPI implements Disposable {
     if (this.isClosed) {
       return;
     }
+
+    this.ensureInitialized();
 
     // Send packet to filter (null signals EOF/flush)
     const sendRet = await this.ctx.sendPacket(packet);
@@ -402,6 +427,8 @@ export class BitStreamFilterAPI implements Disposable {
     if (this.isClosed) {
       return;
     }
+
+    this.ensureInitialized();
 
     // Send packet to filter (null signals EOF/flush)
     const sendRet = this.ctx.sendPacketSync(packet);
@@ -754,7 +781,7 @@ export class BitStreamFilterAPI implements Disposable {
   async flush(): Promise<void> {
     this.signal?.throwIfAborted();
 
-    if (this.isClosed) {
+    if (this.isClosed || !this.initialized) {
       return;
     }
 
@@ -800,7 +827,7 @@ export class BitStreamFilterAPI implements Disposable {
    * @see {@link flush} For async version
    */
   flushSync(): void {
-    if (this.isClosed) {
+    if (this.isClosed || !this.initialized) {
       return;
     }
 
@@ -856,7 +883,7 @@ export class BitStreamFilterAPI implements Disposable {
    * @see {@link receiveSync} For synchronous version
    */
   async receive(): Promise<Packet | null> {
-    if (this.isClosed) {
+    if (this.isClosed || !this.initialized) {
       return null;
     }
 
@@ -925,7 +952,7 @@ export class BitStreamFilterAPI implements Disposable {
    * @see {@link receive} For async version
    */
   receiveSync(): Packet | null {
-    if (this.isClosed) {
+    if (this.isClosed || !this.initialized) {
       return null;
     }
 
@@ -948,6 +975,85 @@ export class BitStreamFilterAPI implements Disposable {
       // Error
       FFmpegError.throwIfError(recvRet, 'Failed to receive packet from bitstream filter');
       return null;
+    }
+  }
+
+  /**
+   * Pipe output to another bitstream filter.
+   *
+   * Starts background worker for packet processing.
+   * Packets flow through: input → this filter → target filter.
+   *
+   * @param target - Target bitstream filter
+   *
+   * @returns Scheduler for continued chaining
+   *
+   * @example
+   * ```typescript
+   * const filter1 = BitStreamFilterAPI.create('h264_mp4toannexb', stream);
+   * const filter2 = BitStreamFilterAPI.create('dump_extra', stream);
+   * filter1.pipeTo(filter2).pipeTo(output, 0);
+   * ```
+   */
+  pipeTo(target: BitStreamFilterAPI): Scheduler<Packet>;
+
+  /**
+   * Pipe output to muxer.
+   *
+   * Terminal stage - writes filtered packets to output file.
+   *
+   * @param output - Muxer to write to
+   *
+   * @param streamIndex - Stream index in output
+   *
+   * @returns Control interface for pipeline
+   *
+   * @example
+   * ```typescript
+   * const filter = BitStreamFilterAPI.create('h264_mp4toannexb', stream);
+   * const control = filter.pipeTo(output, 0);
+   * await control.send(packet);
+   * ```
+   */
+  pipeTo(output: Muxer, streamIndex: number): SchedulerControl<Packet>;
+
+  pipeTo(target: BitStreamFilterAPI | Muxer, streamIndex?: number): Scheduler<Packet> | SchedulerControl<Packet> {
+    if (target instanceof Muxer) {
+      // Start worker if not already running
+      this.workerPromise ??= this.runWorker();
+
+      // Start pipe task: filter.outputQueue -> output
+      this.pipeToPromise = (async () => {
+        while (true) {
+          const packet = await this.receiveFromQueue();
+          if (!packet) break;
+          await target.writePacket(packet, streamIndex!);
+        }
+      })();
+
+      // Return control without pipeTo (terminal stage)
+      return new SchedulerControl<Packet>(this as unknown as SchedulableComponent<Packet>);
+    } else {
+      // BitStreamFilterAPI
+      const t = target as unknown as SchedulableComponent<Packet>;
+
+      // Store reference to next component for flush propagation
+      this.nextComponent = t;
+
+      // Start worker if not already running
+      this.workerPromise ??= this.runWorker();
+
+      // Start pipe task: filter.outputQueue -> target.inputQueue (via target.send)
+      this.pipeToPromise = (async () => {
+        while (true) {
+          const packet = await this.receiveFromQueue();
+          if (!packet) break;
+          await t.sendToQueue(packet);
+        }
+      })();
+
+      // Return scheduler for chaining (target is now the last component)
+      return new Scheduler<Packet>(this as unknown as SchedulableComponent<Packet>, t);
     }
   }
 
@@ -1012,23 +1118,6 @@ export class BitStreamFilterAPI implements Disposable {
       if (!packet) break;
       yield packet;
     }
-  }
-
-  /**
-   * Get associated stream.
-   *
-   * Returns the stream this filter was created for.
-   *
-   * @returns Associated stream
-   *
-   * @example
-   * ```typescript
-   * const stream = filter.getStream();
-   * console.log(`Filtering stream ${stream.index}`);
-   * ```
-   */
-  getStream(): Stream {
-    return this.stream;
   }
 
   /**
@@ -1104,6 +1193,52 @@ export class BitStreamFilterAPI implements Disposable {
   }
 
   /**
+   * Bind input parameters from the source and initialize the filter.
+   *
+   * @internal
+   */
+  private ensureInitialized(): void {
+    if (this.initialized) {
+      return;
+    }
+
+    const params = this.ctx.inputCodecParameters;
+    if (!params) {
+      throw new Error('Failed to get input codec parameters from filter context');
+    }
+
+    const source = this.source;
+    if (source instanceof Stream) {
+      source.codecpar.copy(params);
+      this.ctx.inputTimeBase = source.timeBase;
+    } else if (source instanceof Encoder) {
+      const codecContext = source.getCodecContext();
+      if (!codecContext) {
+        throw new Error('Encoder is not initialized yet; cannot derive bitstream filter parameters.');
+      }
+      const ret = params.fromContext(codecContext);
+      FFmpegError.throwIfError(ret, 'Failed to derive bitstream filter parameters from encoder');
+      this.ctx.inputTimeBase = codecContext.timeBase;
+    } else {
+      // Upstream is another bitstream filter: chain from its output.
+      source.ensureInitialized();
+      const upstream = source.outputCodecParameters;
+      if (!upstream) {
+        throw new Error('Upstream bitstream filter has no output parameters.');
+      }
+      upstream.copy(params);
+      const tb = source.outputTimeBase;
+      if (tb) {
+        this.ctx.inputTimeBase = tb;
+      }
+    }
+
+    const initRet = this.ctx.init();
+    FFmpegError.throwIfError(initRet, 'Failed to initialize bitstream filter');
+    this.initialized = true;
+  }
+
+  /**
    * Send packet to input queue or flush the pipeline.
    *
    * When packet is provided, queues it for filtering.
@@ -1120,7 +1255,7 @@ export class BitStreamFilterAPI implements Disposable {
    *
    * @internal
    */
-  async sendToQueue(packet: Packet | null): Promise<void> {
+  private async sendToQueue(packet: Packet | null): Promise<void> {
     if (packet) {
       await this.inputQueue.send(packet);
     } else {
@@ -1154,7 +1289,7 @@ export class BitStreamFilterAPI implements Disposable {
    *
    * @internal
    */
-  async receiveFromQueue(): Promise<Packet | null> {
+  private async receiveFromQueue(): Promise<Packet | null> {
     return await this.outputQueue.receive();
   }
 
@@ -1173,6 +1308,8 @@ export class BitStreamFilterAPI implements Disposable {
         if (this.isClosed) {
           break;
         }
+
+        this.ensureInitialized();
 
         // Send packet to filter
         const sendRet = await this.ctx.sendPacket(packet);
@@ -1218,85 +1355,6 @@ export class BitStreamFilterAPI implements Disposable {
     } finally {
       // Close output queue when done (if not already closed with error)
       this.outputQueue?.close();
-    }
-  }
-
-  /**
-   * Pipe output to another bitstream filter.
-   *
-   * Starts background worker for packet processing.
-   * Packets flow through: input → this filter → target filter.
-   *
-   * @param target - Target bitstream filter
-   *
-   * @returns Scheduler for continued chaining
-   *
-   * @example
-   * ```typescript
-   * const filter1 = BitStreamFilterAPI.create('h264_mp4toannexb', stream);
-   * const filter2 = BitStreamFilterAPI.create('dump_extra', stream);
-   * filter1.pipeTo(filter2).pipeTo(output, 0);
-   * ```
-   */
-  pipeTo(target: BitStreamFilterAPI): Scheduler<Packet>;
-
-  /**
-   * Pipe output to muxer.
-   *
-   * Terminal stage - writes filtered packets to output file.
-   *
-   * @param output - Muxer to write to
-   *
-   * @param streamIndex - Stream index in output
-   *
-   * @returns Control interface for pipeline
-   *
-   * @example
-   * ```typescript
-   * const filter = BitStreamFilterAPI.create('h264_mp4toannexb', stream);
-   * const control = filter.pipeTo(output, 0);
-   * await control.send(packet);
-   * ```
-   */
-  pipeTo(output: Muxer, streamIndex: number): SchedulerControl<Packet>;
-
-  pipeTo(target: BitStreamFilterAPI | Muxer, streamIndex?: number): Scheduler<Packet> | SchedulerControl<Packet> {
-    if (target instanceof Muxer) {
-      // Start worker if not already running
-      this.workerPromise ??= this.runWorker();
-
-      // Start pipe task: filter.outputQueue -> output
-      this.pipeToPromise = (async () => {
-        while (true) {
-          const packet = await this.receiveFromQueue();
-          if (!packet) break;
-          await target.writePacket(packet, streamIndex!);
-        }
-      })();
-
-      // Return control without pipeTo (terminal stage)
-      return new SchedulerControl<Packet>(this);
-    } else {
-      // BitStreamFilterAPI
-      const t = target as unknown as SchedulableComponent<Packet>;
-
-      // Store reference to next component for flush propagation
-      this.nextComponent = t;
-
-      // Start worker if not already running
-      this.workerPromise ??= this.runWorker();
-
-      // Start pipe task: filter.outputQueue -> target.inputQueue (via target.send)
-      this.pipeToPromise = (async () => {
-        while (true) {
-          const packet = await this.receiveFromQueue();
-          if (!packet) break;
-          await t.sendToQueue(packet);
-        }
-      })();
-
-      // Return scheduler for chaining (target is now the last component)
-      return new Scheduler<Packet>(this, t);
     }
   }
 }

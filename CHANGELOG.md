@@ -92,6 +92,17 @@ The `format` field itself autocompletes every available muxer/demuxer name (the 
 
 Formats/filters referenced dynamically (no literal name) still accept a loose option bag.
 
+#### Bitstream filters in transcode pipelines
+
+`BitStreamFilterAPI.create()` now accepts a `Stream` (copy), an `Encoder` (transcode), or another filter (chain) as its input source, and initializes lazily on the first packet. This makes coded-bitstream filters like `h264_metadata` work after a re-encode the same way the FFmpeg CLI does — the filter derives its parameters from the encoder's output once it is open, and the muxer writes the filter's output parameters to the container (so e.g. a rewritten `level` is reflected in the file):
+
+```typescript
+using bsf = BitStreamFilterAPI.create('h264_metadata', encoder, {
+  options: { aud: 'remove', level: '4.1' },
+});
+pipeline(input, decoder, filter, encoder, bsf, output);
+```
+
 #### Type-safe filters via `FilterPreset.filter()`
 
 `FilterPreset` gained a generic `filter(name, options)` that exposes **every** FFmpeg filter (≈580) with autocomplete for both the filter name and its options, generated from FFmpeg's `AVOption` metadata — including each filter's description and a link to the FFmpeg docs as JSDoc:

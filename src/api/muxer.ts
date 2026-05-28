@@ -34,6 +34,7 @@ import { AsyncQueue } from './utilities/async-queue.js';
 
 import type { MuxerFormat, MuxerOptionsFor } from '../constants/index.js';
 import type { IRational, OutputFormat, Stream } from '../lib/index.js';
+import type { BitStreamFilterAPI } from './bitstream-filter.js';
 import type { Demuxer, RTPDemuxer } from './demuxer.js';
 import type { IOOutputCallbacks } from './io-stream.js';
 
@@ -42,6 +43,8 @@ interface StreamDescription {
   inputStream?: Stream; // Source stream for metadata/properties (optional in encoder-only mode)
   outputStream: Stream;
   encoder?: Encoder;
+  bsf?: BitStreamFilterAPI; // Trailing bitstream filter whose output parameters override the encoder's
+
   timeBase?: IRational;
   sourceTimeBase?: IRational;
   isStreamCopy: boolean;
@@ -805,7 +808,7 @@ export class Muxer implements AsyncDisposable, Disposable {
    * });
    * ```
    */
-  addStream(encoder: Encoder, options?: { inputStream?: Stream }): number;
+  addStream(encoder: Encoder, options?: { inputStream?: Stream; bsf?: BitStreamFilterAPI }): number;
 
   /**
    * Add a stream to the output (stream copy or transcoding mode).
@@ -857,8 +860,8 @@ export class Muxer implements AsyncDisposable, Disposable {
    * @see {@link writePacket} For writing packets to streams
    * @see {@link Encoder} For transcoding source
    */
-  addStream(stream: Stream, options?: { encoder?: Encoder }): number;
-  addStream(streamOrEncoder: Stream | Encoder, options?: { encoder?: Encoder; inputStream?: Stream }): number {
+  addStream(stream: Stream, options?: { encoder?: Encoder; bsf?: BitStreamFilterAPI }): number;
+  addStream(streamOrEncoder: Stream | Encoder, options?: { encoder?: Encoder; inputStream?: Stream; bsf?: BitStreamFilterAPI }): number {
     if (this.isClosed) {
       throw new Error('Muxer is closed');
     }
@@ -964,6 +967,7 @@ export class Muxer implements AsyncDisposable, Disposable {
         outputStream: outStream,
         inputStream: stream,
         encoder,
+        bsf: options?.bsf,
         sourceTimeBase: undefined, // Will be set on initialization
         isStreamCopy: false,
         sqIdxMux: -1, // Will be set if sync queue is needed
@@ -1180,6 +1184,12 @@ export class Muxer implements AsyncDisposable, Disposable {
           continue;
         }
 
+        // If a trailing bitstream filter is present, wait until it is initialized
+        // so its output parameters (e.g. modified extradata) are available.
+        if (streamInfo.bsf && !streamInfo.bsf.isInitialized) {
+          continue;
+        }
+
         // This encoder is ready, initialize it now
         // Read codecType from codecContext, not from stream (which is still uninitialized)
         // const codecType = codecContext.codecType;
@@ -1198,6 +1208,15 @@ export class Muxer implements AsyncDisposable, Disposable {
         // 3. Copy codec parameters from encoder context
         const ret = streamInfo.outputStream.codecpar.fromContext(codecContext);
         FFmpegError.throwIfError(ret, 'Failed to copy codec parameters from encoder');
+
+        // 3b. Overlay the trailing bitstream filter's output parameters, so
+        // container-level fields (e.g. extradata/level rewritten by h264_metadata)
+        // reflect the filter's output rather than the raw encoder output.
+        const bsfParams = streamInfo.bsf?.outputCodecParameters;
+        if (bsfParams) {
+          const bsfRet = bsfParams.copy(streamInfo.outputStream.codecpar);
+          FFmpegError.throwIfError(bsfRet, 'Failed to copy codec parameters from bitstream filter');
+        }
 
         // 4. Copy metadata from input stream
         if (streamInfo.inputStream) {
@@ -1509,6 +1528,12 @@ export class Muxer implements AsyncDisposable, Disposable {
           continue;
         }
 
+        // If a trailing bitstream filter is present, wait until it is initialized
+        // so its output parameters (e.g. modified extradata) are available.
+        if (streamInfo.bsf && !streamInfo.bsf.isInitialized) {
+          continue;
+        }
+
         // This encoder is ready, initialize it now
         // Read codecType from codecContext, not from stream (which is still uninitialized)
         const codecType = codecContext.codecType;
@@ -1535,6 +1560,15 @@ export class Muxer implements AsyncDisposable, Disposable {
         // 3. Copy codec parameters from encoder context
         const ret = streamInfo.outputStream.codecpar.fromContext(codecContext);
         FFmpegError.throwIfError(ret, 'Failed to copy codec parameters from encoder');
+
+        // 3b. Overlay the trailing bitstream filter's output parameters, so
+        // container-level fields (e.g. extradata/level rewritten by h264_metadata)
+        // reflect the filter's output rather than the raw encoder output.
+        const bsfParams = streamInfo.bsf?.outputCodecParameters;
+        if (bsfParams) {
+          const bsfRet = bsfParams.copy(streamInfo.outputStream.codecpar);
+          FFmpegError.throwIfError(bsfRet, 'Failed to copy codec parameters from bitstream filter');
+        }
 
         // 4. Copy metadata from input stream
         if (streamInfo.inputStream) {

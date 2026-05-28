@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "rootDir": ".",
     "outDir": "./dist",
     "target": "ES2024",
     "moduleResolution": "NodeNext",

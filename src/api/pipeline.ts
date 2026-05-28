@@ -1131,10 +1131,10 @@ async function consumeSimplePipeline(stream: AsyncIterable<Packet | Frame | null
     if (metadata.decoder) {
       // Have decoder - use its stream for metadata/properties
       const originalStream = metadata.decoder.getStream();
-      streamIndex = output.addStream(originalStream, { encoder: metadata.encoder });
+      streamIndex = output.addStream(originalStream, { encoder: metadata.encoder, bsf: metadata.bitStreamFilter });
     } else {
       // Encoder-only mode (e.g., frame generator) - no input stream
-      streamIndex = output.addStream(metadata.encoder);
+      streamIndex = output.addStream(metadata.encoder, { bsf: metadata.bitStreamFilter });
     }
   } else if (metadata.decoder) {
     // Stream copy - use decoder's original stream
@@ -1504,10 +1504,10 @@ async function runNamedPipelineAsync<K extends StreamName>(
         if (meta.decoder) {
           // Have decoder - use its stream for metadata/properties
           const originalStream = meta.decoder.getStream();
-          streamIndices[name] = output.addStream(originalStream, { encoder: meta.encoder });
+          streamIndices[name] = output.addStream(originalStream, { encoder: meta.encoder, bsf: meta.bitStreamFilter });
         } else {
           // Encoder-only mode (e.g., frame generator) - no input stream
-          streamIndices[name] = output.addStream(meta.encoder);
+          streamIndices[name] = output.addStream(meta.encoder, { bsf: meta.bitStreamFilter });
         }
       } else if (meta.decoder) {
         // Stream copy - use decoder's original stream
@@ -1729,10 +1729,10 @@ async function consumeNamedStream(stream: AsyncIterable<Packet | null>, output: 
     if (metadata.decoder) {
       // Have decoder - use its stream for metadata/properties
       const originalStream = metadata.decoder.getStream();
-      streamIndex = output.addStream(originalStream, { encoder: metadata.encoder });
+      streamIndex = output.addStream(originalStream, { encoder: metadata.encoder, bsf: metadata.bitStreamFilter });
     } else {
       // Encoder-only mode (e.g., frame generator) - no input stream
-      streamIndex = output.addStream(metadata.encoder);
+      streamIndex = output.addStream(metadata.encoder, { bsf: metadata.bitStreamFilter });
     }
   } else if (metadata.decoder) {
     // Stream copy - use decoder's original stream

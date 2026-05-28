@@ -1,8 +1,9 @@
 import assert from 'node:assert';
+import { existsSync, unlinkSync } from 'node:fs';
 import { describe, it } from 'node:test';
 
-import { AV_CODEC_ID_H264, BitStreamFilterAPI, Demuxer, Packet } from '../src/index.js';
-import { getInputFile, prepareTestEnvironment } from './index.js';
+import { AV_CODEC_ID_H264, BitStreamFilterAPI, Decoder, Demuxer, Encoder, FF_ENCODER_LIBX264, Muxer, Packet, pipeline } from '../src/index.js';
+import { getInputFile, getOutputFile, prepareTestEnvironment } from './index.js';
 
 prepareTestEnvironment();
 
@@ -507,6 +508,102 @@ describe('BitStreamFilterAPI', () => {
           }),
         /Failed to set bitstream filter option/,
       );
+    });
+  });
+
+  describe('Lazy Initialization', () => {
+    it('should initialize on the first packet (async)', async () => {
+      await using media = await Demuxer.open(inputFile);
+      const stream = media.video();
+      assert.ok(stream);
+
+      using bsf = BitStreamFilterAPI.create('null', stream);
+      assert.strictEqual(bsf.isInitialized, false, 'Should not be initialized before the first packet');
+
+      for await (using packet of media.packets()) {
+        if (!packet) break;
+        if (packet.streamIndex !== stream.index) continue;
+
+        const filtered = await bsf.filterAll(packet);
+        for (const outPacket of filtered) {
+          outPacket.free();
+        }
+        break;
+      }
+
+      assert.strictEqual(bsf.isInitialized, true, 'Should be initialized after the first packet');
+    });
+
+    it('should initialize on the first packet (sync)', () => {
+      using media = Demuxer.openSync(inputFile);
+      const stream = media.video();
+      assert.ok(stream);
+
+      using bsf = BitStreamFilterAPI.create('null', stream);
+      assert.strictEqual(bsf.isInitialized, false);
+
+      for (using packet of media.packetsSync()) {
+        if (!packet) break;
+        if (packet.streamIndex !== stream.index) continue;
+
+        const filtered = bsf.filterAllSync(packet);
+        for (const outPacket of filtered) {
+          outPacket.free();
+        }
+        break;
+      }
+
+      assert.strictEqual(bsf.isInitialized, true);
+    });
+  });
+
+  describe('Encoder Source', () => {
+    it('should throw from getStream() when created from an encoder', async () => {
+      await using media = await Demuxer.open(inputFile);
+      const stream = media.video();
+      assert.ok(stream);
+
+      using decoder = await Decoder.create(stream);
+      using encoder = await Encoder.create(FF_ENCODER_LIBX264, { decoder, bitrate: '1M' });
+      using bsf = BitStreamFilterAPI.create('h264_metadata', encoder, { options: { aud: 'remove' } });
+
+      assert.throws(() => bsf.getStream(), /No associated stream/);
+    });
+
+    it('should derive parameters from the encoder and write them to the container (transcode)', async () => {
+      const outputFile = getOutputFile('bsf-encoder-source.mp4');
+
+      try {
+        await using input = await Demuxer.open(inputFile);
+        const videoStream = input.video();
+        assert.ok(videoStream);
+
+        using decoder = await Decoder.create(videoStream);
+        using encoder = await Encoder.create(FF_ENCODER_LIBX264, { decoder, bitrate: '1M' });
+
+        // The filter derives its parameters from the encoder's output (lazy),
+        // and rewrites the H.264 level - which must reach the container.
+        using bsf = BitStreamFilterAPI.create('h264_metadata', encoder, {
+          options: { aud: 'remove', level: '4.1' },
+        });
+
+        const output = await Muxer.open(outputFile);
+        const { completion } = pipeline(input, decoder, encoder, bsf, output);
+        await completion;
+        await output.close();
+
+        assert.ok(existsSync(outputFile), 'Output file should exist');
+
+        // h264_metadata level '4.1' -> level_idc 41 in the written avcC.
+        await using result = await Demuxer.open(outputFile);
+        const outVideo = result.video();
+        assert.ok(outVideo);
+        assert.strictEqual(outVideo.codecpar.level, 41, 'Container level should reflect the bitstream filter output');
+      } finally {
+        if (existsSync(outputFile)) {
+          unlinkSync(outputFile);
+        }
+      }
     });
   });
 });
