@@ -88,7 +88,7 @@ await Muxer.open('out.mp4', {
 
 The `format` field itself autocompletes every available muxer/demuxer name (the generated `MuxerFormat` / `DemuxerFormat` unions, covering libavformat **and** libavdevice), while still accepting any string. Because container option bags also legitimately carry protocol and codec-child options (e.g. `rtsp_transport` on a demuxer), unknown keys remain accepted — typing is additive autocomplete, never a hard gate.
 
-**`BitStreamFilterAPI.create()`** — the `options` bag is strongly typed to the named filter's options (strict, like codecs), so `h264_metadata`'s `aud?: 'pass' | 'insert' | 'remove'` is validated at compile time.
+**`BitStreamFilterAPI.create()`** — the filter name autocompletes every available bitstream filter (the generated `BsfName` union), and the `options` bag is strongly typed to the named filter's options (strict, like codecs), so `h264_metadata`'s `aud?: 'pass' | 'insert' | 'remove'` is validated at compile time. Unknown names still pass through via the `(string & {})` fallback.
 
 Formats/filters referenced dynamically (no literal name) still accept a loose option bag.
 
