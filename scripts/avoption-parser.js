@@ -21,12 +21,12 @@ export function mapKind(token, hasEnum) {
   return 'string';
 }
 
-// Recursively collect .c/.h files under a directory.
-export function walk(dir, acc = []) {
+// Recursively collect source files (default .c/.h; libavdevice also uses .m).
+export function walk(dir, acc = [], exts = ['.c', '.h']) {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     const full = join(dir, e.name);
-    if (e.isDirectory()) walk(full, acc);
-    else if (e.name.endsWith('.c') || e.name.endsWith('.h')) acc.push(full);
+    if (e.isDirectory()) walk(full, acc, exts);
+    else if (exts.some((x) => e.name.endsWith(x))) acc.push(full);
   }
   return acc;
 }

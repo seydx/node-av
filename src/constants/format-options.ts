@@ -369,6 +369,16 @@ export interface MuxerPrivateOptionsMap {
     loopend?: number | (string & {});
   };
   /**
+   * AudioToolbox output device
+   * @see https://ffmpeg.org/ffmpeg-formats.html#audiotoolbox
+   */
+  audiotoolbox: {
+    /** list available audio devices */
+    list_devices?: boolean | (string & {});
+    /** select audio device by index (starts at 0) */
+    audio_device_index?: number | (string & {});
+  };
+  /**
    * AVI (Audio Video Interleaved)
    * @see https://ffmpeg.org/ffmpeg-formats.html#avi
    */
@@ -389,6 +399,30 @@ export interface MuxerPrivateOptionsMap {
     movie_timescale?: number | (string & {});
     /** Number of times to loop animated AVIF: 0 - infinite loop */
     loop?: number | (string & {});
+  };
+  /**
+   * caca (color ASCII art) output device
+   * @see https://ffmpeg.org/ffmpeg-formats.html#caca
+   */
+  caca: {
+    /** set window forced size */
+    window_size?: string | number;
+    /** set window title */
+    window_title?: string | number;
+    /** set display driver */
+    driver?: string | number;
+    /** set dithering algorithm */
+    algorithm?: string | number;
+    /** set antialias method */
+    antialias?: string | number;
+    /** set charset used to render output */
+    charset?: string | number;
+    /** set color used to render output */
+    color?: string | number;
+    /** list available drivers */
+    list_drivers?: boolean | (string & {});
+    /** list available dither options */
+    list_dither?: 'algorithms' | 'antialiases' | 'charsets' | 'colors' | (string & {}) | number;
   };
   /**
    * Chromaprint
@@ -481,6 +515,30 @@ export interface MuxerPrivateOptionsMap {
     write_prft?: boolean | (string & {});
   };
   /**
+   * Blackmagic DeckLink output
+   * @see https://ffmpeg.org/ffmpeg-formats.html#decklink
+   */
+  decklink: {
+    /** use ffmpeg -sinks decklink instead */
+    list_devices?: boolean | (string & {});
+    /** list supported formats */
+    list_formats?: number | (string & {});
+    /** video preroll in seconds */
+    preroll?: number | (string & {});
+    /** VANC queue buffer size */
+    vanc_queue_size?: number | (string & {});
+    /** duplex mode */
+    duplex_mode?: 'unset' | 'half' | 'full' | 'one_sub_device_full' | 'one_sub_device_half' | 'two_sub_device_full' | 'four_sub_device_half' | (string & {}) | number;
+    /** single/dual/quad SDI link configuration */
+    link?: 'unset' | 'single' | 'dual' | 'quad' | (string & {}) | number;
+    /** set Square Division */
+    sqd?: 'unset' | 'false' | 'true' | (string & {}) | number;
+    /** set SMPTE LevelA */
+    level_a?: 'unset' | 'false' | 'true' | (string & {}) | number;
+    /** genlock timing pixel offset */
+    timing_offset?: 'unset' | (string & {}) | number;
+  };
+  /**
    * MPEG-2 PS (DVD VOB)
    * @see https://ffmpeg.org/ffmpeg-formats.html#dvd
    */
@@ -571,6 +629,16 @@ export interface MuxerPrivateOptionsMap {
     write_prft?: 'pts' | 'wallclock' | (string & {}) | number;
     /** force or disable writing tmcd */
     write_tmcd?: boolean | (string & {});
+  };
+  /**
+   * Linux framebuffer
+   * @see https://ffmpeg.org/ffmpeg-formats.html#fbdev
+   */
+  fbdev: {
+    /** set x coordinate of top left corner */
+    xoffset?: number | (string & {});
+    /** set y coordinate of top left corner */
+    yoffset?: number | (string & {});
   };
   /**
    * FIFO queue pseudo-muxer
@@ -1454,6 +1522,28 @@ export interface MuxerPrivateOptionsMap {
     write_tmcd?: boolean | (string & {});
   };
   /**
+   * Pulse audio output
+   * @see https://ffmpeg.org/ffmpeg-formats.html#pulse
+   */
+  pulse: {
+    /** set PulseAudio server */
+    server?: string | number;
+    /** set application name */
+    name?: string | number;
+    /** set stream description */
+    stream_name?: string | number;
+    /** set device name */
+    device?: string | number;
+    /** set buffer size in bytes */
+    buffer_size?: number | (string & {});
+    /** set buffer duration in millisecs */
+    buffer_duration?: number | (string & {});
+    /** set pre-buffering size */
+    prebuf?: number | (string & {});
+    /** set minimum request size */
+    minreq?: number | (string & {});
+  };
+  /**
    * RTP output
    * @see https://ffmpeg.org/ffmpeg-formats.html#rtp
    */
@@ -1867,6 +1957,24 @@ export interface MuxerPrivateOptionsMap {
     /** The optional private key file path for DTLS */
     key_file?: string | number;
   };
+  /**
+   * XV (XVideo) output device
+   * @see https://ffmpeg.org/ffmpeg-formats.html#xv
+   */
+  xv: {
+    /** set display name */
+    display_name?: string | number;
+    /** set existing window id */
+    window_id?: number | (string & {});
+    /** set window forced size */
+    window_size?: string | number;
+    /** set window title */
+    window_title?: string | number;
+    /** set window x offset */
+    window_x?: number | (string & {});
+    /** set window y offset */
+    window_y?: number | (string & {});
+  };
 }
 
 export interface DemuxerPrivateOptionsMap {
@@ -1961,6 +2069,29 @@ export interface DemuxerPrivateOptionsMap {
     aa_fixed_key?: string | number;
   };
   /**
+   * ALSA audio input
+   * @see https://ffmpeg.org/ffmpeg-formats.html#alsa
+   */
+  alsa: {
+    sample_rate?: number | (string & {});
+    channels?: number | (string & {});
+    ch_layout?: string | number;
+  };
+  /**
+   * Android camera input device
+   * @see https://ffmpeg.org/ffmpeg-formats.html#android_005fcamera
+   */
+  android_camera: {
+    /** set video size given as a string such as 640x480 or hd720 */
+    video_size?: string | number;
+    /** set video frame rate */
+    framerate?: string | number;
+    /** set index of camera to use */
+    camera_index?: number | (string & {});
+    /** set maximum number of frames to buffer */
+    input_queue_size?: number | (string & {});
+  };
+  /**
    * Animated Portable Network Graphics
    * @see https://ffmpeg.org/ffmpeg-formats.html#apng
    */
@@ -2018,6 +2149,42 @@ export interface DemuxerPrivateOptionsMap {
    */
   av1: {
     framerate?: string | number;
+  };
+  /**
+   * AVFoundation input device
+   * @see https://ffmpeg.org/ffmpeg-formats.html#avfoundation
+   */
+  avfoundation: {
+    /** list available devices */
+    list_devices?: boolean | (string & {});
+    /** select video device by index for devices with same name (starts at 0) */
+    video_device_index?: number | (string & {});
+    /** select audio device by index for devices with same name (starts at 0) */
+    audio_device_index?: number | (string & {});
+    /** set pixel format */
+    pixel_format?: string | number;
+    /** set frame rate */
+    framerate?: string | number;
+    /** set video size */
+    video_size?: string | number;
+    /** capture the screen cursor */
+    capture_cursor?: boolean | (string & {});
+    /** capture the screen mouse clicks */
+    capture_mouse_clicks?: boolean | (string & {});
+    /** capture the raw data from device connection */
+    capture_raw_data?: boolean | (string & {});
+    /** drop frames that are available later than expected */
+    drop_late_frames?: boolean | (string & {});
+    /** capture system audio via ScreenCaptureKit (macOS 13.0+) */
+    capture_system_audio?: boolean | (string & {});
+    /** exclude current process audio from system audio capture */
+    exclude_process_audio?: boolean | (string & {});
+    /** set system audio sample rate (8000/16000/24000/48000) */
+    sck_audio_sample_rate?: number | (string & {});
+    /** set system audio channel count (1=mono, 2=stereo) */
+    sck_audio_channels?: number | (string & {});
+    /** capture a specific window by ID via ScreenCaptureKit (0=disabled) */
+    capture_window_id?: number | (string & {});
   };
   /**
    * AVI (Audio Video Interleaved)
@@ -2093,12 +2260,116 @@ export interface DemuxerPrivateOptionsMap {
     raw_packet_size?: number | (string & {});
   };
   /**
+   * Blackmagic DeckLink input
+   * @see https://ffmpeg.org/ffmpeg-formats.html#decklink
+   */
+  decklink: {
+    /** use ffmpeg -sources decklink instead */
+    list_devices?: boolean | (string & {});
+    /** list supported formats */
+    list_formats?: number | (string & {});
+    /** set format by fourcc */
+    format_code?: string | number;
+    /** pixel format to be returned by the card when capturing */
+    raw_format?: 'auto' | 'uyvy422' | 'yuv422p10' | 'argb' | 'bgra' | 'rgb10' | (string & {}) | number;
+    /** output klv if present in vanc */
+    enable_klv?: boolean | (string & {});
+    /** teletext lines bitmask */
+    teletext_lines?: 'standard' | 'all' | (string & {}) | number;
+    /** number of audio channels */
+    channels?: number | (string & {});
+    /** duplex mode */
+    duplex_mode?: 'unset' | 'half' | 'full' | 'one_sub_device_full' | 'one_sub_device_half' | 'two_sub_device_full' | 'four_sub_device_half' | (string & {}) | number;
+    /** timecode format */
+    timecode_format?: 'none' | 'rp188vitc' | 'rp188vitc2' | 'rp188ltc' | 'rp188any' | 'vitc' | 'vitc2' | 'serial' | 'rp188hfr' | (string & {}) | number;
+    /** video input */
+    video_input?: 'unset' | 'sdi' | 'hdmi' | 'optical_sdi' | 'component' | 'composite' | 's_video' | (string & {}) | number;
+    /** audio input */
+    audio_input?: 'unset' | 'embedded' | 'aes_ebu' | 'analog' | 'analog_xlr' | 'analog_rca' | 'microphone' | (string & {}) | number;
+    /** audio pts source */
+    audio_pts?: 'audio' | 'video' | 'reference' | 'wallclock' | 'abs_wallclock' | (string & {}) | number;
+    /** video pts source */
+    video_pts?: 'audio' | 'video' | 'reference' | 'wallclock' | 'abs_wallclock' | (string & {}) | number;
+    /** use option signal_loss_action instead */
+    draw_bars?: boolean | (string & {});
+    /** input queue buffer size */
+    queue_size?: number | (string & {});
+    /** audio bitdepth (16 or 32) */
+    audio_depth?: number | (string & {});
+    /** copy timestamps, do not remove the initial offset */
+    decklink_copyts?: boolean | (string & {});
+    /** capture start time alignment (in seconds) */
+    timestamp_align?: string | number;
+    /** drop frames till a frame with timecode is received. TC format must be set */
+    wait_for_tc?: boolean | (string & {});
+    /** action on signal loss */
+    signal_loss_action?: 'none' | 'bars' | 'repeat' | (string & {}) | number;
+  };
+  /**
    * raw DFPWM1a
    * @see https://ffmpeg.org/ffmpeg-formats.html#dfpwm
    */
   dfpwm: {
     sample_rate?: number | (string & {});
     ch_layout?: string | number;
+  };
+  /**
+   * DirectShow capture
+   * @see https://ffmpeg.org/ffmpeg-formats.html#dshow
+   */
+  dshow: {
+    /** set video size given a string such as 640x480 or hd720. */
+    video_size?: string | number;
+    /** set video pixel format */
+    pixel_format?: string | number;
+    /** set video frame rate */
+    framerate?: string | number;
+    /** set audio sample rate */
+    sample_rate?: number | (string & {});
+    /** set audio sample size */
+    sample_size?: number | (string & {});
+    /** set number of audio channels, such as 1 or 2 */
+    channels?: number | (string & {});
+    /** set audio device buffer latency size in milliseconds (default is the device's default) */
+    audio_buffer_size?: number | (string & {});
+    /** list available devices */
+    list_devices?: boolean | (string & {});
+    /** list available options for specified device */
+    list_options?: boolean | (string & {});
+    /** set video device number for devices with same name (starts at 0) */
+    video_device_number?: number | (string & {});
+    /** set audio device number for devices with same name (starts at 0) */
+    audio_device_number?: number | (string & {});
+    /** select video capture pin by name */
+    video_pin_name?: string | number;
+    /** select audio capture pin by name */
+    audio_pin_name?: string | number;
+    /** set video input pin number for crossbar device */
+    crossbar_video_input_pin_number?: number | (string & {});
+    /** set audio input pin number for crossbar device */
+    crossbar_audio_input_pin_number?: number | (string & {});
+    /** display property dialog for video capture device */
+    show_video_device_dialog?: boolean | (string & {});
+    /** display property dialog for audio capture device */
+    show_audio_device_dialog?: boolean | (string & {});
+    /** display property dialog for crossbar connecting pins filter on video device */
+    show_video_crossbar_connection_dialog?: boolean | (string & {});
+    /** display property dialog for crossbar connecting pins filter on audio device */
+    show_audio_crossbar_connection_dialog?: boolean | (string & {});
+    /** display property dialog for analog tuner filter */
+    show_analog_tv_tuner_dialog?: boolean | (string & {});
+    /** display property dialog for analog tuner audio filter */
+    show_analog_tv_tuner_audio_dialog?: boolean | (string & {});
+    /** load audio capture filter device (and properties) from file */
+    audio_device_load?: string | number;
+    /** save audio capture filter device (and properties) to file */
+    audio_device_save?: string | number;
+    /** load video capture filter device (and properties) from file */
+    video_device_load?: string | number;
+    /** save video capture filter device (and properties) to file */
+    video_device_save?: string | number;
+    /** use device instead of wallclock timestamps for video frames */
+    use_video_device_timestamps?: boolean | (string & {});
   };
   /**
    * DVD-Video
@@ -2146,6 +2417,13 @@ export interface DemuxerPrivateOptionsMap {
     framerate?: string | number;
   };
   /**
+   * Linux framebuffer
+   * @see https://ffmpeg.org/ffmpeg-formats.html#fbdev
+   */
+  fbdev: {
+    framerate?: string | number;
+  };
+  /**
    * Flexible Image Transport System
    * @see https://ffmpeg.org/ffmpeg-formats.html#fits
    */
@@ -2189,6 +2467,24 @@ export interface DemuxerPrivateOptionsMap {
    */
   g729: {
     bit_rate?: number | (string & {});
+  };
+  /**
+   * GDI API Windows frame grabber
+   * @see https://ffmpeg.org/ffmpeg-formats.html#gdigrab
+   */
+  gdigrab: {
+    /** draw the mouse pointer */
+    draw_mouse?: number | (string & {});
+    /** draw border around capture area */
+    show_region?: number | (string & {});
+    /** set video frame rate */
+    framerate?: string | number;
+    /** set video frame size */
+    video_size?: string | number;
+    /** capture area x offset */
+    offset_x?: number | (string & {});
+    /** capture area y offset */
+    offset_y?: number | (string & {});
   };
   /**
    * CompuServe Graphics Interchange Format (GIF)
@@ -2254,6 +2550,18 @@ export interface DemuxerPrivateOptionsMap {
     seg_max_retry?: number | (string & {});
   };
   /**
+   * libiec61883 (new DV1394) A/V input device
+   * @see https://ffmpeg.org/ffmpeg-formats.html#iec61883
+   */
+  iec61883: {
+    /** override autodetection of DV/HDV */
+    dvtype?: 'auto' | 'dv' | 'hdv' | (string & {}) | number;
+    /** set queue buffer size (in packets) */
+    dvbuffer?: number | (string & {});
+    /** select one of multiple DV devices by its GUID */
+    dvguid?: string | number;
+  };
+  /**
    * image2 sequence
    * @see https://ffmpeg.org/ffmpeg-formats.html#image2
    */
@@ -2302,6 +2610,32 @@ export interface DemuxerPrivateOptionsMap {
     assetmaps?: string | number;
   };
   /**
+   * JACK Audio Connection Kit
+   * @see https://ffmpeg.org/ffmpeg-formats.html#jack
+   */
+  jack: {
+    /** Number of audio channels. */
+    channels?: number | (string & {});
+  };
+  /**
+   * KMS screen capture
+   * @see https://ffmpeg.org/ffmpeg-formats.html#kmsgrab
+   */
+  kmsgrab: {
+    /** DRM device path */
+    device?: string | number;
+    /** Pixel format for framebuffer */
+    format?: string | number;
+    /** DRM format modifier for framebuffer */
+    format_modifier?: number | (string & {});
+    /** CRTC ID to define capture source */
+    crtc_id?: number | (string & {});
+    /** Plane ID to define capture source */
+    plane_id?: number | (string & {});
+    /** Framerate to capture at */
+    framerate?: string | number;
+  };
+  /**
    * KUX (YouKu)
    * @see https://ffmpeg.org/ffmpeg-formats.html#kux
    */
@@ -2312,6 +2646,37 @@ export interface DemuxerPrivateOptionsMap {
     flv_full_metadata?: boolean | (string & {});
     /** Ignore the Size of previous tag */
     flv_ignore_prevtag?: boolean | (string & {});
+  };
+  /**
+   * Libavfilter virtual input device
+   * @see https://ffmpeg.org/ffmpeg-formats.html#lavfi
+   */
+  lavfi: {
+    /** set libavfilter graph */
+    graph?: string | number;
+    /** set libavfilter graph filename */
+    graph_file?: string | number;
+    /** dump graph to stderr */
+    dumpgraph?: string | number;
+  };
+  /**
+   * @see https://ffmpeg.org/ffmpeg-formats.html#libcdio
+   */
+  libcdio: {
+    /** set drive reading speed */
+    speed?: number | (string & {});
+    /** set error recovery mode */
+    paranoia_mode?: 'disable' | 'verify' | 'overlap' | 'neverskip' | 'full' | (string & {}) | number;
+  };
+  /**
+   * dc1394 v.2 A/V grab
+   * @see https://ffmpeg.org/ffmpeg-formats.html#libdc1394
+   */
+  libdc1394: {
+    /** A string describing frame size, such as 640x480 or hd720. */
+    video_size?: string | number;
+    pixel_format?: string | number;
+    framerate?: string | number;
   };
   /**
    * Game Music Emu demuxer
@@ -2633,6 +2998,50 @@ export interface DemuxerPrivateOptionsMap {
     framerate?: string | number;
   };
   /**
+   * OpenAL audio capture device
+   * @see https://ffmpeg.org/ffmpeg-formats.html#openal
+   */
+  openal: {
+    /** set number of channels */
+    channels?: number | (string & {});
+    /** set sample rate */
+    sample_rate?: number | (string & {});
+    /** set sample size */
+    sample_size?: number | (string & {});
+    /** list available devices */
+    list_devices?: 'true' | 'false' | (string & {}) | number;
+  };
+  /**
+   * OSS (Open Sound System) capture
+   * @see https://ffmpeg.org/ffmpeg-formats.html#oss
+   */
+  oss: {
+    sample_rate?: number | (string & {});
+    channels?: number | (string & {});
+  };
+  /**
+   * Pulse audio input
+   * @see https://ffmpeg.org/ffmpeg-formats.html#pulse
+   */
+  pulse: {
+    /** set PulseAudio server */
+    server?: string | number;
+    /** set application name */
+    name?: string | number;
+    /** set stream description */
+    stream_name?: string | number;
+    /** set sample rate in Hz */
+    sample_rate?: number | (string & {});
+    /** set number of audio channels */
+    channels?: number | (string & {});
+    /** set number of bytes per frame */
+    frame_size?: number | (string & {});
+    /** set buffering size, affects latency and cpu usage */
+    fragment_size?: number | (string & {});
+    /** set the initial pts using the current time */
+    wallclock?: number | (string & {});
+  };
+  /**
    * raw video
    * @see https://ffmpeg.org/ffmpeg-formats.html#rawvideo
    */
@@ -2712,6 +3121,14 @@ export interface DemuxerPrivateOptionsMap {
     ch_layout?: string | number;
   };
   /**
+   * sndio audio capture
+   * @see https://ffmpeg.org/ffmpeg-formats.html#sndio
+   */
+  sndio: {
+    sample_rate?: number | (string & {});
+    channels?: number | (string & {});
+  };
+  /**
    * TED Talks captions
    * @see https://ffmpeg.org/ffmpeg-formats.html#tedcaptions
    */
@@ -2730,12 +3147,77 @@ export interface DemuxerPrivateOptionsMap {
     framerate?: string | number;
   };
   /**
+   * Video4Linux2 device grab
+   * @see https://ffmpeg.org/ffmpeg-formats.html#v4l2
+   */
+  v4l2: {
+    /** set TV standard, used only by analog frame grabber */
+    standard?: string | number;
+    /** set TV channel, used only by frame grabber */
+    channel?: number | (string & {});
+    /** set frame size */
+    video_size?: string | number;
+    /** set preferred pixel format */
+    pixel_format?: string | number;
+    /** set preferred pixel format (for raw video) or codec name */
+    input_format?: string | number;
+    /** set frame rate */
+    framerate?: string | number;
+    /** list available formats and exit */
+    list_formats?: 'all' | 'raw' | 'compressed' | (string & {}) | number;
+    /** list supported standards and exit */
+    list_standards?: 'all' | (string & {}) | number;
+    /** set type of timestamps for grabbed frames */
+    timestamps?: 'default' | 'abs' | 'mono2abs' | (string & {}) | number;
+    /** set type of timestamps for grabbed frames */
+    ts?: 'default' | 'abs' | 'mono2abs' | (string & {}) | number;
+    /** use libv4l2 (v4l-utils) conversion functions */
+    use_libv4l2?: boolean | (string & {});
+  };
+  /**
    * VapourSynth demuxer
    * @see https://ffmpeg.org/ffmpeg-formats.html#vapoursynth
    */
   vapoursynth: {
     /** set max file size supported (in bytes) */
     max_script_size?: number | (string & {});
+  };
+  /**
+   * VfW video capture
+   * @see https://ffmpeg.org/ffmpeg-formats.html#vfwcap
+   */
+  vfwcap: {
+    /** A string describing frame size, such as 640x480 or hd720. */
+    video_size?: string | number;
+    framerate?: string | number;
+  };
+  /**
+   * Video4Linux2 device grab
+   * @see https://ffmpeg.org/ffmpeg-formats.html#video4linux2
+   */
+  video4linux2: {
+    /** set TV standard, used only by analog frame grabber */
+    standard?: string | number;
+    /** set TV channel, used only by frame grabber */
+    channel?: number | (string & {});
+    /** set frame size */
+    video_size?: string | number;
+    /** set preferred pixel format */
+    pixel_format?: string | number;
+    /** set preferred pixel format (for raw video) or codec name */
+    input_format?: string | number;
+    /** set frame rate */
+    framerate?: string | number;
+    /** list available formats and exit */
+    list_formats?: 'all' | 'raw' | 'compressed' | (string & {}) | number;
+    /** list supported standards and exit */
+    list_standards?: 'all' | (string & {}) | number;
+    /** set type of timestamps for grabbed frames */
+    timestamps?: 'default' | 'abs' | 'mono2abs' | (string & {}) | number;
+    /** set type of timestamps for grabbed frames */
+    ts?: 'default' | 'abs' | 'mono2abs' | (string & {}) | number;
+    /** use libv4l2 (v4l-utils) conversion functions */
+    use_libv4l2?: boolean | (string & {});
   };
   /**
    * VobSub subtitle format
@@ -2789,6 +3271,35 @@ export interface DemuxerPrivateOptionsMap {
     /** Set kind of WebVTT track */
     kind?: 'subtitles' | 'captions' | 'descriptions' | 'metadata' | (string & {}) | number;
   };
+  /**
+   * X11 screen capture, using XCB
+   * @see https://ffmpeg.org/ffmpeg-formats.html#x11grab
+   */
+  x11grab: {
+    /** Window to capture. */
+    window_id?: number | (string & {});
+    /** Initial x coordinate. */
+    x?: number | (string & {});
+    /** Initial y coordinate. */
+    y?: number | (string & {});
+    /** Initial x coordinate. */
+    grab_x?: number | (string & {});
+    /** Initial y coordinate. */
+    grab_y?: number | (string & {});
+    /** A string describing frame size, such as 640x480 or hd720. */
+    video_size?: string | number;
+    framerate?: string | number;
+    /** Draw the mouse pointer. */
+    draw_mouse?: number | (string & {});
+    /** Move the grabbing region when the mouse pointer reaches within specified amount of pixels to the edge of region. */
+    follow_mouse?: 'centered' | (string & {}) | number;
+    /** Show the grabbing region. */
+    show_region?: number | (string & {});
+    /** Set the region border thickness. */
+    region_border?: number | (string & {});
+    /** Select the grabbing region graphically using the pointer. */
+    select_region?: boolean | (string & {});
+  };
 }
 
 /**
@@ -2796,15 +3307,3 @@ export interface DemuxerPrivateOptionsMap {
  * options that flow through the same dictionary (e.g. `rtsp_transport`).
  */
 export type UnknownFormatOptions = Record<string, string | number | boolean | bigint | undefined | null>;
-
-/**
- * Options for a muxer: generic AVFormatContext options + the format's private
- * options (when the format name is known) + an open bag for protocol/other keys.
- */
-export type MuxerOptionsFor<F> = FormatContextOptions & (F extends keyof MuxerPrivateOptionsMap ? MuxerPrivateOptionsMap[F] : {}) & UnknownFormatOptions;
-
-/**
- * Options for a demuxer: generic AVFormatContext options + the format's private
- * options (when the format name is known) + an open bag for protocol/other keys.
- */
-export type DemuxerOptionsFor<F> = FormatContextOptions & (F extends keyof DemuxerPrivateOptionsMap ? DemuxerPrivateOptionsMap[F] : {}) & UnknownFormatOptions;

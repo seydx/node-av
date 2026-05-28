@@ -16,7 +16,8 @@ import { getFFmpegPath } from './utils.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const LAVF = join(getFFmpegPath(''), 'libavformat');
 
-const files = walk(LAVF);
+// libavformat (containers) + libavdevice (avfoundation, v4l2, dshow, … — .m for ObjC)
+const files = [...walk(LAVF, [], ['.c', '.h']), ...walk(join(getFFmpegPath(''), 'libavdevice'), [], ['.c', '.h', '.m'])];
 const headerMacros = buildHeaderMacros(files);
 
 // Extract the inner body of `... AVOption <name>[] = { ... };` (balanced braces).
@@ -98,18 +99,6 @@ const resolution = `/**
  * options that flow through the same dictionary (e.g. \`rtsp_transport\`).
  */
 export type UnknownFormatOptions = Record<string, string | number | boolean | bigint | undefined | null>;
-
-/**
- * Options for a muxer: generic AVFormatContext options + the format's private
- * options (when the format name is known) + an open bag for protocol/other keys.
- */
-export type MuxerOptionsFor<F> = FormatContextOptions & (F extends keyof MuxerPrivateOptionsMap ? MuxerPrivateOptionsMap[F] : {}) & UnknownFormatOptions;
-
-/**
- * Options for a demuxer: generic AVFormatContext options + the format's private
- * options (when the format name is known) + an open bag for protocol/other keys.
- */
-export type DemuxerOptionsFor<F> = FormatContextOptions & (F extends keyof DemuxerPrivateOptionsMap ? DemuxerPrivateOptionsMap[F] : {}) & UnknownFormatOptions;
 `;
 
 const out =

@@ -3,6 +3,7 @@ export * from './constants.js';
 export * from './decoders.js';
 export * from './encoders.js';
 export * from './hardware.js';
+export type * from './formats.js';
 export type * from './options.js';
 export type * from './format-options.js';
 export type * from './bsf-options.js';

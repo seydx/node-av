@@ -32,7 +32,7 @@ import { Encoder } from './encoder.js';
 import { IOStream } from './io-stream.js';
 import { AsyncQueue } from './utilities/async-queue.js';
 
-import type { MuxerOptionsFor } from '../constants/index.js';
+import type { MuxerFormat, MuxerOptionsFor } from '../constants/index.js';
 import type { IRational, OutputFormat, Stream } from '../lib/index.js';
 import type { Demuxer, RTPDemuxer } from './demuxer.js';
 import type { IOOutputCallbacks } from './io-stream.js';
@@ -63,7 +63,7 @@ interface WriteJob {
 /**
  * Options for Muxer creation.
  */
-export interface MuxerOptions<F extends string = string> {
+export interface MuxerOptions<F extends MuxerFormat | (string & {}) = MuxerFormat | (string & {})> {
   /**
    * Input media for automatic metadata and property copying.
    *
@@ -396,9 +396,9 @@ export class Muxer implements AsyncDisposable, Disposable {
    * @see {@link MuxerOptions} For configuration options
    * @see {@link IOOutputCallbacks} For custom I/O interface
    */
-  static async open<const F extends string = string>(target: string, options?: MuxerOptions<F>): Promise<Muxer>;
-  static async open<const F extends string>(target: IOOutputCallbacks, options: MuxerOptions<F> & { format: F }): Promise<Muxer>;
-  static async open<const F extends string>(target: Writable, options: MuxerOptions<F> & { format: F }): Promise<Muxer>;
+  static async open<const F extends MuxerFormat | (string & {}) = MuxerFormat | (string & {})>(target: string, options?: MuxerOptions<F>): Promise<Muxer>;
+  static async open<const F extends MuxerFormat | (string & {})>(target: IOOutputCallbacks, options: MuxerOptions<F> & { format: F }): Promise<Muxer>;
+  static async open<const F extends MuxerFormat | (string & {})>(target: Writable, options: MuxerOptions<F> & { format: F }): Promise<Muxer>;
   static async open(target: string | IOOutputCallbacks | Writable, options?: MuxerOptions): Promise<Muxer> {
     const output = new Muxer(options);
 
@@ -549,9 +549,9 @@ export class Muxer implements AsyncDisposable, Disposable {
    *
    * @see {@link open} For async version
    */
-  static openSync<const F extends string = string>(target: string, options?: MuxerOptions<F>): Muxer;
-  static openSync<const F extends string>(target: IOOutputCallbacks, options: MuxerOptions<F> & { format: F }): Muxer;
-  static openSync<const F extends string>(target: Writable, options: MuxerOptions<F> & { format: F }): Muxer;
+  static openSync<const F extends MuxerFormat | (string & {}) = MuxerFormat | (string & {})>(target: string, options?: MuxerOptions<F>): Muxer;
+  static openSync<const F extends MuxerFormat | (string & {})>(target: IOOutputCallbacks, options: MuxerOptions<F> & { format: F }): Muxer;
+  static openSync<const F extends MuxerFormat | (string & {})>(target: Writable, options: MuxerOptions<F> & { format: F }): Muxer;
   static openSync(target: string | IOOutputCallbacks | Writable, options?: MuxerOptions): Muxer {
     const output = new Muxer(options);
 
