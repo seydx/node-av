@@ -595,13 +595,23 @@ describe('BitStreamFilterAPI', () => {
         assert.ok(existsSync(outputFile), 'Output file should exist');
 
         // h264_metadata level '4.1' -> level_idc 41 in the written avcC.
-        await using result = await Demuxer.open(outputFile);
-        const outVideo = result.video();
-        assert.ok(outVideo);
-        assert.strictEqual(outVideo.codecpar.level, 41, 'Container level should reflect the bitstream filter output');
+        // Scope the reader so its handle is released before the cleanup below
+        // (Windows holds an exclusive lock while the file is open).
+        let level: number | undefined;
+        {
+          await using result = await Demuxer.open(outputFile);
+          const outVideo = result.video();
+          assert.ok(outVideo);
+          level = outVideo.codecpar.level;
+        }
+        assert.strictEqual(level, 41, 'Container level should reflect the bitstream filter output');
       } finally {
         if (existsSync(outputFile)) {
-          unlinkSync(outputFile);
+          try {
+            unlinkSync(outputFile);
+          } catch {
+            // Best-effort: Windows may still hold the handle briefly
+          }
         }
       }
     });
