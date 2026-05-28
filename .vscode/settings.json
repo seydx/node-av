@@ -5,9 +5,8 @@
   "files.eol": "\n",
   "editor.codeLens": false,
   "editor.formatOnSave": true,
-  "javascript.preferences.importModuleSpecifierEnding": "js",
-  "typescript.preferences.importModuleSpecifierEnding": "js",
-  "typescript.tsdk": "node_modules/typescript/lib",
+  "js/ts.preferences.importModuleSpecifierEnding": "js",
+  "js/ts.tsdk.path": "node_modules/typescript/lib",
   "github.copilot.chat.localeOverride": "en",
   "eslint.debug": false,
   "eslint.validate": [
@@ -81,5 +80,5 @@
       ]
     }
   },
-  "terminal.integrated.defaultProfile.windows": "MSYS2"
+  "terminal.integrated.defaultProfile.windows": "MSYS2",
 }

@@ -31,12 +31,8 @@
                 "${workspaceFolder}/externals/jellyfin-ffmpeg/**",
                 "${workspaceFolder}/node_modules/node-addon-api",
                 "/opt/homebrew/include/node",
-                "/opt/homebrew/opt/node/include/node",
                 "/opt/homebrew/Cellar/node/*/include/node",
-                "/usr/local/include/node",
-                "/usr/local/opt/node/include/node",
                 "/usr/local/Cellar/node/*/include/node",
-                "/usr/include/node",
                 "${env:HOME}/.node-gyp/*/include/node",
                 "${env:HOME}/.cache/node-gyp/*/include/node"
             ],
@@ -97,7 +93,12 @@
                 "${env:HOME}/.cache/node-gyp/*/include/node",
                 "${env:USERPROFILE}/.node-gyp/*/include/node"
             ],
-            "defines": ["_WIN32", "WIN32", "__MINGW32__", "__MINGW64__"],
+            "defines": [
+                "_WIN32",
+                "WIN32",
+                "__MINGW32__",
+                "__MINGW64__"
+            ],
             "compilerPath": "${env:MINGW_PREFIX}/bin/g++.exe",
             "cStandard": "c17",
             "cppStandard": "c++14",
@@ -117,7 +118,13 @@
                 "${env:HOME}/.cache/node-gyp/*/include/node",
                 "${env:USERPROFILE}/.node-gyp/*/include/node"
             ],
-            "defines": ["_WIN32", "WIN32", "__MINGW64__", "__aarch64__", "_ARM64_"],
+            "defines": [
+                "_WIN32",
+                "WIN32",
+                "__MINGW64__",
+                "__aarch64__",
+                "_ARM64_"
+            ],
             "compilerPath": "${env:MINGW_PREFIX}/bin/clang++.exe",
             "cStandard": "c17",
             "cppStandard": "c++14",
