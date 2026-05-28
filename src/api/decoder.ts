@@ -24,7 +24,7 @@ import { FRAME_THREAD_QUEUE_SIZE, PACKET_THREAD_QUEUE_SIZE } from './constants.j
 import { AsyncQueue } from './utilities/async-queue.js';
 import { Scheduler } from './utilities/scheduler.js';
 
-import type { AVCodecID, AVPixelFormat, AVThreadType, EOFSignal, FFDecoderCodec } from '../constants/index.js';
+import type { AVCodecID, AVPixelFormat, AVThreadType, DecoderOptionsFor, EOFSignal, FFDecoderCodec } from '../constants/index.js';
 import type { Stream } from '../lib/stream.js';
 import type { IRational } from '../lib/types.js';
 import type { Encoder } from './encoder.js';
@@ -35,7 +35,7 @@ import type { SchedulableComponent } from './utilities/scheduler.js';
 /**
  * Options for decoder creation.
  */
-export interface DecoderOptions {
+export interface DecoderOptions<C = unknown> {
   /**
    * Exit immediately on first decode error.
    *
@@ -124,10 +124,12 @@ export interface DecoderOptions {
   /**
    * Additional codec-specific options.
    *
-   * Key-value pairs of FFmpeg AVCodecContext options.
-   * These are passed directly to the decoder.
+   * Key-value pairs of FFmpeg private codec options, passed directly to the decoder.
+   * When the codec is created from a branded constant (e.g. `FF_DECODER_H264_CUVID`),
+   * these are strongly typed to that codec's known options (autocomplete + validation);
+   * otherwise any string/number/boolean values are accepted.
    */
-  options?: Record<string, string | number | boolean | undefined | null>;
+  options?: DecoderOptionsFor<C>;
 
   /**
    * AbortSignal for cancellation.
@@ -287,7 +289,7 @@ export class Decoder implements Disposable {
    * @see {@link createSync} For synchronous version
    */
   static async create(stream: Stream, options?: DecoderOptions): Promise<Decoder>;
-  static async create(stream: Stream, decoderCodec?: FFDecoderCodec | AVCodecID | Codec, options?: DecoderOptions): Promise<Decoder>;
+  static async create<const C extends FFDecoderCodec | AVCodecID | Codec>(stream: Stream, decoderCodec: C, options?: DecoderOptions<C>): Promise<Decoder>;
   static async create(stream: Stream, optionsOrCodec?: DecoderOptions | FFDecoderCodec | AVCodecID | Codec, maybeOptions?: DecoderOptions): Promise<Decoder> {
     // Parse arguments
     let options: DecoderOptions = {};
@@ -478,7 +480,7 @@ export class Decoder implements Disposable {
    * @see {@link create} For async version
    */
   static createSync(stream: Stream, options?: DecoderOptions): Decoder;
-  static createSync(stream: Stream, decoderCodec?: FFDecoderCodec | AVCodecID | Codec, options?: DecoderOptions): Decoder;
+  static createSync<const C extends FFDecoderCodec | AVCodecID | Codec>(stream: Stream, decoderCodec: C, options?: DecoderOptions<C>): Decoder;
   static createSync(stream: Stream, optionsOrCodec?: DecoderOptions | FFDecoderCodec | AVCodecID | Codec, maybeOptions?: DecoderOptions): Decoder {
     // Parse arguments
     let options: DecoderOptions = {};

@@ -148,7 +148,7 @@ if (canCopyAudio) {
   audioDecoder = await Decoder.create(audioStream);
 
   // Create filter chain that converts to the format needed by AAC encoder
-  const filterChain = FilterPreset.chain().aformat(AV_SAMPLE_FMT_FLTP, 48000, 'stereo').asetnsamples(1024).build();
+  const filterChain = FilterPreset.chain().aformat(AV_SAMPLE_FMT_FLTP, 48000, 'stereo').filter('asetnsamples', { n: 1024 }).build();
   audioFilter = FilterAPI.create(filterChain);
 
   // AAC encoder

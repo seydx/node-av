@@ -606,7 +606,7 @@ export class FMP4Stream {
 
         // Add fps filter if fps differs
         if (needsFps) {
-          filterChain.fps(this.options.video.fps!);
+          filterChain.filter('fps', { fps: this.options.video.fps! });
         }
 
         this.videoFilter = FilterAPI.create(filterChain.build(), {

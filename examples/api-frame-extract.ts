@@ -117,9 +117,7 @@ async function extractFramesAtInterval(intervalSeconds: number, count: number) {
   using jpegEncoder = await Encoder.create(FF_ENCODER_MJPEG, {
     decoder,
     bitrate: '2M',
-    options: {
-      strict: 'experimental',
-    },
+    options: { strict: 'experimental' },
   });
 
   let currentFrame = 0;

@@ -32,6 +32,7 @@ import { Encoder } from './encoder.js';
 import { IOStream } from './io-stream.js';
 import { AsyncQueue } from './utilities/async-queue.js';
 
+import type { MuxerOptionsFor } from '../constants/index.js';
 import type { IRational, OutputFormat, Stream } from '../lib/index.js';
 import type { Demuxer, RTPDemuxer } from './demuxer.js';
 import type { IOOutputCallbacks } from './io-stream.js';
@@ -62,7 +63,7 @@ interface WriteJob {
 /**
  * Options for Muxer creation.
  */
-export interface MuxerOptions {
+export interface MuxerOptions<F extends string = string> {
   /**
    * Input media for automatic metadata and property copying.
    *
@@ -83,8 +84,11 @@ export interface MuxerOptions {
    * Use this to override automatic format detection.
    *
    * Matches FFmpeg CLI's -f option.
+   *
+   * When given as a literal (e.g. `'mp4'`), `options` is strongly typed to that
+   * muxer's known options plus the generic AVFormatContext options.
    */
-  format?: string;
+  format?: F;
 
   /**
    * Buffer size for I/O operations.
@@ -230,10 +234,12 @@ export interface MuxerOptions {
   /**
    * FFmpeg format options passed directly to the output.
    *
-   * Key-value pairs of FFmpeg AVFormatContext options.
-   * These are passed directly to avformat_write_header().
+   * Key-value pairs of FFmpeg AVFormatContext / muxer-private options, applied
+   * before avformat_write_header(). When `format` is a known literal, these are
+   * typed to that muxer's options (autocomplete + value typing); arbitrary keys
+   * remain allowed so protocol/other options still pass.
    */
-  options?: Record<string, string | number | boolean | bigint | undefined | null>;
+  options?: MuxerOptionsFor<F>;
 
   /**
    * AbortSignal for cancellation.
@@ -390,9 +396,9 @@ export class Muxer implements AsyncDisposable, Disposable {
    * @see {@link MuxerOptions} For configuration options
    * @see {@link IOOutputCallbacks} For custom I/O interface
    */
-  static async open(target: string, options?: MuxerOptions): Promise<Muxer>;
-  static async open(target: IOOutputCallbacks, options: MuxerOptions & { format: string }): Promise<Muxer>;
-  static async open(target: Writable, options: MuxerOptions & { format: string }): Promise<Muxer>;
+  static async open<const F extends string = string>(target: string, options?: MuxerOptions<F>): Promise<Muxer>;
+  static async open<const F extends string>(target: IOOutputCallbacks, options: MuxerOptions<F> & { format: F }): Promise<Muxer>;
+  static async open<const F extends string>(target: Writable, options: MuxerOptions<F> & { format: F }): Promise<Muxer>;
   static async open(target: string | IOOutputCallbacks | Writable, options?: MuxerOptions): Promise<Muxer> {
     const output = new Muxer(options);
 
@@ -543,9 +549,9 @@ export class Muxer implements AsyncDisposable, Disposable {
    *
    * @see {@link open} For async version
    */
-  static openSync(target: string, options?: MuxerOptions): Muxer;
-  static openSync(target: IOOutputCallbacks, options: MuxerOptions & { format: string }): Muxer;
-  static openSync(target: Writable, options: MuxerOptions & { format: string }): Muxer;
+  static openSync<const F extends string = string>(target: string, options?: MuxerOptions<F>): Muxer;
+  static openSync<const F extends string>(target: IOOutputCallbacks, options: MuxerOptions<F> & { format: F }): Muxer;
+  static openSync<const F extends string>(target: Writable, options: MuxerOptions<F> & { format: F }): Muxer;
   static openSync(target: string | IOOutputCallbacks | Writable, options?: MuxerOptions): Muxer {
     const output = new Muxer(options);
 

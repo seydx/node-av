@@ -729,7 +729,7 @@ describe('High-Level Filter API', () => {
     });
 
     it('should chain multiple filter presets', () => {
-      const filterChain = FilterPreset.chain().scale(1280, 720).fps(24).format(AV_PIX_FMT_YUV420P).build();
+      const filterChain = FilterPreset.chain().scale(1280, 720).filter('fps', { fps: 24 }).format(AV_PIX_FMT_YUV420P).build();
       const filter = FilterAPI.create(filterChain);
       assert.ok(filter); // Video filters use lazy initialization
 

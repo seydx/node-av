@@ -164,7 +164,7 @@ using audioDecoder = await Decoder.create(audioStream, {
   exitOnError: false,
 });
 
-const audioFilterChain = FilterPreset.chain().aformat(AV_SAMPLE_FMT_FLTP, 44100, 'stereo').asetnsamples(1024).build();
+const audioFilterChain = FilterPreset.chain().aformat(AV_SAMPLE_FMT_FLTP, 44100, 'stereo').filter('asetnsamples', { n: 1024 }).build();
 using audioFilter = FilterAPI.create(audioFilterChain);
 
 using audioEncoder = await Encoder.create(FF_ENCODER_AAC, {

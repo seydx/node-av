@@ -84,7 +84,7 @@ using encoder = await Encoder.create(FF_ENCODER_LIBX264, {
   filter,
   options: {
     preset: 'medium',
-    crf: '23',
+    crf: 23,
   },
 });
 

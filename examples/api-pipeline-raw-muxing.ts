@@ -120,7 +120,7 @@ using videoEncoder = await Encoder.create(FF_ENCODER_LIBX264, {
   gopSize: 60,
   options: {
     preset: 'fast',
-    crf: '23',
+    crf: 23,
   },
 });
 
@@ -131,7 +131,7 @@ using audioEncoder = await Encoder.create(FF_ENCODER_AAC, {
 
 // Create audio filter to handle frame size and format conversion
 console.log('Creating audio filter for format conversion...');
-const filterChain = FilterPreset.chain().aformat([AV_SAMPLE_FMT_FLTP], 48000, 'stereo').asetnsamples(1024).build();
+const filterChain = FilterPreset.chain().aformat([AV_SAMPLE_FMT_FLTP], 48000, 'stereo').filter('asetnsamples', { n: 1024 }).build();
 using audioFilter = FilterAPI.create(filterChain);
 
 // Process with pipeline

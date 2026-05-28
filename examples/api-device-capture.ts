@@ -187,7 +187,7 @@ async function captureCamera(deviceId: string, outputPath: string, durationSec: 
     decoder,
     options: {
       preset: 'ultrafast',
-      crf: '23',
+      crf: 23,
     },
   });
 
@@ -324,7 +324,7 @@ async function captureDevice(outputPath: string, durationSec: number) {
   });
   using videoEncoder = await Encoder.create(FF_ENCODER_LIBX264, {
     decoder: videoDecoder,
-    options: { preset: 'ultrafast', crf: '23' },
+    options: { preset: 'ultrafast', crf: 23 },
   });
   const videoOutIndex = output.addStream(videoEncoder);
 
@@ -426,7 +426,7 @@ async function captureScreen(outputPath: string, durationSec: number) {
     decoder,
     options: {
       preset: 'ultrafast',
-      crf: '23',
+      crf: 23,
     },
   });
 

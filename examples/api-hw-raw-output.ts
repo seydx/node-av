@@ -101,7 +101,7 @@ using decoder = await Decoder.create(videoStream, {
 });
 
 // Create filter
-const filterChain = FilterPreset.chain(hardware).scale(scaleWidth, scaleHeight).hwdownload().format(AV_PIX_FMT_NV12).fps(fps).build();
+const filterChain = FilterPreset.chain(hardware).scale(scaleWidth, scaleHeight).hwdownload().format(AV_PIX_FMT_NV12).filter('fps', { fps }).build();
 console.log(`Creating filter: ${filterChain}`);
 using filter = FilterAPI.create(filterChain, {
   framerate: videoStream.avgFrameRate,

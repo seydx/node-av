@@ -30,7 +30,7 @@ import { AsyncQueue } from './utilities/async-queue.js';
 import { SchedulerControl } from './utilities/scheduler.js';
 import { parseBitrate } from './utils.js';
 
-import type { AVCodecFlag, AVCodecID, AVPixelFormat, AVSampleFormat, AVThreadType, EOFSignal, FFEncoderCodec } from '../constants/index.js';
+import type { AVCodecFlag, AVCodecID, AVPixelFormat, AVSampleFormat, AVThreadType, EncoderOptionsFor, EOFSignal, FFEncoderCodec } from '../constants/index.js';
 import type { Decoder } from './decoder.js';
 import type { FilterComplexAPI } from './filter-complex.js';
 import type { FilterAPI } from './filter.js';
@@ -40,7 +40,7 @@ import type { SchedulableComponent } from './utilities/scheduler.js';
 /**
  * Options for encoder creation.
  */
-export interface EncoderOptions {
+export interface EncoderOptions<C = unknown> {
   /**
    * Target bitrate.
    *
@@ -132,10 +132,12 @@ export interface EncoderOptions {
   /**
    * Additional codec-specific options.
    *
-   * Key-value pairs of FFmpeg AVCodecContext options.
-   * These are passed directly to the encoder.
+   * Key-value pairs of FFmpeg private codec options, passed directly to the encoder.
+   * When the codec is created from a branded constant (e.g. `FF_ENCODER_LIBX264`),
+   * these are strongly typed to that codec's known options (autocomplete + validation);
+   * otherwise any string/number/boolean values are accepted.
    */
-  options?: Record<string, string | number | boolean | undefined | null>;
+  options?: EncoderOptionsFor<C>;
 
   /**
    * AbortSignal for cancellation.
@@ -298,7 +300,7 @@ export class Encoder implements Disposable {
    * @see {@link EncoderOptions} For configuration options
    * @see {@link createSync} For synchronous version
    */
-  static async create(encoderCodec: FFEncoderCodec | AVCodecID | Codec, options: EncoderOptions = {}): Promise<Encoder> {
+  static async create<const C extends FFEncoderCodec | AVCodecID | Codec>(encoderCodec: C, options: EncoderOptions<C> = {}): Promise<Encoder> {
     let codec: Codec | null = null;
 
     if (encoderCodec instanceof Codec) {
@@ -357,9 +359,12 @@ export class Encoder implements Disposable {
       codecContext.threadType = options.threadType;
     }
 
-    const opts = options.options ? Dictionary.fromObject(options.options) : undefined;
+    // Loose view for internal use: the public signature narrows `options` to the
+    // codec, but internally codec options are handled as a generic dictionary.
+    const looseOptions = options as EncoderOptions;
+    const opts = looseOptions.options ? Dictionary.fromObject(looseOptions.options) : undefined;
 
-    const encoder = new Encoder(codecContext, codec, options, opts);
+    const encoder = new Encoder(codecContext, codec, looseOptions, opts);
 
     if (options.signal) {
       options.signal.throwIfAborted();
@@ -426,7 +431,7 @@ export class Encoder implements Disposable {
    * @see {@link EncoderOptions} For configuration options
    * @see {@link create} For async version
    */
-  static createSync(encoderCodec: FFEncoderCodec | AVCodecID | Codec, options: EncoderOptions = {}): Encoder {
+  static createSync<const C extends FFEncoderCodec | AVCodecID | Codec>(encoderCodec: C, options: EncoderOptions<C> = {}): Encoder {
     let codec: Codec | null = null;
 
     if (encoderCodec instanceof Codec) {
@@ -485,9 +490,12 @@ export class Encoder implements Disposable {
       codecContext.threadType = options.threadType;
     }
 
-    const opts = options.options ? Dictionary.fromObject(options.options) : undefined;
+    // Loose view for internal use: the public signature narrows `options` to the
+    // codec, but internally codec options are handled as a generic dictionary.
+    const looseOptions = options as EncoderOptions;
+    const opts = looseOptions.options ? Dictionary.fromObject(looseOptions.options) : undefined;
 
-    const encoder = new Encoder(codecContext, codec, options, opts);
+    const encoder = new Encoder(codecContext, codec, looseOptions, opts);
 
     if (options.signal) {
       options.signal.throwIfAborted();

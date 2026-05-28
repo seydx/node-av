@@ -8,21 +8,26 @@ import { Muxer } from './muxer.js';
 import { AsyncQueue } from './utilities/async-queue.js';
 import { Scheduler, SchedulerControl } from './utilities/scheduler.js';
 
+import type { BsfOptionsFor } from '../constants/index.js';
 import type { Stream } from '../lib/stream.js';
 import type { SchedulableComponent } from './utilities/scheduler.js';
 
 /**
  * Options for bitstream filter creation.
+ *
+ * @template N - The bitstream filter name; when a literal name is given,
+ * `options` is strongly typed to that filter's known options.
  */
-export interface BitstreamFilterOptions {
+export interface BitstreamFilterOptions<N extends string = string> {
   /**
    * Filter-specific options.
    *
-   * Key-value pairs of FFmpeg bitstream filter options.
-   * These are passed directly to the filter via av_opt_set().
-   * Available options depend on the specific filter being used.
+   * Key-value pairs of FFmpeg bitstream filter options, passed directly to the
+   * filter via av_opt_set(). When created from a known filter name, these are
+   * strongly typed to that filter's options (autocomplete + validation);
+   * otherwise any string/number/boolean values are accepted.
    */
-  options?: Record<string, string | number | boolean | bigint | undefined | null>;
+  options?: BsfOptionsFor<N>;
 
   /**
    * AbortSignal for cancellation.
@@ -158,7 +163,7 @@ export class BitStreamFilterAPI implements Disposable {
    * @see {@link BitStreamFilter.getByName} For filter discovery
    * @see {@link BitstreamFilterOptions} For available options
    */
-  static create(filterName: string, stream: Stream, filterOptions?: BitstreamFilterOptions): BitStreamFilterAPI {
+  static create<const N extends string = string>(filterName: N, stream: Stream, filterOptions?: BitstreamFilterOptions<N>): BitStreamFilterAPI {
     if (!stream) {
       throw new Error('Stream is required');
     }
@@ -186,7 +191,7 @@ export class BitStreamFilterAPI implements Disposable {
 
       // Apply filter-specific options before init
       if (filterOptions?.options) {
-        for (const [key, value] of Object.entries(filterOptions.options)) {
+        for (const [key, value] of Object.entries(filterOptions.options as Record<string, string | number | boolean | bigint | undefined | null>)) {
           const ret = ctx.setOption(key, value);
           FFmpegError.throwIfError(ret, `Failed to set bitstream filter option '${key}'`);
         }

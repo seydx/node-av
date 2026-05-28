@@ -117,7 +117,7 @@ using encoder = await Encoder.create(FF_ENCODER_LIBX264, {
   decoder: decoder0, // For framerate and other metadata
   filter: complex,
   bitrate: '4M', // Higher bitrate for grid (4 videos in one)
-  options: { preset: 'medium', crf: '23' },
+  options: { preset: 'medium', crf: 23 },
 });
 
 const outputStreamIndex = output.addStream(encoder);

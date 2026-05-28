@@ -17,8 +17,17 @@ import {
 import { Filter } from '../lib/filter.js';
 import { avGetPixFmtName, avGetSampleFmtName } from '../lib/utilities.js';
 
-import type { AVPixelFormat, AVSampleFormat } from '../constants/index.js';
+import type { AVPixelFormat, AVSampleFormat, FilterOptionsMap } from '../constants/index.js';
 import type { HardwareContext } from './hardware.js';
+
+// Escape a filter option value for the filtergraph string. Bare tokens (numbers,
+// simple identifiers, expressions) are emitted as-is; anything with special
+// characters is single-quoted, with embedded quotes escaped FFmpeg-style.
+const escapeFilterValue = (value: string | number | boolean): string => {
+  const s = String(value);
+  if (s !== '' && /^[A-Za-z0-9_.+\-/*]+$/.test(s)) return s;
+  return `'${s.replace(/'/g, "'\\''")}'`;
+};
 
 /**
  * Hardware filter capabilities for different platforms.
@@ -62,8 +71,8 @@ export interface FilterSupport {
  * // Software filter chain
  * const filter = FilterPreset.chain()
  *   .scale(1920, 1080)
- *   .fps(30)
- *   .fade('in', 0, 2)
+ *   .filter('fps', { fps: 30 })
+ *   .filter('fade', { type: 'in', start_time: 0, duration: 2 })
  *   .build();
  *
  * // Hardware-accelerated filter chain
@@ -117,7 +126,7 @@ export class FilterPreset {
    * // Software filter chain
    * const filter = FilterPreset.chain()
    *   .scale(1280, 720)
-   *   .fps(30)
+   *   .filter('fps', { fps: 30 })
    *   .build();
    * ```
    *
@@ -154,6 +163,41 @@ export class FilterPreset {
     }
 
     return this.add(filter);
+  }
+
+  /**
+   * Adds any FFmpeg filter to the chain with type-safe options.
+   *
+   * Provides autocomplete for every available filter name and its options
+   * (generated from FFmpeg's AVOption metadata). Prefer the dedicated methods
+   * (e.g. {@link scale}) when hardware-aware selection or automatic mapping is
+   * needed; use {@link custom} for raw filter strings.
+   *
+   * @param name - Filter name (autocompleted from all available filters)
+   *
+   * @param options - Filter-specific options, typed to the chosen filter
+   *
+   * @returns This instance for chaining
+   *
+   * @example
+   * ```typescript
+   * chain
+   *   .filter('drawtext', { text: 'hello', fontsize: 24 })
+   *   .filter('hue', { s: 0 });
+   * // "drawtext=text=hello:fontsize=24,hue=s=0"
+   * ```
+   */
+  filter<N extends keyof FilterOptionsMap>(name: N, options?: FilterOptionsMap[N]): this {
+    if (!options) {
+      return this.add(name);
+    }
+
+    const entries = Object.entries(options as Record<string, string | number | boolean | undefined | null>);
+    const args = entries
+      .filter((e): e is [string, string | number | boolean] => e[1] != null)
+      .map(([k, v]) => `${k}=${escapeFilterValue(v)}`)
+      .join(':');
+    return this.add(args ? `${name}=${args}` : name);
   }
 
   /**
@@ -537,30 +581,6 @@ export class FilterPreset {
   }
 
   /**
-   * Adds an FPS filter to change frame rate.
-   *
-   * @param fps - Target frames per second
-   *
-   * @returns This instance for chaining
-   *
-   * @example
-   * ```typescript
-   * chain.fps(30)  // Convert to 30 FPS
-   * chain.fps(23.976)  // Film frame rate
-   * ```
-   *
-   * @see {@link https://ffmpeg.org/ffmpeg-filters.html#fps | FFmpeg fps filter}
-   */
-  fps(fps: number): FilterPreset {
-    if (fps <= 0) {
-      return this;
-    }
-
-    this.add(`fps=fps=${fps}`);
-    return this;
-  }
-
-  /**
    * Adds a format filter to convert pixel format.
    *
    * @param pixelFormat - Target pixel format(s) - AVPixelFormat enum, or array
@@ -595,26 +615,6 @@ export class FilterPreset {
       this.add(`format=${formatName}`);
     }
 
-    return this;
-  }
-
-  /**
-   * Adds a rotate filter to the chain.
-   *
-   * @param angle - Rotation angle in degrees
-   *
-   * @returns This instance for chaining
-   *
-   * @example
-   * ```typescript
-   * chain.rotate(90)  // Rotate 90 degrees clockwise
-   * chain.rotate(-45)  // Rotate 45 degrees counter-clockwise
-   * ```
-   *
-   * @see {@link https://ffmpeg.org/ffmpeg-filters.html#rotate | FFmpeg rotate filter}
-   */
-  rotate(angle: number): FilterPreset {
-    this.add(`rotate=${angle}*PI/180`);
     return this;
   }
 
@@ -784,30 +784,6 @@ export class FilterPreset {
   }
 
   /**
-   * Creates a fade filter string for video.
-   *
-   * @param type - Fade type ('in' or 'out')
-   *
-   * @param start - Start time in seconds
-   *
-   * @param duration - Fade duration in seconds
-   *
-   * @returns Filter string or null if not supported
-   *
-   * @example
-   * ```typescript
-   * presets.fade('in', 0, 2)  // 2-second fade in from start
-   * presets.fade('out', 10, 1)  // 1-second fade out at 10 seconds
-   * ```
-   *
-   * @see {@link https://ffmpeg.org/ffmpeg-filters.html#fade | FFmpeg fade filter}
-   */
-  fade(type: 'in' | 'out', start: number, duration: number): FilterPreset {
-    this.add(`fade=t=${type}:st=${start}:d=${duration}`);
-    return this;
-  }
-
-  /**
    * Creates an overlay filter string to composite two video streams.
    *
    * @param x - X position for overlay (default: 0)
@@ -861,26 +837,6 @@ export class FilterPreset {
   }
 
   /**
-   * Creates a volume filter string for audio.
-   *
-   * @param factor - Volume multiplication factor (1.0 = unchanged, 2.0 = double)
-   *
-   * @returns Filter string or null if not supported
-   *
-   * @example
-   * ```typescript
-   * presets.volume(0.5)  // Reduce volume by 50%
-   * presets.volume(1.5)  // Increase volume by 50%
-   * ```
-   *
-   * @see {@link https://ffmpeg.org/ffmpeg-filters.html#volume | FFmpeg volume filter}
-   */
-  volume(factor: number): FilterPreset {
-    this.add(`volume=${factor}`);
-    return this;
-  }
-
-  /**
    * Creates an audio format filter string.
    *
    * @param sampleFormat - Target sample format (e.g., 's16', 'fltp')
@@ -915,138 +871,6 @@ export class FilterPreset {
     if (sampleRate) filter += `:sample_rates=${sampleRate}`;
     if (channelLayout) filter += `:channel_layouts=${channelLayout}`;
     this.add(filter);
-    return this;
-  }
-
-  /**
-   * Adds an asetnsamples filter to set the number of samples per frame.
-   * This is crucial for encoders like Opus that require specific frame sizes.
-   *
-   * @param samples - Number of samples per frame
-   *
-   * @param padding - Whether to pad or drop samples (default: true)
-   *
-   * @returns This instance for chaining
-   *
-   * @example
-   * ```typescript
-   * // For Opus encoder (requires 960 samples)
-   * chain.asetnsamples(960);
-   *
-   * // Drop samples instead of padding
-   * chain.asetnsamples(1024, false);
-   * ```
-   *
-   * @see {@link https://ffmpeg.org/ffmpeg-filters.html#asetnsamples | FFmpeg asetnsamples filter}
-   */
-  asetnsamples(samples: number, padding = true): FilterPreset {
-    const p = padding ? 1 : 0;
-    this.add(`asetnsamples=n=${samples}:p=${p}`);
-    return this;
-  }
-
-  /**
-   * Adds an aresample filter to change audio sample rate, format, and channel layout.
-   *
-   * Uses libswresample for high-quality audio resampling and format conversion.
-   * Can also perform timestamp compensation (stretch/squeeze/fill/trim).
-   *
-   * @param rate - Target sample rate in Hz
-   *
-   * @param format - Optional target sample format (e.g., 's16', 'flt', 'fltp')
-   *
-   * @param channelLayout - Optional target channel layout (e.g., 'mono', 'stereo')
-   *
-   * @returns This instance for chaining
-   *
-   * @example
-   * ```typescript
-   * chain.aresample(44100)  // Convert to 44.1 kHz only
-   * chain.aresample(48000, 's16', 'stereo')  // Full conversion
-   * ```
-   *
-   * @see {@link https://ffmpeg.org/ffmpeg-filters.html#aresample | FFmpeg aresample filter}
-   */
-  aresample(rate: number, format?: AVSampleFormat | string, channelLayout?: string): FilterPreset {
-    const params: string[] = [`${rate}`];
-
-    if (format !== undefined) {
-      const formatStr = typeof format === 'number' ? `${format}` : format;
-      params.push(`osf=${formatStr}`);
-    }
-
-    if (channelLayout !== undefined) {
-      params.push(`ochl=${channelLayout}`);
-    }
-
-    this.add(`aresample=${params.join(':')}`);
-    return this;
-  }
-
-  /**
-   * Adds an atempo filter to change audio playback speed.
-   * Factor must be between 0.5 and 2.0. For larger changes, chain multiple atempo filters.
-   *
-   * @param factor - Tempo factor (0.5 = half speed, 2.0 = double speed)
-   *
-   * @returns This instance for chaining
-   *
-   * @example
-   * ```typescript
-   * chain.atempo(1.5)  // 1.5x speed
-   * chain.atempo(0.8)  // Slow down to 80% speed
-   * ```
-   *
-   * @see {@link https://ffmpeg.org/ffmpeg-filters.html#atempo | FFmpeg atempo filter}
-   */
-  atempo(factor: number): FilterPreset {
-    this.add(`atempo=${factor}`);
-    return this;
-  }
-
-  /**
-   * Adds an audio fade filter.
-   *
-   * @param type - Fade type ('in' or 'out')
-   *
-   * @param start - Start time in seconds
-   *
-   * @param duration - Fade duration in seconds
-   *
-   * @returns This instance for chaining
-   *
-   * @example
-   * ```typescript
-   * chain.afade('in', 0, 3)  // 3-second audio fade in
-   * chain.afade('out', 20, 2)  // 2-second fade out at 20s
-   * ```
-   *
-   * @see {@link https://ffmpeg.org/ffmpeg-filters.html#afade | FFmpeg afade filter}
-   */
-  afade(type: 'in' | 'out', start: number, duration: number): FilterPreset {
-    this.add(`afade=t=${type}:st=${start}:d=${duration}`);
-    return this;
-  }
-
-  /**
-   * Adds an amix filter to mix multiple audio streams.
-   *
-   * @param inputs - Number of input streams to mix (default: 2)
-   *
-   * @param duration - How to determine output duration (default: 'longest')
-   *
-   * @returns This instance for chaining
-   *
-   * @example
-   * ```typescript
-   * chain.amix(3, 'longest')  // Mix 3 audio streams
-   * chain.amix(2, 'first')  // Mix 2 streams, use first's duration
-   * ```
-   *
-   * @see {@link https://ffmpeg.org/ffmpeg-filters.html#amix | FFmpeg amix filter}
-   */
-  amix(inputs = 2, duration: 'first' | 'longest' | 'shortest' = 'longest'): FilterPreset {
-    this.add(`amix=inputs=${inputs}:duration=${duration}`);
     return this;
   }
 
@@ -1092,80 +916,6 @@ export class FilterPreset {
       filter += `:${color}`;
       this.add(filter);
     }
-    return this;
-  }
-
-  /**
-   * Adds a trim filter to cut a portion of the stream.
-   * Crucial for cutting segments from media.
-   *
-   * @param start - Start time in seconds
-   *
-   * @param end - End time in seconds (optional)
-   *
-   * @param duration - Duration in seconds (optional, alternative to end)
-   *
-   * @returns This instance for chaining
-   *
-   * @example
-   * ```typescript
-   * chain.trim(10, 30)  // Extract from 10s to 30s
-   * chain.trim(5, undefined, 10)  // Extract 10s starting at 5s
-   * ```
-   *
-   * @see {@link https://ffmpeg.org/ffmpeg-filters.html#trim | FFmpeg trim filter}
-   */
-  trim(start: number, end?: number, duration?: number): FilterPreset {
-    let filter = `trim=start=${start}`;
-    if (end !== undefined) filter += `:end=${end}`;
-    if (duration !== undefined) filter += `:duration=${duration}`;
-    this.add(filter);
-    return this;
-  }
-
-  /**
-   * Creates a setpts filter string to change presentation timestamps.
-   * Essential for speed changes and timestamp manipulation.
-   *
-   * @param expression - PTS expression (e.g., 'PTS*2' for half speed, 'PTS/2' for double speed)
-   *
-   * @returns Filter string or null if not supported
-   *
-   * @example
-   * ```typescript
-   * // Double speed
-   * presets.setpts('PTS/2');
-   *
-   * // Half speed
-   * presets.setpts('PTS*2');
-   *
-   * // Reset timestamps
-   * presets.setpts('PTS-STARTPTS');
-   * ```
-   *
-   * @see {@link https://ffmpeg.org/ffmpeg-filters.html#setpts | FFmpeg setpts filter}
-   */
-  setpts(expression: string): FilterPreset {
-    this.add(`setpts=${expression}`);
-    return this;
-  }
-
-  /**
-   * Creates an asetpts filter string for audio timestamp manipulation.
-   *
-   * @param expression - PTS expression
-   *
-   * @returns Filter string or null if not supported
-   *
-   * @example
-   * ```typescript
-   * presets.asetpts('PTS-STARTPTS')  // Reset timestamps to start from 0
-   * ```
-   *
-   * @see {@link https://ffmpeg.org/ffmpeg-filters.html#asetpts | FFmpeg asetpts filter}
-   */
-  asetpts(expression: string): FilterPreset {
-    this.add(`asetpts=${expression}`);
     return this;
   }
 
@@ -1232,74 +982,6 @@ export class FilterPreset {
       this.add(`transpose=${mode}`);
     }
 
-    return this;
-  }
-
-  /**
-   * Creates a setsar filter string to set sample aspect ratio.
-   * Important for correcting aspect ratio issues.
-   *
-   * @param ratio - Aspect ratio (e.g., '1:1', '16:9', or number)
-   *
-   * @returns Filter string or null if not supported
-   *
-   * @example
-   * ```typescript
-   * presets.setsar('1:1')  // Square pixels
-   * presets.setsar(1.333)  // 4:3 aspect ratio
-   * ```
-   *
-   * @see {@link https://ffmpeg.org/ffmpeg-filters.html#setsar | FFmpeg setsar/setdar filter}
-   */
-  setsar(ratio: string | number): FilterPreset {
-    this.add(`setsar=${ratio}`);
-    return this;
-  }
-
-  /**
-   * Creates a setdar filter string to set display aspect ratio.
-   *
-   * @param ratio - Aspect ratio (e.g., '16:9', '4:3')
-   *
-   * @returns Filter string or null if not supported
-   *
-   * @example
-   * ```typescript
-   * presets.setdar('16:9')  // Widescreen
-   * presets.setdar('4:3')  // Traditional TV aspect
-   * ```
-   *
-   * @see {@link https://ffmpeg.org/ffmpeg-filters.html#setsar | FFmpeg setsar/setdar filter}
-   */
-  setdar(ratio: string | number): FilterPreset {
-    this.add(`setdar=${ratio}`);
-    return this;
-  }
-
-  /**
-   * Adds an apad filter to add audio padding.
-   * Useful for ensuring minimum audio duration.
-   *
-   * @param wholeDuration - Minimum duration in seconds (optional)
-   *
-   * @param padDuration - Amount of padding to add in seconds (optional)
-   *
-   * @returns This instance for chaining
-   *
-   * @example
-   * ```typescript
-   * chain.apad(30)  // Ensure at least 30 seconds total
-   * chain.apad(undefined, 5)  // Add 5 seconds of padding
-   * ```
-   *
-   * @see {@link https://ffmpeg.org/ffmpeg-filters.html#apad | FFmpeg apad filter}
-   */
-  apad(wholeDuration?: number, padDuration?: number): FilterPreset {
-    if (!wholeDuration && !padDuration) return this;
-    let filter = 'apad';
-    if (wholeDuration) filter += `=whole_dur=${wholeDuration}`;
-    if (padDuration) filter += wholeDuration ? `:pad_dur=${padDuration}` : `=pad_dur=${padDuration}`;
-    this.add(filter);
     return this;
   }
 
@@ -1376,482 +1058,6 @@ export class FilterPreset {
       this.add(filter);
     }
 
-    return this;
-  }
-
-  /**
-   * Creates a select filter string to select specific frames.
-   * Powerful for extracting keyframes, specific frame types, etc.
-   *
-   * @param expression - Selection expression
-   *
-   * @returns Filter string or null if not supported
-   *
-   * @example
-   * ```typescript
-   * presets.select('eq(pict_type,I)')  // Select only keyframes
-   * presets.select('not(mod(n,10))')  // Select every 10th frame
-   * ```
-   *
-   * @see {@link https://ffmpeg.org/ffmpeg-filters.html#select | FFmpeg select filter}
-   */
-  select(expression: string): FilterPreset {
-    this.add(`select='${expression}'`);
-    return this;
-  }
-
-  /**
-   * Creates an aselect filter string for audio selection.
-   *
-   * @param expression - Selection expression
-   *
-   * @returns Filter string or null if not supported
-   *
-   * @example
-   * ```typescript
-   * presets.aselect('between(t,10,20)')  // Select audio between 10-20 seconds
-   * ```
-   *
-   * @see {@link https://ffmpeg.org/ffmpeg-filters.html#aselect | FFmpeg aselect filter}
-   */
-  aselect(expression: string): FilterPreset {
-    this.add(`aselect='${expression}'`);
-    return this;
-  }
-
-  /**
-   * Creates a concat filter string to concatenate multiple inputs.
-   * Essential for joining multiple video/audio segments.
-   *
-   * @param n - Number of input segments
-   *
-   * @param v - Number of output video streams (0 or 1)
-   *
-   * @param a - Number of output audio streams (0 or 1)
-   *
-   * @returns Filter string or null if not supported
-   *
-   * @example
-   * ```typescript
-   * presets.concat(3, 1, 1)  // Join 3 segments with video and audio
-   * presets.concat(2, 1, 0)  // Join 2 video-only segments
-   * ```
-   *
-   * @see {@link https://ffmpeg.org/ffmpeg-filters.html#concat | FFmpeg concat filter}
-   */
-  concat(n: number, v = 1, a = 1): FilterPreset {
-    this.add(`concat=n=${n}:v=${v}:a=${a}`);
-    return this;
-  }
-
-  /**
-   * Creates an amerge filter string to merge multiple audio streams into one.
-   * Different from amix - this creates multi-channel output.
-   *
-   * @param inputs - Number of input streams
-   *
-   * @returns Filter string or null if not supported
-   *
-   * @example
-   * ```typescript
-   * presets.amerge(2)  // Merge 2 mono streams to stereo
-   * presets.amerge(6)  // Merge 6 channels for 5.1 surround
-   * ```
-   *
-   * @see {@link https://ffmpeg.org/ffmpeg-filters.html#amerge | FFmpeg amerge filter}
-   */
-  amerge(inputs = 2): FilterPreset {
-    this.add(`amerge=inputs=${inputs}`);
-    return this;
-  }
-
-  /**
-   * Creates a channelmap filter string to remap audio channels.
-   * Critical for audio channel manipulation.
-   *
-   * @param map - Channel mapping (e.g., '0-0|1-1' or 'FL-FR|FR-FL' to swap stereo)
-   *
-   * @returns Filter string or null if not supported
-   *
-   * @example
-   * ```typescript
-   * presets.channelmap('FL-FR|FR-FL')  // Swap left and right channels
-   * presets.channelmap('0-0|0-1')  // Duplicate mono to stereo
-   * ```
-   *
-   * @see {@link https://ffmpeg.org/ffmpeg-filters.html#channelmap | FFmpeg channelmap filter}
-   */
-  channelmap(map: string): FilterPreset {
-    this.add(`channelmap=${map}`);
-    return this;
-  }
-
-  /**
-   * Creates a channelsplit filter string to split audio channels.
-   *
-   * @param channelLayout - Channel layout to split (optional)
-   *
-   * @returns Filter string or null if not supported
-   *
-   * @example
-   * ```typescript
-   * presets.channelsplit('stereo')  // Split stereo to 2 mono
-   * presets.channelsplit('5.1')  // Split 5.1 to individual channels
-   * ```
-   *
-   * @see {@link https://ffmpeg.org/ffmpeg-filters.html#channelsplit | FFmpeg channelsplit filter}
-   */
-  channelsplit(channelLayout?: string): FilterPreset {
-    this.add(channelLayout ? `channelsplit=channel_layout=${channelLayout}` : 'channelsplit');
-    return this;
-  }
-
-  /**
-   * Creates a loudnorm filter string for loudness normalization.
-   * Essential for broadcast compliance and consistent audio levels.
-   *
-   * @param I - Integrated loudness target (default: -24 LUFS)
-   *
-   * @param TP - True peak (default: -2 dBTP)
-   *
-   * @param LRA - Loudness range (default: 7 LU)
-   *
-   * @returns Filter string or null if not supported
-   *
-   * @example
-   * ```typescript
-   * presets.loudnorm(-23, -1, 7)  // EBU R128 broadcast standard
-   * presets.loudnorm(-16, -1.5, 11)  // Streaming platforms standard
-   * ```
-   *
-   * @see {@link https://ffmpeg.org/ffmpeg-filters.html#loudnorm | FFmpeg loudnorm filter}
-   */
-  loudnorm(I = -24, TP = -2, LRA = 7): FilterPreset {
-    this.add(`loudnorm=I=${I}:TP=${TP}:LRA=${LRA}`);
-    return this;
-  }
-
-  /**
-   * Creates a compand filter string for audio compression/expansion.
-   * Important for dynamic range control.
-   *
-   * @param attacks - Attack times
-   *
-   * @param decays - Decay times
-   *
-   * @param points - Transfer function points
-   *
-   * @param gain - Output gain
-   *
-   * @returns Filter string or null if not supported
-   *
-   * @example
-   * ```typescript
-   * presets.compand('0.3|0.3', '1|1', '-90/-60|-60/-40|-40/-30|-20/-20', 6)
-   * ```
-   *
-   * @see {@link https://ffmpeg.org/ffmpeg-filters.html#compand | FFmpeg compand filter}
-   */
-  compand(attacks: string, decays: string, points: string, gain?: number): FilterPreset {
-    let filter = `compand=attacks=${attacks}:decays=${decays}:points=${points}`;
-    if (gain !== undefined) filter += `:gain=${gain}`;
-    this.add(filter);
-    return this;
-  }
-
-  /**
-   * Adds a drawtext filter to overlay text on video.
-   *
-   * @param text - Text to display
-   *
-   * @param options - Text rendering options
-   *
-   * @returns This instance for chaining
-   *
-   * @example
-   * ```typescript
-   * chain.drawtext('Hello World', { x: 10, y: 10, fontsize: 24 })
-   * chain.drawtext('Timestamp', {
-   *   x: 10,
-   *   y: 10,
-   *   fontsize: 24,
-   *   fontcolor: 'white',
-   *   fontfile: '/path/to/font.ttf'
-   * })
-   * ```
-   *
-   * @see {@link https://ffmpeg.org/ffmpeg-filters.html#drawtext | FFmpeg drawtext filter}
-   */
-  drawtext(text: string, options: Record<string, any>): FilterPreset {
-    let filter = `drawtext=text='${text.replace(/'/g, "\\'").replace(/"/g, '\\"')}'`;
-    for (const [key, value] of Object.entries(options)) {
-      if (key === 'fontfile' && typeof value === 'string') {
-        filter += `:${key}='${value}'`;
-      } else {
-        filter += `:${key}=${value}`;
-      }
-    }
-    this.add(filter);
-    return this;
-  }
-
-  /**
-   * Adds a split filter to duplicate a video stream.
-   *
-   * @param outputs - Number of output streams (default: 2)
-   *
-   * @returns This instance for chaining
-   *
-   * @example
-   * ```typescript
-   * chain.split()    // Split into 2 outputs
-   * chain.split(3)   // Split into 3 outputs
-   * ```
-   *
-   * @see {@link https://ffmpeg.org/ffmpeg-filters.html#split | FFmpeg split filter}
-   */
-  split(outputs = 2): FilterPreset {
-    this.add(`split=${outputs}`);
-    return this;
-  }
-
-  /**
-   * Adds an asplit filter to duplicate an audio stream.
-   *
-   * @param outputs - Number of output streams (default: 2)
-   *
-   * @returns This instance for chaining
-   *
-   * @example
-   * ```typescript
-   * chain.asplit()   // Split into 2 outputs
-   * chain.asplit(3)  // Split into 3 outputs
-   * ```
-   *
-   * @see {@link https://ffmpeg.org/ffmpeg-filters.html#asplit | FFmpeg asplit filter}
-   */
-  asplit(outputs = 2): FilterPreset {
-    this.add(`asplit=${outputs}`);
-    return this;
-  }
-
-  /**
-   * Adds an adelay filter to delay audio by specified milliseconds.
-   *
-   * @param delays - Delay in milliseconds (single value or array for multiple channels)
-   *
-   * @returns This instance for chaining
-   *
-   * @example
-   * ```typescript
-   * chain.adelay(100)        // Delay all channels by 100ms
-   * chain.adelay([100, 200]) // Delay first channel by 100ms, second by 200ms
-   * ```
-   *
-   * @see {@link https://ffmpeg.org/ffmpeg-filters.html#adelay | FFmpeg adelay filter}
-   */
-  adelay(delays: number | number[]): FilterPreset {
-    const delayStr = Array.isArray(delays) ? delays.join('|') : delays.toString();
-    this.add(`adelay=${delayStr}`);
-    return this;
-  }
-
-  /**
-   * Adds an aecho filter for audio echo effect.
-   *
-   * @param in_gain - Input gain (0-1)
-   *
-   * @param out_gain - Output gain (0-1)
-   *
-   * @param delays - Delay in milliseconds
-   *
-   * @param decays - Decay factor (0-1)
-   *
-   * @returns This instance for chaining
-   *
-   * @example
-   * ```typescript
-   * chain.aecho(0.8, 0.9, 1000, 0.3)  // Echo with 1 second delay
-   * ```
-   *
-   * @see {@link https://ffmpeg.org/ffmpeg-filters.html#aecho | FFmpeg aecho filter}
-   */
-  aecho(in_gain: number, out_gain: number, delays: number, decays: number): FilterPreset {
-    this.add(`aecho=${in_gain}:${out_gain}:${delays}:${decays}`);
-    return this;
-  }
-
-  /**
-   * Adds a highpass filter to remove low frequencies.
-   *
-   * @param frequency - Cutoff frequency in Hz
-   *
-   * @param options - Additional filter options
-   *
-   * @returns This instance for chaining
-   *
-   * @example
-   * ```typescript
-   * chain.highpass(200)  // Remove frequencies below 200Hz
-   * chain.highpass(200, { width_type: 'q', width: 1 })
-   * ```
-   *
-   * @see {@link https://ffmpeg.org/ffmpeg-filters.html#highpass | FFmpeg highpass filter}
-   */
-  highpass(frequency: number, options?: Record<string, any>): FilterPreset {
-    let filter = `highpass=f=${frequency}`;
-    if (options) {
-      for (const [key, value] of Object.entries(options)) {
-        filter += `:${key}=${value}`;
-      }
-    }
-    this.add(filter);
-    return this;
-  }
-
-  /**
-   * Adds a lowpass filter to remove high frequencies.
-   *
-   * @param frequency - Cutoff frequency in Hz
-   *
-   * @param options - Additional filter options
-   *
-   * @returns This instance for chaining
-   *
-   * @example
-   * ```typescript
-   * chain.lowpass(5000)  // Remove frequencies above 5000Hz
-   * ```
-   *
-   * @see {@link https://ffmpeg.org/ffmpeg-filters.html#lowpass | FFmpeg lowpass filter}
-   */
-  lowpass(frequency: number, options?: Record<string, any>): FilterPreset {
-    let filter = `lowpass=f=${frequency}`;
-    if (options) {
-      for (const [key, value] of Object.entries(options)) {
-        filter += `:${key}=${value}`;
-      }
-    }
-    this.add(filter);
-    return this;
-  }
-
-  /**
-   * Adds a bandpass filter to keep only a frequency band.
-   *
-   * @param frequency - Center frequency in Hz
-   *
-   * @param options - Additional filter options
-   *
-   * @returns This instance for chaining
-   *
-   * @example
-   * ```typescript
-   * chain.bandpass(1000)  // Keep frequencies around 1000Hz
-   * ```
-   *
-   * @see {@link https://ffmpeg.org/ffmpeg-filters.html#bandpass | FFmpeg bandpass filter}
-   */
-  bandpass(frequency: number, options?: Record<string, any>): FilterPreset {
-    let filter = `bandpass=f=${frequency}`;
-    if (options) {
-      for (const [key, value] of Object.entries(options)) {
-        filter += `:${key}=${value}`;
-      }
-    }
-    this.add(filter);
-    return this;
-  }
-
-  /**
-   * Adds an equalizer filter for frequency band adjustment.
-   *
-   * @param frequency - Center frequency in Hz
-   *
-   * @param width - Band width
-   *
-   * @param gain - Gain in dB
-   *
-   * @param width_type - Width type (optional)
-   *
-   * @returns This instance for chaining
-   *
-   * @example
-   * ```typescript
-   * chain.equalizer(1000, 2, 5)        // Boost 1000Hz by 5dB
-   * chain.equalizer(1000, 2, 5, 'q')   // Use Q factor for width
-   * ```
-   *
-   * @see {@link https://ffmpeg.org/ffmpeg-filters.html#equalizer | FFmpeg equalizer filter}
-   */
-  equalizer(frequency: number, width: number, gain: number, width_type?: string): FilterPreset {
-    let filter = `equalizer=f=${frequency}`;
-    if (width_type) {
-      filter += `:width_type=${width_type}`;
-    }
-    filter += `:width=${width}:gain=${gain}`;
-    this.add(filter);
-    return this;
-  }
-
-  /**
-   * Adds a compressor filter for dynamic range compression.
-   *
-   * @param options - Compressor parameters
-   *
-   * @returns This instance for chaining
-   *
-   * @example
-   * ```typescript
-   * chain.compressor()  // Default compression
-   * chain.compressor({
-   *   threshold: 0.5,
-   *   ratio: 4,
-   *   attack: 5,
-   *   release: 50
-   * })
-   * ```
-   *
-   * @see {@link https://ffmpeg.org/ffmpeg-filters.html#acompressor | FFmpeg acompressor filter}
-   */
-  compressor(options?: Record<string, any>): FilterPreset {
-    if (!options || Object.keys(options).length === 0) {
-      this.add('acompressor');
-    } else {
-      let filter = 'acompressor';
-      const params: string[] = [];
-      for (const [key, value] of Object.entries(options)) {
-        params.push(`${key}=${value}`);
-      }
-      filter += '=' + params.join(':');
-      this.add(filter);
-    }
-    return this;
-  }
-
-  /**
-   * Adds an atrim filter to trim audio.
-   *
-   * @param start - Start time in seconds
-   *
-   * @param end - End time in seconds (optional)
-   *
-   * @param duration - Duration in seconds (optional)
-   *
-   * @returns This instance for chaining
-   *
-   * @example
-   * ```typescript
-   * chain.atrim(10, 20)  // Extract audio from 10s to 20s
-   * ```
-   *
-   * @see {@link https://ffmpeg.org/ffmpeg-filters.html#atrim | FFmpeg atrim filter}
-   */
-  atrim(start: number, end?: number, duration?: number): FilterPreset {
-    let filter = `atrim=start=${start}`;
-    if (end !== undefined) filter += `:end=${end}`;
-    if (duration !== undefined) filter += `:duration=${duration}`;
-    this.add(filter);
     return this;
   }
 
@@ -2022,32 +1228,6 @@ export class FilterPreset {
     }
 
     this.add('hwdownload');
-    return this;
-  }
-
-  /**
-   * Adds a hwmap filter to map frames between hardware devices.
-   *
-   * @param derive - Device to derive from (optional)
-   *
-   * @returns This instance for chaining
-   *
-   * @example
-   * ```typescript
-   * const chain = FilterPresets.chain()
-   *   .hwmap('cuda')
-   *   .build();
-   * ```
-   *
-   * @example
-   * ```typescript
-   * const chain = FilterPresets.chain()
-   *   .hwmap()
-   *   .build();
-   * ```
-   */
-  hwmap(derive?: string): FilterPreset {
-    this.add(derive ? `hwmap=derive_device=${derive}` : 'hwmap');
     return this;
   }
 

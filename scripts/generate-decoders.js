@@ -233,16 +233,44 @@ const generateTypeScript = (includePatches = false) => {
  * DO NOT EDIT MANUALLY
  */
 
-// Brand symbol for type safety
-const __codec_brand = Symbol('__codec_brand');
+import type { CodecContextOptions, DecoderOptionsMap } from './options.js';
 
-// Base decoder type
-export type FFDecoderCodec = string & { readonly [__codec_brand]: 'decoder' };
+// Brand symbols for type safety
+declare const __codec_brand: unique symbol;
+declare const __codec_name: unique symbol;
+
+// Base decoder type. The optional name parameter carries the codec's literal
+// name as a phantom property, enabling codec-specific option typing
+// (see DecoderOptionsMap) while the runtime value stays a plain string.
+export type FFDecoderCodec<N extends string = string> = string & { readonly [__codec_brand]: 'decoder'; readonly [__codec_name]: N };
 
 // Specific decoder types by media type
-export type FFVideoDecoder = FFDecoderCodec & { readonly __type: 'video' };
-export type FFAudioDecoder = FFDecoderCodec & { readonly __type: 'audio' };
-export type FFSubtitleDecoder = FFDecoderCodec & { readonly __type: 'subtitle' };
+export type FFVideoDecoder<N extends string = string> = FFDecoderCodec<N> & { readonly __type: 'video' };
+export type FFAudioDecoder<N extends string = string> = FFDecoderCodec<N> & { readonly __type: 'audio' };
+export type FFSubtitleDecoder<N extends string = string> = FFDecoderCodec<N> & { readonly __type: 'subtitle' };
+
+/**
+ * Loose option bag for codecs without generated option typings
+ * (hardware codecs, codecs passed by AVCodecID/Codec, or plain strings).
+ */
+export type UnknownDecoderOptions = Record<string, string | number | boolean | undefined | null>;
+
+/** Resolve a codec's literal name from its phantom brand, or \`never\` if unbranded. */
+export type DecoderNameOf<C> = C extends FFDecoderCodec<infer N> ? N : never;
+
+/**
+ * Resolve the codec-specific private options for a decoder codec.
+ *
+ * Returns the strongly-typed option set when the codec name is known
+ * (enables autocomplete and rejects invalid keys/values), otherwise falls
+ * back to {@link UnknownDecoderOptions}.
+ */
+export type DecoderOptionsFor<C> =
+  [DecoderNameOf<C>] extends [never]
+    ? UnknownDecoderOptions
+    : DecoderNameOf<C> extends keyof DecoderOptionsMap
+      ? Omit<CodecContextOptions, keyof DecoderOptionsMap[DecoderNameOf<C>]> & DecoderOptionsMap[DecoderNameOf<C>]
+      : UnknownDecoderOptions;
 
 `;
 
@@ -255,7 +283,7 @@ export type FFSubtitleDecoder = FFDecoderCodec & { readonly __type: 'subtitle' }
     output += '// Software video decoders\n';
     for (const decoder of videoSw.sort()) {
       const constName = toConstantName(decoder);
-      output += `export const ${constName} = '${codecName(decoder)}' as FFVideoDecoder;\n`;
+      output += `export const ${constName} = '${codecName(decoder)}' as FFVideoDecoder<'${codecName(decoder)}'>;\n`;
     }
     output += '\n';
   }
@@ -277,7 +305,7 @@ export type FFSubtitleDecoder = FFDecoderCodec & { readonly __type: 'subtitle' }
       output += `\n// ${hwType}\n`;
       for (const decoder of decoders.sort()) {
         const constName = toConstantName(decoder);
-        output += `export const ${constName} = '${codecName(decoder)}' as FFVideoDecoder;\n`;
+        output += `export const ${constName} = '${codecName(decoder)}' as FFVideoDecoder<'${codecName(decoder)}'>;\n`;
       }
     }
     output += '\n';
@@ -292,7 +320,7 @@ export type FFSubtitleDecoder = FFDecoderCodec & { readonly __type: 'subtitle' }
     output += '// Software audio decoders\n';
     for (const decoder of audioSw.sort()) {
       const constName = toConstantName(decoder);
-      output += `export const ${constName} = '${codecName(decoder)}' as FFAudioDecoder;\n`;
+      output += `export const ${constName} = '${codecName(decoder)}' as FFAudioDecoder<'${codecName(decoder)}'>;\n`;
     }
     output += '\n';
   }
@@ -301,7 +329,7 @@ export type FFSubtitleDecoder = FFDecoderCodec & { readonly __type: 'subtitle' }
     output += '// Hardware audio decoders\n';
     for (const decoder of audioHw.sort()) {
       const constName = toConstantName(decoder);
-      output += `export const ${constName} = '${codecName(decoder)}' as FFAudioDecoder;\n`;
+      output += `export const ${constName} = '${codecName(decoder)}' as FFAudioDecoder<'${codecName(decoder)}'>;\n`;
     }
     output += '\n';
   }
@@ -314,7 +342,7 @@ export type FFSubtitleDecoder = FFDecoderCodec & { readonly __type: 'subtitle' }
 
     for (const decoder of subtitleDecoders.sort()) {
       const constName = toConstantName(decoder);
-      output += `export const ${constName} = '${codecName(decoder)}' as FFSubtitleDecoder;\n`;
+      output += `export const ${constName} = '${codecName(decoder)}' as FFSubtitleDecoder<'${codecName(decoder)}'>;\n`;
     }
     output += '\n';
   }

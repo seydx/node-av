@@ -52,7 +52,7 @@ using encoder = await Encoder.create(FF_ENCODER_LIBX264, {
   gopSize: 60,
   options: {
     preset: 'fast',
-    crf: '23',
+    crf: 23,
   },
 });
 
