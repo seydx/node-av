@@ -25,6 +25,22 @@ import { WebRTCStream, RTPStream, RTCPeerConnection } from 'node-av';
 import { WebRTCStream, RTPStream, RTCPeerConnection } from 'node-av/webrtc';
 ```
 
+#### `FilterPreset` thin wrappers replaced by the generic `filter()`
+
+The hand-written single-filter convenience methods on `FilterPreset` (e.g. `fps`, `rotate`, `fade`, `volume`, `drawtext`, `trim`, `concat`, `highpass`, `aresample`, …) were removed in favor of the type-safe generic `filter(name, options)`, which covers **every** FFmpeg filter with autocomplete and validation. The hardware-aware / auto-mapping methods (`scale`, `crop`, `overlay`, `tonemap`, `deinterlace`, `format`, `aformat`, `whisper`, …) and `custom()` remain.
+
+**Migration:**
+```typescript
+// Before
+FilterPreset.chain().fps(30).drawtext('hi', { x: 10 }).build();
+
+// After
+FilterPreset.chain()
+  .filter('fps', { fps: 30 })
+  .filter('drawtext', { text: 'hi', x: 10 })
+  .build();
+```
+
 ### Added
 
 #### `Frame.exportIOSurface()` — zero-copy IOSurface export (macOS)
@@ -39,6 +55,68 @@ if (handle) {
 ```
 
 Returns `null` for non-VideoToolbox frames and on non-macOS platforms. The IOSurface stays owned by the frame's `CVPixelBuffer`, so the frame must be kept alive while the handle is in use.
+
+#### Type-safe codec options
+
+`Encoder.create()` / `createSync()` and `Decoder.create()` / `createSync()` now infer the codec-specific private options from the codec constant. When you pass a branded constant (e.g. `FF_ENCODER_LIBX264`), the `options` field is strongly typed to that codec's known options — with editor autocomplete, and compile-time errors for unknown keys or invalid enum values:
+
+```typescript
+// Autocomplete + validation for libx264's private options
+await Encoder.create(FF_ENCODER_LIBX264, {
+  options: { preset: 'fast', crf: 23 },
+});
+
+await Encoder.create(FF_ENCODER_H264_VIDEOTOOLBOX, {
+  options: { coder: 'nope' }, // ✗ Type error: not assignable to 'cavlc' | 'vlc' | 'cabac' | 'ac'
+});
+```
+
+The option types are generated from FFmpeg's `AVOption` metadata, covering every codec known to FFmpeg. Each codec's bag also includes the generic `AVCodecContext` options (e.g. `strict`, `flags`, `bf`), with the codec's private options taking precedence on name clashes (`profile`, `level`). Codecs passed by `AVCodecID`, by `Codec` instance, or as a plain string still accept a loose option bag, so existing dynamic usage is unchanged. Combinable flag options (e.g. `mpv_flags`) suggest the known tokens while still accepting any combined string (`'+a+b'`).
+
+#### Type-safe container & bitstream-filter options
+
+The same generated-from-source typing now extends to containers and bitstream filters:
+
+**`Muxer.open()` / `openSync()` and `Demuxer.open()` / `openSync()`** — when `format` is given as a literal (e.g. `'mp4'`, `'mov'`), the `options` bag is typed to that (de)muxer's private options plus the generic `AVFormatContext` options, with autocomplete for keys and enum/flag values:
+
+```typescript
+await Muxer.open('out.mp4', {
+  format: 'mp4',
+  options: { movflags: '+faststart+frag_keyframe' }, // autocomplete of mov flags
+});
+```
+
+Because container option bags also legitimately carry protocol and codec-child options (e.g. `rtsp_transport` on a demuxer), unknown keys remain accepted — typing is additive autocomplete, never a hard gate.
+
+**`BitStreamFilterAPI.create()`** — the `options` bag is strongly typed to the named filter's options (strict, like codecs), so `h264_metadata`'s `aud?: 'pass' | 'insert' | 'remove'` is validated at compile time.
+
+Formats/filters referenced dynamically (no literal name) still accept a loose option bag.
+
+#### Type-safe filters via `FilterPreset.filter()`
+
+`FilterPreset` gained a generic `filter(name, options)` that exposes **every** FFmpeg filter (≈580) with autocomplete for both the filter name and its options, generated from FFmpeg's `AVOption` metadata — including each filter's description and a link to the FFmpeg docs as JSDoc:
+
+```typescript
+FilterPreset.chain()
+  .filter('drawtext', { text: 'hello', fontsize: 24 })
+  .filter('haldclut', { clut: 'all' })   // 'bogus' → compile error
+  .build();
+```
+
+Enum options are validated (typos are compile errors), while expression options (e.g. `scale` geometry, `setpts`) accept both strings and numbers. Values are escaped for the filtergraph automatically. Filters not in the map can still be added with `custom()`.
+
+#### `Codec.getOptions()` — runtime codec option introspection
+
+New low-level method that returns a codec's private (`priv_class`) AVOptions at runtime — name, help, `AVOptionType`, unit, flags, min/max and default — mirroring `ffmpeg -h encoder=<name>`:
+
+```typescript
+const codec = Codec.findEncoderByName(FF_ENCODER_LIBX264);
+for (const opt of codec?.getOptions() ?? []) {
+  console.log(opt.name, opt.type, opt.help);
+}
+```
+
+Returns an empty array for codecs without private options.
 
 ### Changed
 
