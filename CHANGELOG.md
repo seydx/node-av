@@ -4,15 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-## [6.0.0] - 2026-05-27
+## [6.0.0 Beta] - 2026-05-28
 
 ### Breaking Changes
 
 #### WebRTC / RTP moved to the `node-av/webrtc` subpath
 
-`WebRTCStream`, `RTPStream`, and the re-exported werift primitives (`RTCPeerConnection`, `MediaStreamTrack`, `RtpPacket`, `RTCSessionDescription`, `RTCIceCandidate`, `RTCRtpCodecParameters`, `PeerConfig`) are no longer exported from the main package. They now live under the dedicated `node-av/webrtc` entry point.
-
-This removes the werift dependency chain from the core import graph.
+`WebRTCStream`, `RTPStream`, and the re-exported werift primitives (`RTCPeerConnection`, `MediaStreamTrack`, `RtpPacket`, `RTCSessionDescription`, `RTCIceCandidate`, `RTCRtpCodecParameters`, `PeerConfig`) are no longer exported from the main package. They now live under the dedicated `node-av/webrtc` entry point. This removes the werift dependency chain from the core import graph.
 
 `werift` is now an **optional dependency** — only required when using `node-av/webrtc`.
 
