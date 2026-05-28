@@ -366,7 +366,10 @@ export const key = (s) => (isIdent(s) ? s : `'${s.replace(/'/g, "\\'")}'`);
 // character as `_` + the lowercase 4-digit hex of its code point (e.g. '_' ->
 // '_005f', '-' -> '_002d'), so e.g. `dump_extra` -> `dump_005fextra`.
 export const docAnchor = (name) => name.replace(/[^A-Za-z0-9]/g, (c) => '_' + c.codePointAt(0).toString(16).padStart(4, '0'));
-const jsdoc = (s) => (s ? s.replace(/\*\//g, '*​/') : '');
+// Sanitize help/description text for a JSDoc comment that is also rendered as
+// markdown/Vue by the docs build: neutralize `*/` and escape `&<>` so sequences
+// like "<psy-rd>" aren't parsed as (unclosed) HTML tags.
+const jsdoc = (s) => (s ? s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\*\//g, '*​/') : '');
 const quote = (v) => `'${v.replace(/'/g, "\\'")}'`;
 
 // Modes: 'strict' (codecs/BSF) rejects invalid keys/values; 'lenient' (containers)

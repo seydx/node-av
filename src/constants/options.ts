@@ -163,11 +163,11 @@ export interface CodecContextOptions {
     | 'thread_ops'
     | 'nomc'
     | (string & {});
-  /** diamond type & size for motion estimation */
+  /** diamond type &amp; size for motion estimation */
   dia_size?: number;
   /** amount of motion predictors from the previous frame */
   last_pred?: number;
-  /** diamond type & size for motion estimation pre-pass */
+  /** diamond type &amp; size for motion estimation pre-pass */
   pre_dia_size?: number;
   /** sub-pel motion estimation quality */
   subq?: number;
@@ -861,7 +861,7 @@ export interface EncoderOptionsMap {
     skip_empty_cb?: boolean;
     /** Limit strips/frame, vintage compatible is 1..3, otherwise the more the better */
     max_strips?: number;
-    /** Enforce min strips/frame, more is worse and faster, must be <= max_strips */
+    /** Enforce min strips/frame, more is worse and faster, must be &lt;= max_strips */
     min_strips?: number;
     /** How fast the strip number adapts, more is slightly better, much slower */
     strip_number_adaptivity?: number;
@@ -2039,7 +2039,7 @@ export interface EncoderOptionsMap {
     /** Depth of look ahead in number frames, available when extbrc option is enabled */
     look_ahead_depth?: number;
     profile?: 'unknown' | 'main' | 'main10' | 'mainsp' | 'rext' | 'scc';
-    /** Set the encoding tier (only level >= 4 can support high tier) */
+    /** Set the encoding tier (only level &gt;= 4 can support high tier) */
     tier?: 'main' | 'high';
     /** 1: GPB (generalized P/B frame); 0: regular P frame */
     gpb?: boolean;
@@ -2812,7 +2812,7 @@ export interface EncoderOptionsMap {
     'aq-strength'?: number;
     /** Use psychovisual optimizations. */
     psy?: boolean;
-    /** Strength of psychovisual optimization, in <psy-rd>:<psy-trellis> format. */
+    /** Strength of psychovisual optimization, in &lt;psy-rd&gt;:&lt;psy-trellis&gt; format. */
     'psy-rd'?: string;
     /** Number of frames to look ahead for frametype and ratecontrol */
     'rc-lookahead'?: number;
@@ -2839,7 +2839,7 @@ export interface EncoderOptionsMap {
     aud?: boolean;
     /** Use macroblock tree ratecontrol. */
     mbtree?: boolean;
-    /** Loop filter parameters, in <alpha:beta> form. */
+    /** Loop filter parameters, in &lt;alpha:beta&gt; form. */
     deblock?: string;
     /** Reduce fluctuations in QP (before curve compression) */
     cplxblur?: number;
@@ -2913,7 +2913,7 @@ export interface EncoderOptionsMap {
     'aq-strength'?: number;
     /** Use psychovisual optimizations. */
     psy?: boolean;
-    /** Strength of psychovisual optimization, in <psy-rd>:<psy-trellis> format. */
+    /** Strength of psychovisual optimization, in &lt;psy-rd&gt;:&lt;psy-trellis&gt; format. */
     'psy-rd'?: string;
     /** Number of frames to look ahead for frametype and ratecontrol */
     'rc-lookahead'?: number;
@@ -2940,7 +2940,7 @@ export interface EncoderOptionsMap {
     aud?: boolean;
     /** Use macroblock tree ratecontrol. */
     mbtree?: boolean;
-    /** Loop filter parameters, in <alpha:beta> form. */
+    /** Loop filter parameters, in &lt;alpha:beta&gt; form. */
     deblock?: string;
     /** Reduce fluctuations in QP (before curve compression) */
     cplxblur?: number;
@@ -3014,7 +3014,7 @@ export interface EncoderOptionsMap {
     'aq-strength'?: number;
     /** Use psychovisual optimizations. */
     psy?: boolean;
-    /** Strength of psychovisual optimization, in <psy-rd>:<psy-trellis> format. */
+    /** Strength of psychovisual optimization, in &lt;psy-rd&gt;:&lt;psy-trellis&gt; format. */
     'psy-rd'?: string;
     /** Number of frames to look ahead for frametype and ratecontrol */
     'rc-lookahead'?: number;
@@ -3041,7 +3041,7 @@ export interface EncoderOptionsMap {
     aud?: boolean;
     /** Use macroblock tree ratecontrol. */
     mbtree?: boolean;
-    /** Loop filter parameters, in <alpha:beta> form. */
+    /** Loop filter parameters, in &lt;alpha:beta&gt; form. */
     deblock?: string;
     /** Reduce fluctuations in QP (before curve compression) */
     cplxblur?: number;
@@ -3602,7 +3602,7 @@ export interface EncoderOptionsMap {
   snow: {
     /** motion estimation algorithm */
     motion_est?: 'zero' | 'epzs' | 'xone' | 'iter';
-    /** Only do ME/MC (I frames -> ref, P frame -> ME+MC). */
+    /** Only do ME/MC (I frames -&gt; ref, P frame -&gt; ME+MC). */
     memc_only?: boolean;
     /** Skip final bitstream writeout. */
     no_bitstream?: boolean;

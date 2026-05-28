@@ -4657,7 +4657,7 @@ export interface FilterOptionsMap {
     thickness?: string | number;
     /** set the box thickness */
     t?: string | number;
-    /** replace color & alpha */
+    /** replace color &amp; alpha */
     replace?: boolean;
     /** use data from bounding box in side data */
     box_source?: string | number;
@@ -4755,7 +4755,7 @@ export interface FilterOptionsMap {
     thickness?: string | number;
     /** set grid line thickness */
     t?: string | number;
-    /** replace color & alpha */
+    /** replace color &amp; alpha */
     replace?: boolean;
   };
   /**
@@ -12051,7 +12051,7 @@ export interface FilterOptionsMap {
     result?: string | number;
     /** how shaky is the video and how quick is the camera? */
     shakiness?: number;
-    /** (>=shakiness) 1: low 15: high (slow) */
+    /** (&gt;=shakiness) 1: low 15: high (slow) */
     accuracy?: number;
     /** region around minimum is scanned with 1 pixel resolution */
     stepsize?: number;
@@ -12059,7 +12059,7 @@ export interface FilterOptionsMap {
     mincontrast?: number;
     /** 0: draw nothing; 1,2: show fields and transforms */
     show?: number;
-    /** virtual tripod mode (if >0): motion is compared to a reference */
+    /** virtual tripod mode (if &gt;0): motion is compared to a reference */
     tripod?: number;
     /** transforms data file format */
     fileformat?: 'ascii' | 'binary';
@@ -12085,7 +12085,7 @@ export interface FilterOptionsMap {
     invert?: number;
     /** consider transforms as relative */
     relative?: number;
-    /** set percentage to zoom (>0: zoom in, <0: zoom out */
+    /** set percentage to zoom (&gt;0: zoom in, &lt;0: zoom out */
     zoom?: number;
     /** set optimal zoom (0: nothing, 1: optimal static zoom, 2: optimal dynamic zoom) */
     optzoom?: number;
@@ -12695,7 +12695,7 @@ export interface FilterOptionsMap {
     kv?: number;
   };
   /**
-   * Apply Zoom & Pan effect.
+   * Apply Zoom &amp; Pan effect.
    * @see https://ffmpeg.org/ffmpeg-filters.html#zoompan
    */
   zoompan: {
