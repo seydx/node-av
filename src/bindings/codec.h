@@ -50,6 +50,7 @@ private:
   Napi::Value IsDecoder(const Napi::CallbackInfo& info);
   Napi::Value IsExperimental(const Napi::CallbackInfo& info);
   Napi::Value GetHwConfig(const Napi::CallbackInfo& info);
+  Napi::Value GetOptions(const Napi::CallbackInfo& info);
 
   void Set(const AVCodec* codec) { codec_ = codec; }
 };

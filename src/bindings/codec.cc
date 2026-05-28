@@ -1,6 +1,10 @@
 #include "codec.h"
 #include "common.h"
 
+extern "C" {
+#include <libavutil/opt.h>
+}
+
 namespace ffmpeg {
 
 Napi::FunctionReference Codec::constructor;
@@ -18,6 +22,7 @@ Napi::Object Codec::Init(Napi::Env env, Napi::Object exports) {
     InstanceMethod<&Codec::IsDecoder>("isDecoder"),
     InstanceMethod<&Codec::IsExperimental>("isExperimental"),
     InstanceMethod<&Codec::GetHwConfig>("getHwConfig"),
+    InstanceMethod<&Codec::GetOptions>("getOptions"),
 
     InstanceAccessor<&Codec::GetName>("name"),
     InstanceAccessor<&Codec::GetLongName>("longName"),
@@ -467,7 +472,75 @@ Napi::Value Codec::GetHwConfig(const Napi::CallbackInfo& info) {
   result.Set("pixFmt", Napi::Number::New(env, config->pix_fmt));
   result.Set("methods", Napi::Number::New(env, config->methods));
   result.Set("deviceType", Napi::Number::New(env, config->device_type));
-  
+
+  return result;
+}
+
+Napi::Value Codec::GetOptions(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+  Napi::Array result = Napi::Array::New(env);
+  if (!codec_ || !codec_->priv_class) {
+    return result; // codec has no private options
+  }
+
+  // av_opt_next() iterates an AVClass's options. Passing the address of the
+  // priv_class pointer works because av_opt_next only needs an object whose
+  // first member is `const AVClass*` (same trick FFmpeg uses in -h encoder=...).
+  const AVClass* priv_class = codec_->priv_class;
+  const void* obj = &priv_class;
+
+  uint32_t i = 0;
+  const AVOption* opt = nullptr;
+  while ((opt = av_opt_next(obj, opt)) != nullptr) {
+    Napi::Object o = Napi::Object::New(env);
+    o.Set("name", Napi::String::New(env, opt->name ? opt->name : ""));
+    o.Set("help", opt->help ? Napi::Value(Napi::String::New(env, opt->help)) : env.Null());
+    o.Set("type", Napi::Number::New(env, static_cast<int>(opt->type)));
+    o.Set("flags", Napi::Number::New(env, opt->flags));
+    o.Set("unit", opt->unit ? Napi::Value(Napi::String::New(env, opt->unit)) : env.Null());
+    o.Set("min", Napi::Number::New(env, opt->min));
+    o.Set("max", Napi::Number::New(env, opt->max));
+
+    // Default value, decoded per option type
+    switch (opt->type) {
+      case AV_OPT_TYPE_FLAGS:
+      case AV_OPT_TYPE_INT:
+      case AV_OPT_TYPE_INT64:
+      case AV_OPT_TYPE_UINT:
+      case AV_OPT_TYPE_UINT64:
+      case AV_OPT_TYPE_BOOL:
+      case AV_OPT_TYPE_DURATION:
+      case AV_OPT_TYPE_PIXEL_FMT:
+      case AV_OPT_TYPE_SAMPLE_FMT:
+      case AV_OPT_TYPE_CONST:
+        o.Set("default", Napi::Number::New(env, static_cast<double>(opt->default_val.i64)));
+        break;
+      case AV_OPT_TYPE_DOUBLE:
+      case AV_OPT_TYPE_FLOAT:
+        o.Set("default", Napi::Number::New(env, opt->default_val.dbl));
+        break;
+      case AV_OPT_TYPE_STRING:
+      case AV_OPT_TYPE_COLOR:
+      case AV_OPT_TYPE_IMAGE_SIZE:
+      case AV_OPT_TYPE_VIDEO_RATE:
+        o.Set("default", opt->default_val.str ? Napi::Value(Napi::String::New(env, opt->default_val.str)) : env.Null());
+        break;
+      case AV_OPT_TYPE_RATIONAL: {
+        Napi::Object q = Napi::Object::New(env);
+        q.Set("num", Napi::Number::New(env, opt->default_val.q.num));
+        q.Set("den", Napi::Number::New(env, opt->default_val.q.den));
+        o.Set("default", q);
+        break;
+      }
+      default:
+        o.Set("default", env.Null());
+        break;
+    }
+
+    result.Set(i++, o);
+  }
+
   return result;
 }
 

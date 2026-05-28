@@ -7,7 +7,7 @@ import type { AVCodecCap, AVCodecID, AVHWDeviceType, AVMediaType, AVPixelFormat,
 import type { FFDecoderCodec } from '../constants/decoders.js';
 import type { FFEncoderCodec } from '../constants/encoders.js';
 import type { FFHWDeviceType } from '../constants/hardware.js';
-import type { NativeCodec, NativeWrapper } from './native-types.js';
+import type { NativeCodec, NativeCodecOption, NativeWrapper } from './native-types.js';
 import type { ChannelLayout } from './types.js';
 
 /**
@@ -752,6 +752,34 @@ export class Codec implements NativeWrapper<NativeCodec> {
     deviceType: AVHWDeviceType;
   } | null {
     return this.native.getHwConfig(index);
+  }
+
+  /**
+   * Enumerate the codec's private options.
+   *
+   * Returns the codec-specific tunables exposed by the codec's private
+   * `AVClass` (e.g. libx264's `preset`, `crf`, `tune`). These are the options
+   * accepted via the `options` dictionary when creating an encoder/decoder, and
+   * are distinct from the generic `AVCodecContext` fields (bitrate, gop_size, ...).
+   *
+   * Options of type `AV_OPT_TYPE_CONST` are the named values belonging to a
+   * parent option's `unit` (i.e. enum members). Returns an empty array when the
+   * codec has no private options.
+   *
+   * Direct mapping to iterating `codec->priv_class` via av_opt_next().
+   *
+   * @returns Array of private option descriptors
+   *
+   * @example
+   * ```typescript
+   * const codec = Codec.findEncoderByName(FF_ENCODER_LIBX264);
+   * for (const opt of codec?.getOptions() ?? []) {
+   *   console.log(opt.name, opt.type, opt.unit);
+   * }
+   * ```
+   */
+  getOptions(): NativeCodecOption[] {
+    return this.native.getOptions();
   }
 
   /**

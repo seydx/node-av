@@ -183,6 +183,22 @@ export interface NativeCodec {
   isDecoder(): boolean;
   isExperimental(): boolean;
   getHwConfig(index: number): { pixFmt: AVPixelFormat; methods: number; deviceType: AVHWDeviceType } | null;
+  getOptions(): NativeCodecOption[];
+}
+
+/**
+ * A single private (codec-specific) AVOption entry, as returned by
+ * {@link NativeCodec.getOptions}.
+ */
+export interface NativeCodecOption {
+  name: string;
+  help: string | null;
+  type: AVOptionType;
+  flags: number;
+  unit: string | null;
+  min: number;
+  max: number;
+  default: number | string | { num: number; den: number } | null;
 }
 
 /**

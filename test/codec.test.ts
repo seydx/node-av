@@ -479,6 +479,49 @@ describe('Codec', () => {
     });
   });
 
+  describe('Codec Options (getOptions)', () => {
+    it('should return private options for an encoder', () => {
+      const libx264 = Codec.findEncoderByName(FF_ENCODER_LIBX264);
+      assert.ok(libx264);
+
+      const options = libx264.getOptions();
+      assert.ok(Array.isArray(options));
+      assert.ok(options.length > 0);
+
+      // libx264 exposes the well-known 'preset' option
+      const preset = options.find((o) => o.name === 'preset');
+      assert.ok(preset, "libx264 should expose a 'preset' option");
+    });
+
+    it('should expose valid metadata for each option', () => {
+      const mjpeg = Codec.findEncoder(AV_CODEC_ID_MJPEG);
+      assert.ok(mjpeg);
+
+      const options = mjpeg.getOptions();
+      assert.ok(options.length > 0);
+
+      for (const opt of options) {
+        assert.equal(typeof opt.name, 'string');
+        assert.ok(opt.name.length > 0);
+        assert.equal(typeof opt.type, 'number'); // AVOptionType
+        assert.equal(typeof opt.flags, 'number');
+        assert.equal(typeof opt.min, 'number');
+        assert.equal(typeof opt.max, 'number');
+        assert.ok(opt.help === null || typeof opt.help === 'string');
+        assert.ok(opt.unit === null || typeof opt.unit === 'string');
+      }
+    });
+
+    it('should return an empty array for codecs without private options', () => {
+      const pcm = Codec.findEncoder(AV_CODEC_ID_PCM_S16LE);
+      assert.ok(pcm);
+
+      const options = pcm.getOptions();
+      assert.ok(Array.isArray(options));
+      assert.equal(options.length, 0);
+    });
+  });
+
   describe('Encoder vs Decoder', () => {
     it('should distinguish between encoder and decoder', () => {
       // Find H.264 decoder
