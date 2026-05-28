@@ -4,6 +4,64 @@
  * DO NOT EDIT MANUALLY.
  */
 
+/**
+ * All bitstream filter names known to this FFmpeg build.
+ *
+ * Use with `BitStreamFilterAPI.create()` for name autocomplete. Unknown names
+ * still pass through via the `(string & {})` fallback in the API signature.
+ */
+export type BsfName =
+  | 'aac_adtstoasc'
+  | 'ahx_to_mp2'
+  | 'apv_metadata'
+  | 'av1_frame_merge'
+  | 'av1_frame_split'
+  | 'av1_metadata'
+  | 'chomp'
+  | 'dca_core'
+  | 'dovi_rpu'
+  | 'dts2pts'
+  | 'dump_extra'
+  | 'dv_error_marker'
+  | 'eac3_core'
+  | 'eia608_to_smpte436m'
+  | 'evc_frame_merge'
+  | 'extract_extradata'
+  | 'filter_units'
+  | 'h264_metadata'
+  | 'h264_mp4toannexb'
+  | 'h264_redundant_pps'
+  | 'hapqa_extract'
+  | 'hevc_metadata'
+  | 'hevc_mp4toannexb'
+  | 'imxdump'
+  | 'lcevc_metadata'
+  | 'media100_to_mjpegb'
+  | 'mjpeg2jpeg'
+  | 'mjpegadump'
+  | 'mov2textsub'
+  | 'mpeg2_metadata'
+  | 'mpeg4_unpack_bframes'
+  | 'noise'
+  | 'null'
+  | 'opus_metadata'
+  | 'pcm_rechunk'
+  | 'pgs_frame_merge'
+  | 'prores_metadata'
+  | 'remove_extra'
+  | 'setts'
+  | 'showinfo'
+  | 'smpte436m_to_eia608'
+  | 'text2movsub'
+  | 'trace_headers'
+  | 'truehd_core'
+  | 'vp9_metadata'
+  | 'vp9_raw_reorder'
+  | 'vp9_superframe'
+  | 'vp9_superframe_split'
+  | 'vvc_metadata'
+  | 'vvc_mp4toannexb';
+
 export interface BsfOptionsMap {
   /**
    * @see https://ffmpeg.org/ffmpeg-bitstream-filters.html#apv_005fmetadata

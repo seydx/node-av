@@ -8,7 +8,7 @@ import { Muxer } from './muxer.js';
 import { AsyncQueue } from './utilities/async-queue.js';
 import { Scheduler, SchedulerControl } from './utilities/scheduler.js';
 
-import type { BsfOptionsFor } from '../constants/index.js';
+import type { BsfName, BsfOptionsFor } from '../constants/index.js';
 import type { Stream } from '../lib/stream.js';
 import type { SchedulableComponent } from './utilities/scheduler.js';
 
@@ -163,7 +163,12 @@ export class BitStreamFilterAPI implements Disposable {
    * @see {@link BitStreamFilter.getByName} For filter discovery
    * @see {@link BitstreamFilterOptions} For available options
    */
-  static create<const N extends string = string>(filterName: N, stream: Stream, filterOptions?: BitstreamFilterOptions<N>): BitStreamFilterAPI {
+  // eslint-disable-next-line space-before-function-paren
+  static create<const N extends BsfName | (string & {}) = BsfName | (string & {})>(
+    filterName: N,
+    stream: Stream,
+    filterOptions?: BitstreamFilterOptions<N>,
+  ): BitStreamFilterAPI {
     if (!stream) {
       throw new Error('Stream is required');
     }

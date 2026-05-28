@@ -19,26 +19,35 @@ const files = walk(LAVC);
 const headerMacros = buildHeaderMacros(files);
 
 const bsfs = {};
+const allNames = new Set();
 const bsfRe = /(?:const\s+)?FFBitStreamFilter\s+ff_(\w+)_bsf\s*=\s*\{([\s\S]*?)\n\}\s*;/g;
 
 for (const f of files) {
   const src = readFileSync(f, 'utf8');
-  if (!src.includes('priv_class')) continue;
+  if (!src.includes('FFBitStreamFilter')) continue;
 
-  const localMacros = new Map(headerMacros);
-  collectDefines(src, localMacros);
-  const resolve = makeClassResolver(src, localMacros);
+  let resolve = null;
+  if (src.includes('priv_class')) {
+    const localMacros = new Map(headerMacros);
+    collectDefines(src, localMacros);
+    resolve = makeClassResolver(src, localMacros);
+  }
 
   let m;
   bsfRe.lastIndex = 0;
   while ((m = bsfRe.exec(src)) !== null) {
     const body = m[2];
     const nameMatch = body.match(/\.p\.name\s*=\s*"([^"]+)"/);
+    if (!nameMatch) continue;
+    const name = nameMatch[1];
+    allNames.add(name);
+
+    if (!resolve) continue;
     const privMatch = body.match(/priv_class\s*=\s*&?(\w+)/);
-    if (!nameMatch || !privMatch) continue;
+    if (!privMatch) continue;
     const opts = resolve(privMatch[1]);
     if (!opts || Object.keys(opts).length === 0) continue;
-    bsfs[nameMatch[1]] = opts;
+    bsfs[name] = opts;
   }
 }
 
@@ -57,10 +66,20 @@ export type BsfOptionsFor<N> = N extends keyof BsfOptionsMap ? BsfOptionsMap[N] 
 
 const bsfDoc = (name) => `@see https://ffmpeg.org/ffmpeg-bitstream-filters.html#${docAnchor(name)}`;
 
-const out = header + renderMap('BsfOptionsMap', bsfs, 'strict', bsfDoc) + '\n' + resolution;
+const nameUnion = `/**
+ * All bitstream filter names known to this FFmpeg build.
+ *
+ * Use with \`BitStreamFilterAPI.create()\` for name autocomplete. Unknown names
+ * still pass through via the \`(string & {})\` fallback in the API signature.
+ */
+export type BsfName =
+  | ${[...allNames].sort().map((n) => `'${n}'`).join('\n  | ')};
+`;
+
+const out = header + nameUnion + '\n' + renderMap('BsfOptionsMap', bsfs, 'strict', bsfDoc) + '\n' + resolution;
 
 const outPath = join(__dirname, '..', 'src', 'constants', 'bsf-options.ts');
 writeFileSync(outPath, out);
 
-console.log(`[bsf] ${Object.keys(bsfs).length} bitstream filters with private options`);
+console.log(`[bsf] ${allNames.size} bitstream filters (${Object.keys(bsfs).length} with private options)`);
 console.log(`Wrote ${outPath}`);
