@@ -5,10 +5,47 @@
   "files.eol": "\n",
   "editor.codeLens": false,
   "editor.formatOnSave": true,
+  "editor.quickSuggestions": {
+    "other": "on",
+    "comments": "off",
+    "strings": "on"
+  },
+  "editor.suggestOnTriggerCharacters": true,
+  "editor.inlineSuggest.suppressSuggestions": false,
   "js/ts.preferences.importModuleSpecifierEnding": "js",
-  "js/ts.tsdk.path": "node_modules/typescript/lib",
   "github.copilot.chat.localeOverride": "en",
+  "js/ts.tsdk.path": "node_modules/typescript/lib",
+  "js/ts.tsserver.maxMemory": 4096,
+  "js/ts.tsserver.automaticTypeAcquisition.enabled": false,
+  "js/ts.preferences.includePackageJsonAutoImports": "off",
+  "js/ts.workspaceSymbols.scope": "currentProject",
+  "vue.server.hybridMode": true,
+  "C_Cpp.files.exclude": {
+    "**/externals/**": true,
+    "**/node_modules/**": true,
+    "**/dist/**": true,
+    "**/build/**": true,
+    "**/binary/**": true,
+    "**/.tmp/**": true,
+    "**/.git/**": true
+  },
+  "C_Cpp.autoAddFileAssociations": false,
+  "files.watcherExclude": {
+    "**/externals/**": true,
+    "**/node_modules/**": true,
+    "**/dist/**": true,
+    "**/build/**": true,
+    "**/binary/**": true,
+    "**/.tmp/**": true
+  },
+  "search.exclude": {
+    "**/externals": true,
+    "**/dist": true,
+    "**/build": true,
+    "**/binary": true
+  },
   "eslint.debug": false,
+  "eslint.run": "onSave",
   "eslint.validate": [
     "javascript",
     "typescript",
