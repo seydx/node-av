@@ -1,6 +1,7 @@
 import assert from 'node:assert';
 import { describe, it } from 'node:test';
 
+import { AVERROR_EAGAIN, AVERROR_EINVAL, AVERROR_EOF, AVERROR_INVALIDDATA } from '../src/constants/index.js';
 import { FFmpegError } from '../src/lib/index.js';
 
 describe('FFmpegError', () => {
@@ -297,6 +298,37 @@ describe('FFmpegError', () => {
       const error = new FFmpegError(-12);
       assert.ok(error instanceof FFmpegError);
       assert.ok(error.message, 'Should have message for ENOMEM');
+    });
+  });
+
+  describe('Typed Code Helpers', () => {
+    it('should expose isEOF for AVERROR_EOF', () => {
+      const error = new FFmpegError(AVERROR_EOF);
+      assert.strictEqual(error.isEOF, true);
+      assert.strictEqual(error.isEAGAIN, false);
+      assert.strictEqual(error.isInvalidData, false);
+    });
+
+    it('should expose isEAGAIN for AVERROR_EAGAIN', () => {
+      const error = new FFmpegError(AVERROR_EAGAIN);
+      assert.strictEqual(error.isEAGAIN, true);
+      assert.strictEqual(error.isEOF, false);
+    });
+
+    it('should expose isInvalidData for AVERROR_INVALIDDATA', () => {
+      const error = new FFmpegError(AVERROR_INVALIDDATA);
+      assert.strictEqual(error.isInvalidData, true);
+    });
+
+    it('should expose isEINVAL for AVERROR_EINVAL', () => {
+      const error = new FFmpegError(AVERROR_EINVAL);
+      assert.strictEqual(error.isEINVAL, true);
+    });
+
+    it('should match arbitrary codes via instance is()', () => {
+      const error = new FFmpegError(AVERROR_EOF);
+      assert.strictEqual(error.is(AVERROR_EOF), true);
+      assert.strictEqual(error.is(AVERROR_EAGAIN), false);
     });
   });
 

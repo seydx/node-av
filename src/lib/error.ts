@@ -1,3 +1,4 @@
+import { AVERROR_EOF, AVERROR_EXIT, AVERROR_INVALIDDATA } from '../constants/constants.js';
 import { bindings } from './binding.js';
 
 import type { AVError } from '../constants/constants.js';
@@ -322,6 +323,108 @@ export class FFmpegError extends Error implements NativeWrapper<NativeFFmpegErro
    */
   get message(): string {
     return this.native.message;
+  }
+
+  /**
+   * Whether this is EAGAIN (resource temporarily unavailable).
+   *
+   * In codec/filter contexts this means "output not available yet, feed more
+   * input" rather than a hard failure.
+   *
+   * @example
+   * ```typescript
+   * const error = FFmpegError.fromCode(ret);
+   * if (error?.isEAGAIN) {
+   *   // send more input, then retry
+   * }
+   * ```
+   */
+  get isEAGAIN(): boolean {
+    return this.native.code === AVERROR_EAGAIN;
+  }
+
+  /**
+   * Whether this is the end of stream (AVERROR_EOF).
+   */
+  get isEOF(): boolean {
+    return this.native.code === AVERROR_EOF;
+  }
+
+  /**
+   * Whether this is invalid data found while processing input (AVERROR_INVALIDDATA).
+   */
+  get isInvalidData(): boolean {
+    return this.native.code === AVERROR_INVALIDDATA;
+  }
+
+  /**
+   * Whether this is EINVAL (invalid argument).
+   */
+  get isEINVAL(): boolean {
+    return this.native.code === AVERROR_EINVAL;
+  }
+
+  /**
+   * Whether this is ENOMEM (out of memory).
+   */
+  get isENOMEM(): boolean {
+    return this.native.code === AVERROR_ENOMEM;
+  }
+
+  /**
+   * Whether this is ENOENT (no such file or directory).
+   */
+  get isENOENT(): boolean {
+    return this.native.code === AVERROR_ENOENT;
+  }
+
+  /**
+   * Whether this is EACCES (permission denied).
+   */
+  get isEACCES(): boolean {
+    return this.native.code === AVERROR_EACCES;
+  }
+
+  /**
+   * Whether this is EIO (I/O error).
+   */
+  get isEIO(): boolean {
+    return this.native.code === AVERROR_EIO;
+  }
+
+  /**
+   * Whether this is EPIPE (broken pipe).
+   */
+  get isEPIPE(): boolean {
+    return this.native.code === AVERROR_EPIPE;
+  }
+
+  /**
+   * Whether this is the immediate-exit request (AVERROR_EXIT).
+   */
+  get isExit(): boolean {
+    return this.native.code === AVERROR_EXIT;
+  }
+
+  /**
+   * Check if this error matches a specific code.
+   *
+   * @param errorCode - FFmpeg error code to compare against
+   *
+   * @returns True if this error's code matches
+   *
+   * @example
+   * ```typescript
+   * import { AVERROR_DECODER_NOT_FOUND } from 'node-av/constants';
+   *
+   * const error = FFmpegError.fromCode(ret);
+   * if (error?.is(AVERROR_DECODER_NOT_FOUND)) {
+   *   // handle missing decoder
+   * }
+   * ```
+   */
+  is(errorCode: number): boolean {
+    return this.native.code === errorCode;
   }
 
   /**
