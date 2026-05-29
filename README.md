@@ -461,6 +461,9 @@ Stream any media source directly to web browsers through fragmented MP4 (fMP4) o
 **RTSP Backchannel / Talkback**
 Implements bidirectional RTSP communication for IP camera integration. The library provides native support for RTSP backchannel streams, enabling audio transmission to camera devices. Transport is handled automatically with support for both TCP (interleaved mode) and UDP protocols, with proper RTP packet formatting and stream synchronization.
 
+**Image Scaling & Snapshots**
+The `Scaler` turns decoded frames into raw pixel buffers (`rgb`/`rgba`/`gray`/`nv12`/`yuv420p`) or JPEG/PNG images for detection, thumbnail, and snapshot workloads. One reusable instance pools its swscale contexts, GPU filter graphs, and encoders for zero per-frame allocation; hardware frames are cropped/scaled on the GPU with only the small result downloaded. Recurring resolutions can also be served directly by `EncoderPool`.
+
 See the [Examples](#examples) section for complete implementations.
 
 ## Performance
@@ -549,8 +552,10 @@ If you encounter module resolution errors like `Cannot find module 'lib/binary-s
 | `api-probe` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-probe.ts) |
 | `api-rtp` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-rtp.ts) |
 | `api-rtsp-backchannel` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-rtsp-backchannel.ts) |
+| `api-scaler` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-scaler.ts) |
 | `api-sdp-custom` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-sdp-custom.ts) |
 | `api-sdp-input` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-sdp-input.ts) |
+| `api-snapshot` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-snapshot.ts) |
 | `api-stream-input` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-stream-input.ts) |
 | `api-sw-decode-hw-encode` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-sw-decode-hw-encode.ts) |
 | `api-sw-transcode` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-sw-transcode.ts) |
