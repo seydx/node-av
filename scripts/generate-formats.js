@@ -41,7 +41,11 @@ for (const f of files) {
   }
 }
 
-const renderUnion = (name, set) => `export type ${name} =\n  | ${[...set].sort().map((n) => `'${n}'`).join('\n  | ')};\n`;
+const renderUnion = (name, set) =>
+  `export type ${name} =\n  | ${[...set]
+    .sort()
+    .map((n) => `'${n}'`)
+    .join('\n  | ')};\n`;
 
 const header = `/**
  * Auto-generated FFmpeg muxer/demuxer format names.

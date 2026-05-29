@@ -491,13 +491,13 @@ describe('Packet', () => {
       assert.equal(packet.flags, AVFLAG_NONE);
 
       packet.setFlags(AV_PKT_FLAG_KEY, AV_PKT_FLAG_CORRUPT);
-      assert.equal(packet.flags, (AV_PKT_FLAG_KEY | AV_PKT_FLAG_CORRUPT));
+      assert.equal(packet.flags, AV_PKT_FLAG_KEY | AV_PKT_FLAG_CORRUPT);
       assert.equal(packet.isKeyframe, true);
     });
 
     it('should clear single flag using clearFlags', () => {
       packet.setFlags(AV_PKT_FLAG_KEY, AV_PKT_FLAG_CORRUPT);
-      assert.equal(packet.flags, (AV_PKT_FLAG_KEY | AV_PKT_FLAG_CORRUPT));
+      assert.equal(packet.flags, AV_PKT_FLAG_KEY | AV_PKT_FLAG_CORRUPT);
 
       packet.clearFlags(AV_PKT_FLAG_CORRUPT);
       assert.equal(packet.flags, AV_PKT_FLAG_KEY);
@@ -506,7 +506,7 @@ describe('Packet', () => {
 
     it('should clear multiple flags using clearFlags', () => {
       packet.setFlags(AV_PKT_FLAG_KEY, AV_PKT_FLAG_CORRUPT, AV_PKT_FLAG_DISCARD);
-      assert.equal(packet.flags, (AV_PKT_FLAG_KEY | AV_PKT_FLAG_CORRUPT | AV_PKT_FLAG_DISCARD));
+      assert.equal(packet.flags, AV_PKT_FLAG_KEY | AV_PKT_FLAG_CORRUPT | AV_PKT_FLAG_DISCARD);
 
       packet.clearFlags(AV_PKT_FLAG_CORRUPT, AV_PKT_FLAG_DISCARD);
       assert.equal(packet.flags, AV_PKT_FLAG_KEY);
@@ -518,12 +518,12 @@ describe('Packet', () => {
       assert.equal(packet.flags, AV_PKT_FLAG_KEY);
 
       packet.setFlags(AV_PKT_FLAG_DISCARD);
-      assert.equal(packet.flags, (AV_PKT_FLAG_KEY | AV_PKT_FLAG_DISCARD));
+      assert.equal(packet.flags, AV_PKT_FLAG_KEY | AV_PKT_FLAG_DISCARD);
     });
 
     it('should support direct flag assignment (backward compatibility)', () => {
       packet.flags = (AV_PKT_FLAG_KEY | AV_PKT_FLAG_CORRUPT) as AVPacketFlag;
-      assert.equal(packet.flags, (AV_PKT_FLAG_KEY | AV_PKT_FLAG_CORRUPT));
+      assert.equal(packet.flags, AV_PKT_FLAG_KEY | AV_PKT_FLAG_CORRUPT);
 
       packet.flags = AVFLAG_NONE;
       assert.equal(packet.flags, AVFLAG_NONE);

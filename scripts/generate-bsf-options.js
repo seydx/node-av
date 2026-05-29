@@ -73,7 +73,10 @@ const nameUnion = `/**
  * still pass through via the \`(string & {})\` fallback in the API signature.
  */
 export type BsfName =
-  | ${[...allNames].sort().map((n) => `'${n}'`).join('\n  | ')};
+  | ${[...allNames]
+    .sort()
+    .map((n) => `'${n}'`)
+    .join('\n  | ')};
 `;
 
 const out = header + nameUnion + '\n' + renderMap('BsfOptionsMap', bsfs, 'strict', bsfDoc) + '\n' + resolution;
