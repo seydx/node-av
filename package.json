@@ -1,6 +1,6 @@
 {
   "name": "node-av",
-  "version": "6.0.0-beta.5",
+  "version": "6.0.0-beta.6",
   "description": "FFmpeg bindings for Node.js",
   "author": "seydx (https://github.com/seydx/node-av)",
   "type": "module",
@@ -85,14 +85,14 @@
   },
   "optionalDependencies": {
     "werift": "^0.23.0",
-    "@seydx/node-av-darwin-arm64": "^6.0.0-beta.5",
-    "@seydx/node-av-darwin-x64": "^6.0.0-beta.5",
-    "@seydx/node-av-linux-arm64": "^6.0.0-beta.5",
-    "@seydx/node-av-linux-x64": "^6.0.0-beta.5",
-    "@seydx/node-av-win32-arm64-mingw": "^6.0.0-beta.5",
-    "@seydx/node-av-win32-arm64-msvc": "^6.0.0-beta.5",
-    "@seydx/node-av-win32-x64-mingw": "^6.0.0-beta.5",
-    "@seydx/node-av-win32-x64-msvc": "^6.0.0-beta.5"
+    "@seydx/node-av-darwin-arm64": "^6.0.0-beta.6",
+    "@seydx/node-av-darwin-x64": "^6.0.0-beta.6",
+    "@seydx/node-av-linux-arm64": "^6.0.0-beta.6",
+    "@seydx/node-av-linux-x64": "^6.0.0-beta.6",
+    "@seydx/node-av-win32-arm64-mingw": "^6.0.0-beta.6",
+    "@seydx/node-av-win32-arm64-msvc": "^6.0.0-beta.6",
+    "@seydx/node-av-win32-x64-mingw": "^6.0.0-beta.6",
+    "@seydx/node-av-win32-x64-msvc": "^6.0.0-beta.6"
   },
   "devDependencies": {
     "@stylistic/eslint-plugin": "^5.10.0",
