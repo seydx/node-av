@@ -13,6 +13,9 @@ export { Decoder, type DecoderOptions } from './decoder.js';
 // Encoder
 export { Encoder, type EncoderOptions } from './encoder.js';
 
+// EncoderPool
+export { EncoderPool, type EncoderPoolOptions } from './encoder-pool.js';
+
 // AudioFrameBuffer
 export { AudioFrameBuffer } from './audio-frame-buffer.js';
 
@@ -44,6 +47,18 @@ export {
 
 // Probe
 export { probe, probeSync, type ProbeOptions, type ProbeResult, type ProbeStream, type ProbeStreamType } from './probe.js';
+
+// Scaler
+export {
+  Scaler,
+  type JpegOptions,
+  type PngOptions,
+  type ScaledImageFormat,
+  type ScaleOptions,
+  type ScalerCrop,
+  type ScalerOptions,
+  type ScalerResize,
+} from './scaler.js';
 
 // fMP4 Stream
 export { FMP4_CODECS, FMP4Stream, type FMP4Data, type FMP4Fragment, type FMP4StreamOptions, type MP4Box, type MP4BoxType } from './fmp4-stream.js';
