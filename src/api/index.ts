@@ -24,7 +24,7 @@ export { DeviceAPI, type CameraOptions, type DeviceOptions, type MicrophoneOptio
 
 // Filter
 export { FilterComplexAPI, type FilterComplexInput, type FilterComplexOptions, type FilterComplexOutput } from './filter-complex.js';
-export { FilterPreset, type FilterSupport } from './filter-presets.js';
+export { FilterComplexGraph, FilterPreset, type FilterComplexLabels, type FilterSupport } from './filter-presets.js';
 export { FilterAPI, type FilterOptions } from './filter.js';
 
 // BitStreamFilter
@@ -32,6 +32,9 @@ export { BitStreamFilterAPI, type BitstreamFilterOptions } from './bitstream-fil
 
 // Pipeline
 export { pipeline, type NamedInputs, type NamedOutputs, type NamedStages, type PipelineControl, type PipelineOptions, type StreamName } from './pipeline.js';
+
+// Probe
+export { probe, probeSync, type ProbeOptions, type ProbeResult, type ProbeStream, type ProbeStreamType } from './probe.js';
 
 // fMP4 Stream
 export { FMP4_CODECS, FMP4Stream, type FMP4Data, type FMP4Fragment, type FMP4StreamOptions, type MP4Box, type MP4BoxType } from './fmp4-stream.js';
