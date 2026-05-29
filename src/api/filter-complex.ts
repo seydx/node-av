@@ -19,6 +19,7 @@ import type { AVBufferSrcFlag, AVMediaType, AVSampleFormat, EOFSignal } from '..
 import type { FilterContext } from '../lib/filter-context.js';
 import type { IRational } from '../lib/types.js';
 import type { FilterOptions } from './filter.js';
+import type { FilterComplexGraph } from './filter-presets.js';
 
 /**
  * Frame properties for change detection.
@@ -210,7 +211,10 @@ export class FilterComplexAPI implements Disposable {
    * @see {@link process} For sending frames to inputs
    * @see {@link receive} For getting frames from outputs
    */
-  static create(description: string, options: FilterComplexOptions): FilterComplexAPI {
+  static create(description: string | FilterComplexGraph, options: FilterComplexOptions): FilterComplexAPI {
+    // Accept a type-safe FilterComplexGraph builder or a raw description string.
+    const descriptionString = typeof description === 'string' ? description : description.build();
+
     // Validate inputs and outputs
     if (!options.inputs || options.inputs.length === 0) {
       throw new Error('At least one input is required');
@@ -247,7 +251,7 @@ export class FilterComplexAPI implements Disposable {
       graph.nbThreads = options.threads;
     }
 
-    const instance = new FilterComplexAPI(graph, description, options);
+    const instance = new FilterComplexAPI(graph, descriptionString, options);
 
     // Initialize input states
     for (const input of options.inputs) {

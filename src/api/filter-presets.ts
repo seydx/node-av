@@ -1478,3 +1478,132 @@ export class FilterPreset {
     }
   }
 }
+
+/**
+ * Label specification for a filter-complex chain (input or output pads).
+ *
+ * A single label like `'0:v'` or `'out'`, or several labels. Labels are wrapped
+ * in `[...]` automatically when the graph string is built.
+ */
+export type FilterComplexLabels = string | string[];
+
+/**
+ * Type-safe builder for `filter_complex` graph strings.
+ *
+ * Composes one or more labeled filter chains - each with optional input/output
+ * pad labels and a sequence of type-safe {@link FilterPreset.filter} calls - and
+ * renders them to the description string consumed by
+ * {@link FilterComplexAPI.create}. Provides the same autocomplete and enum
+ * validation as {@link FilterPreset}, but for multi-input/output graphs.
+ *
+ * @example
+ * ```typescript
+ * const graph = FilterComplexGraph.create()
+ *   .chain({ inputs: ['0:v', '1:v'], outputs: 'tmp' }, (c) => c.filter('overlay', { x: 100, y: 50 }))
+ *   .chain({ inputs: 'tmp', outputs: 'out' }, (c) => c.filter('hue', { s: 0 }))
+ *   .build();
+ * // "[0:v][1:v]overlay=x=100:y=50[tmp];[tmp]hue=s=0[out]"
+ *
+ * using complex = FilterComplexAPI.create(graph, {
+ *   inputs: [{ label: '0:v' }, { label: '1:v' }],
+ *   outputs: [{ label: 'out' }],
+ * });
+ * ```
+ */
+export class FilterComplexGraph {
+  private chains: string[] = [];
+
+  /**
+   * Create a new filter-complex graph builder.
+   *
+   * @returns A new builder instance
+   *
+   * @example
+   * ```typescript
+   * const graph = FilterComplexGraph.create();
+   * ```
+   */
+  static create(): FilterComplexGraph {
+    return new FilterComplexGraph();
+  }
+
+  /**
+   * Add a labeled filter chain to the graph.
+   *
+   * The chain's filters are built via a callback that receives a
+   * {@link FilterPreset} for type-safe `filter()` composition.
+   *
+   * @param labels - Optional input and output pad labels
+   *
+   * @param labels.inputs - Input pad label(s) prepended to the chain
+   *
+   * @param labels.outputs - Output pad label(s) appended to the chain
+   *
+   * @param build - Callback composing the chain's filters
+   *
+   * @returns This instance for chaining
+   *
+   * @example
+   * ```typescript
+   * graph.chain({ inputs: ['0:v', '1:v'], outputs: 'out' }, (c) =>
+   *   c.filter('overlay', { x: 0, y: 0 }).filter('hue', { s: 0 }),
+   * );
+   * ```
+   */
+  chain(labels: { inputs?: FilterComplexLabels; outputs?: FilterComplexLabels }, build: (chain: FilterPreset) => FilterPreset): this {
+    const preset = FilterPreset.chain();
+    const filterString = build(preset).build();
+    this.chains.push(`${this.renderLabels(labels.inputs)}${filterString}${this.renderLabels(labels.outputs)}`);
+    return this;
+  }
+
+  /**
+   * Add a raw chain segment to the graph.
+   *
+   * Escape hatch for graph syntax not expressible through {@link chain}.
+   *
+   * @param segment - Raw chain string (e.g. `'[0:v]split[a][b]'`)
+   *
+   * @returns This instance for chaining
+   *
+   * @example
+   * ```typescript
+   * graph.custom('[0:v]split[a][b]');
+   * ```
+   */
+  custom(segment: string): this {
+    this.chains.push(segment);
+    return this;
+  }
+
+  /**
+   * Build the final filter-complex description string.
+   *
+   * @returns The graph description (chains joined by `;`)
+   *
+   * @example
+   * ```typescript
+   * const description = graph.build();
+   * ```
+   */
+  build(): string {
+    return this.chains.join(';');
+  }
+
+  /**
+   * Wrap pad labels in `[...]`.
+   *
+   * @param labels - A single label, an array of labels, or undefined
+   *
+   * @returns The bracketed label string (empty when no labels)
+   *
+   * @internal
+   */
+  private renderLabels(labels?: FilterComplexLabels): string {
+    if (!labels) {
+      return '';
+    }
+    const list = Array.isArray(labels) ? labels : [labels];
+    return list.map((label) => `[${label}]`).join('');
+  }
+}

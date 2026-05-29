@@ -1,7 +1,7 @@
 import assert from 'node:assert';
 import { describe, it } from 'node:test';
 
-import { AV_PIX_FMT_RGBA, AV_PIX_FMT_YUV420P, Decoder, Demuxer, FilterComplexAPI, Frame, Rational } from '../src/index.js';
+import { AV_PIX_FMT_RGBA, AV_PIX_FMT_YUV420P, Decoder, Demuxer, FilterComplexAPI, FilterComplexGraph, Frame, Rational } from '../src/index.js';
 import { getInputFile, prepareTestEnvironment } from './index.js';
 
 prepareTestEnvironment();
@@ -633,6 +633,71 @@ describe('High-Level FilterComplex API', () => {
       filter.close();
       decoder.close();
       await media.close();
+    });
+  });
+
+  describe('FilterComplexGraph builder', () => {
+    it('should render labeled chains to a description string', () => {
+      const description = FilterComplexGraph.create()
+        .chain({ inputs: ['0:v', '1:v'], outputs: 'tmp' }, (c) => c.filter('overlay', { x: 100, y: 50 }))
+        .chain({ inputs: 'tmp', outputs: 'out' }, (c) => c.filter('hue', { s: 0 }))
+        .build();
+
+      assert.strictEqual(description, '[0:v][1:v]overlay=x=100:y=50[tmp];[tmp]hue=s=0[out]');
+    });
+
+    it('should support a single input/output label and custom segments', () => {
+      const description = FilterComplexGraph.create()
+        .custom('[0:v]split=2[a][b]')
+        .chain({ inputs: 'a', outputs: 'hd' }, (c) => c.filter('scale', { width: 1280, height: 720 }))
+        .build();
+
+      assert.strictEqual(description, '[0:v]split=2[a][b];[a]scale=width=1280:height=720[hd]');
+    });
+
+    it('should drive FilterComplexAPI.create() directly', () => {
+      const graph = FilterComplexGraph.create().chain({ inputs: '0:v', outputs: 'out' }, (c) => c.filter('scale', { width: 1280, height: 720 }));
+
+      const filter = FilterComplexAPI.create(graph, {
+        inputs: [{ label: '0:v' }],
+        outputs: [{ label: 'out' }],
+      });
+
+      assert.ok(filter);
+      assert.strictEqual(filter.isOpen, true);
+      filter.close();
+    });
+
+    it('should process a frame through a builder-defined graph', async () => {
+      const graph = FilterComplexGraph.create().chain({ inputs: '0:v', outputs: 'out' }, (c) => c.filter('scale', { width: 1280, height: 720 }));
+
+      const filter = FilterComplexAPI.create(graph, {
+        inputs: [{ label: '0:v' }],
+        outputs: [{ label: 'out' }],
+      });
+
+      using frame = new Frame();
+      frame.alloc();
+      frame.width = 1920;
+      frame.height = 1080;
+      frame.format = AV_PIX_FMT_YUV420P;
+      frame.pts = 0n;
+      frame.timeBase = new Rational(1, 30);
+      assert.ok(frame.getBuffer() >= 0);
+
+      await filter.process('0:v', frame);
+
+      let got = false;
+      while (true) {
+        using output = await filter.receive('out');
+        if (!output) break;
+        assert.strictEqual(output.width, 1280);
+        assert.strictEqual(output.height, 720);
+        got = true;
+      }
+
+      assert.ok(got, 'Should produce at least one filtered frame');
+      filter.close();
     });
   });
 });
