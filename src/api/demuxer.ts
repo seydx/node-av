@@ -42,6 +42,8 @@ import type { IOInputCallbacks } from './io-stream.js';
 /**
  * Per-stream timestamp processing state.
  * Tracks timestamp correction and prediction for each stream.
+ *
+ * @internal
  */
 interface StreamState {
   // PTS wrap-around correction

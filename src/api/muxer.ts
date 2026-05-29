@@ -38,6 +38,12 @@ import type { BitStreamFilterAPI } from './bitstream-filter.js';
 import type { Demuxer, RTPDemuxer } from './demuxer.js';
 import type { IOOutputCallbacks } from './io-stream.js';
 
+/**
+ * Per-stream muxing state: output stream, encoder/bitstream filter, and the
+ * timestamp/pre-mux bookkeeping used while writing.
+ *
+ * @internal
+ */
 interface StreamDescription {
   initialized: boolean;
   inputStream?: Stream; // Source stream for metadata/properties (optional in encoder-only mode)
@@ -57,6 +63,11 @@ interface StreamDescription {
   streamcopyStarted: boolean; // Track if streamcopy has started for this stream
 }
 
+/**
+ * A queued packet write: the packet, its stream state, and stream index.
+ *
+ * @internal
+ */
 interface WriteJob {
   pkt: Packet;
   streamInfo: StreamDescription;
