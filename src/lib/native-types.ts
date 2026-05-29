@@ -688,6 +688,34 @@ export interface NativeFrameUtils extends Disposable {
 }
 
 /**
+ * Native Scaler binding interface.
+ *
+ * AVFrame scaler/cropper/converter with pooled SwsContexts.
+ *
+ * @internal
+ */
+export interface NativeScaler {
+  readonly __brand: 'NativeScaler';
+  process(
+    frame: NativeFrame,
+    options: {
+      crop?: { x: number; y: number; width: number; height: number };
+      resize?: { width: number; height: number };
+      format?: string;
+    },
+  ): Promise<Buffer>;
+  processSync(
+    frame: NativeFrame,
+    options: {
+      crop?: { x: number; y: number; width: number; height: number };
+      resize?: { width: number; height: number };
+      format?: string;
+    },
+  ): Buffer;
+  close(): void;
+}
+
+/**
  * Native SwrContext binding interface
  *
  * Audio resampling, sample format conversion and mixing context.

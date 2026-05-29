@@ -22,6 +22,7 @@ extern "C" {
 #include "audio_fifo.h"
 #include "fifo.h"
 #include "frame_utils.h"
+#include "scaler.h"
 #include "utilities.h"
 #include "filter.h"
 #include "filter_context.h"
@@ -73,6 +74,7 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
   AudioFifo::Init(env, exports);
   Fifo::Init(env, exports);
   FrameUtils::Init(env, exports);
+  Scaler::Init(env, exports);
   
   // Filter System
   Filter::Init(env, exports);

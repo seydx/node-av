@@ -44,6 +44,7 @@ import type {
   NativeFormatContext,
   NativeFrame,
   NativeFrameUtils,
+  NativeScaler,
   NativeHardwareDeviceContext,
   NativeHardwareFramesContext,
   NativeInputFormat,
@@ -137,6 +138,7 @@ type NativeFifoConstructor = new () => NativeFifo;
 type NativeSoftwareScaleContextConstructor = new () => NativeSoftwareScaleContext;
 type NativeSoftwareResampleContextConstructor = new () => NativeSoftwareResampleContext;
 type NativeFrameUtilsConstructor = new (width: number, height: number) => NativeFrameUtils;
+type NativeScalerConstructor = new (flags?: number) => NativeScaler;
 
 // Hardware
 interface NativeHardwareDeviceContextConstructor {
@@ -239,6 +241,7 @@ export interface NativeBinding {
   SoftwareScaleContext: NativeSoftwareScaleContextConstructor;
   SoftwareResampleContext: NativeSoftwareResampleContextConstructor;
   FrameUtils: NativeFrameUtilsConstructor;
+  Scaler: NativeScalerConstructor;
 
   // Hardware
   HardwareDeviceContext: NativeHardwareDeviceContextConstructor;
