@@ -1,3 +1,5 @@
+import { AV_NOPTS_VALUE } from '../constants/constants.js';
+
 import type { Frame } from '../lib/frame.js';
 import type { Packet } from '../lib/packet.js';
 import type { Stream } from '../lib/stream.js';
@@ -67,6 +69,45 @@ export interface PipelineControl {
    * Resolves when all processing is finished or the pipeline is stopped.
    */
   readonly completion: Promise<void>;
+
+  /**
+   * Latest progress snapshot.
+   *
+   * Reflects the output packets written so far. Poll this, or pass
+   * `onProgress` in {@link PipelineOptions} for push updates.
+   *
+   * @example
+   * ```typescript
+   * const control = pipeline(input, decoder, encoder, output);
+   * const timer = setInterval(() => console.log(control.progress.fps), 1000);
+   * await control.completion;
+   * clearInterval(timer);
+   * ```
+   */
+  readonly progress: PipelineProgress;
+}
+
+/**
+ * Progress statistics for a running pipeline.
+ *
+ * Derived from the packets written to the output, mirroring the figures
+ * FFmpeg's CLI reports (`frame= fps= bitrate= time= speed=`).
+ */
+export interface PipelineProgress {
+  /** Number of output packets written so far. */
+  frames: number;
+  /** Total output bytes written so far. */
+  bytes: number;
+  /** Furthest output media timestamp reached, in seconds. */
+  time: number;
+  /** Output packets per wall-clock second. */
+  fps: number;
+  /** Output bitrate in bits per second (over media time). */
+  bitrate: number;
+  /** Processing speed relative to real time (media time / wall-clock time). */
+  speed: number;
+  /** Wall-clock seconds elapsed since the pipeline started. */
+  elapsed: number;
 }
 
 /**
@@ -80,6 +121,21 @@ export interface PipelineOptions {
    * Equivalent to calling `control.stop()`.
    */
   signal?: AbortSignal;
+
+  /**
+   * Progress callback.
+   *
+   * Invoked with the latest {@link PipelineProgress} as output packets are
+   * written, throttled to `progressInterval`, plus a final call on completion.
+   */
+  onProgress?: (progress: PipelineProgress) => void;
+
+  /**
+   * Minimum interval between `onProgress` callbacks, in milliseconds.
+   *
+   * @default 250
+   */
+  progressInterval?: number;
 }
 
 // ============================================================================
@@ -739,13 +795,20 @@ export function pipeline<K extends StreamName, T extends Packet | Frame | null =
  */
 export function pipeline(...args: any[]): PipelineControl | AsyncGenerator<Packet | Frame | null> | Record<StreamName, AsyncGenerator<Packet | Frame | null>> {
   // Extract PipelineOptions if last arg is undefined or a PipelineOptions object.
-  // PipelineOptions is identified as a plain object whose only known key is 'signal'.
-  // This distinguishes it from NamedInputs/NamedStages/NamedOutputs which have stream name keys.
+  // PipelineOptions is identified as a plain object carrying a known option key
+  // ('signal', 'onProgress', or 'progressInterval'). This distinguishes it from
+  // NamedInputs/NamedStages/NamedOutputs which have stream name keys.
   let pipelineOptions: PipelineOptions | undefined;
   const lastArg = args[args.length - 1];
   if (lastArg === undefined) {
     args.pop();
-  } else if (args.length > 0 && typeof lastArg === 'object' && lastArg !== null && Object.getPrototypeOf(lastArg) === Object.prototype && 'signal' in lastArg) {
+  } else if (
+    args.length > 0 &&
+    typeof lastArg === 'object' &&
+    lastArg !== null &&
+    Object.getPrototypeOf(lastArg) === Object.prototype &&
+    ('signal' in lastArg || 'onProgress' in lastArg || 'progressInterval' in lastArg)
+  ) {
     pipelineOptions = args.pop() as PipelineOptions;
   }
   pipelineOptions?.signal?.throwIfAborted();
@@ -804,6 +867,88 @@ export function pipeline(...args: any[]): PipelineControl | AsyncGenerator<Packe
 // ============================================================================
 
 /**
+ * Accumulates output statistics and emits throttled progress updates.
+ *
+ * @internal
+ */
+class ProgressTracker {
+  private frames = 0;
+  private bytes = 0;
+  private maxTime = 0;
+  private readonly startTime = Date.now();
+  private lastEmit = 0;
+
+  /**
+   * @param onProgress - Optional callback for push updates
+   *
+   * @param throttleMs - Minimum interval between callbacks
+   *
+   * @internal
+   */
+  constructor(
+    private readonly onProgress?: (progress: PipelineProgress) => void,
+    private readonly throttleMs = 250,
+  ) {}
+
+  /**
+   * Record a written output packet.
+   *
+   * @param packet - The packet written to the output
+   *
+   * @internal
+   */
+  record(packet: Packet): void {
+    this.frames++;
+    this.bytes += packet.size;
+
+    const tb = packet.timeBase;
+    if (packet.pts !== AV_NOPTS_VALUE && tb && tb.den > 0) {
+      const t = (Number(packet.pts) * tb.num) / tb.den;
+      if (t > this.maxTime) {
+        this.maxTime = t;
+      }
+    }
+
+    const now = Date.now();
+    if (this.onProgress && now - this.lastEmit >= this.throttleMs) {
+      this.lastEmit = now;
+      this.onProgress(this.snapshot());
+    }
+  }
+
+  /**
+   * Build a progress snapshot from the current counters.
+   *
+   * @returns The current progress statistics
+   *
+   * @internal
+   */
+  snapshot(): PipelineProgress {
+    const elapsed = (Date.now() - this.startTime) / 1000;
+    return {
+      frames: this.frames,
+      bytes: this.bytes,
+      time: this.maxTime,
+      fps: elapsed > 0 ? this.frames / elapsed : 0,
+      bitrate: this.maxTime > 0 ? (this.bytes * 8) / this.maxTime : 0,
+      speed: elapsed > 0 ? this.maxTime / elapsed : 0,
+      elapsed,
+    };
+  }
+
+  /**
+   * Emit a final progress update.
+   *
+   * @internal
+   */
+  finish(): void {
+    this.onProgress?.(this.snapshot());
+  }
+}
+
+const EMPTY_PROGRESS: PipelineProgress = { frames: 0, bytes: 0, time: 0, fps: 0, bitrate: 0, speed: 0, elapsed: 0 };
+
+/**
  * Pipeline control implementation.
  *
  * @internal
@@ -812,17 +957,22 @@ class PipelineControlImpl implements PipelineControl {
   private _stopped = false;
   private _completion: Promise<void>;
   private signalCleanup?: () => void;
+  private tracker?: ProgressTracker;
 
   /**
    * @param executionPromise - Promise that resolves when pipeline completes
    *
    * @param signal - Optional AbortSignal for cancellation
    *
+   * @param tracker - Optional progress tracker shared with the runner
+   *
    * @internal
    */
-  constructor(executionPromise: Promise<void>, signal?: AbortSignal) {
-    // Don't resolve immediately on stop, wait for the actual pipeline to finish
-    this._completion = executionPromise;
+  constructor(executionPromise: Promise<void>, signal?: AbortSignal, tracker?: ProgressTracker) {
+    this.tracker = tracker;
+    // Don't resolve immediately on stop, wait for the actual pipeline to finish.
+    // Emit a final progress update once the pipeline settles.
+    this._completion = tracker ? executionPromise.finally(() => tracker.finish()) : executionPromise;
 
     if (signal) {
       const handler = () => this.stop();
@@ -871,6 +1021,13 @@ class PipelineControlImpl implements PipelineControl {
   get completion(): Promise<void> {
     return this._completion;
   }
+
+  /**
+   * Get the latest progress snapshot.
+   */
+  get progress(): PipelineProgress {
+    return this.tracker?.snapshot() ?? EMPTY_PROGRESS;
+  }
 }
 
 // ============================================================================
@@ -891,11 +1048,13 @@ class PipelineControlImpl implements PipelineControl {
  * @internal
  */
 function runDemuxerPipeline(input: Demuxer, output: Muxer, options?: PipelineOptions): PipelineControl {
+  const tracker = new ProgressTracker(options?.onProgress, options?.progressInterval);
   let control: PipelineControl;
   // eslint-disable-next-line prefer-const
   control = new PipelineControlImpl(
-    runDemuxerPipelineAsync(input, output, () => control?.isStopped() ?? false),
+    runDemuxerPipelineAsync(input, output, () => control?.isStopped() ?? false, tracker),
     options?.signal,
+    tracker,
   );
   return control;
 }
@@ -909,9 +1068,11 @@ function runDemuxerPipeline(input: Demuxer, output: Muxer, options?: PipelineOpt
  *
  * @param shouldStop - Function to check if pipeline should stop
  *
+ * @param tracker - Optional progress tracker for output statistics
+ *
  * @internal
  */
-async function runDemuxerPipelineAsync(input: Demuxer, output: Muxer, shouldStop: () => boolean): Promise<void> {
+async function runDemuxerPipelineAsync(input: Demuxer, output: Muxer, shouldStop: () => boolean, tracker?: ProgressTracker): Promise<void> {
   // Get all streams from input
   const videoStream = input.video();
   const audioStream = input.audio();
@@ -968,6 +1129,7 @@ async function runDemuxerPipelineAsync(input: Demuxer, output: Muxer, shouldStop
         const mapping = streams.find((s) => s.stream.index === packet.streamIndex);
         if (mapping) {
           await output.writePacket(packet, mapping.index);
+          tracker?.record(packet);
         }
       } finally {
         // Free the packet after use
@@ -1055,11 +1217,13 @@ function runSimplePipeline(args: any[], options?: PipelineOptions): PipelineCont
 
   // If output, consume the generator
   if (isOutput) {
+    const tracker = new ProgressTracker(options?.onProgress, options?.progressInterval);
     let control: PipelineControl;
     // eslint-disable-next-line prefer-const
     control = new PipelineControlImpl(
-      consumeSimplePipeline(generator, lastStage, metadata, () => control?.isStopped() ?? false),
+      consumeSimplePipeline(generator, lastStage, metadata, () => control?.isStopped() ?? false, tracker),
       options?.signal,
+      tracker,
     );
     return control;
   }
@@ -1120,9 +1284,17 @@ async function* buildSimplePipeline(
  *
  * @param shouldStop - Function to check if pipeline should stop
  *
+ * @param tracker - Optional progress tracker for output statistics
+ *
  * @internal
  */
-async function consumeSimplePipeline(stream: AsyncIterable<Packet | Frame | null>, output: Muxer, metadata: StreamMetadata, shouldStop: () => boolean): Promise<void> {
+async function consumeSimplePipeline(
+  stream: AsyncIterable<Packet | Frame | null>,
+  output: Muxer,
+  metadata: StreamMetadata,
+  shouldStop: () => boolean,
+  tracker?: ProgressTracker,
+): Promise<void> {
   // Add stream to output if we have encoder or decoder info
   let streamIndex = 0;
 
@@ -1174,6 +1346,9 @@ async function consumeSimplePipeline(stream: AsyncIterable<Packet | Frame | null
       try {
         if (isPacket(item) || item === null) {
           await output.writePacket(item, streamIndex);
+          if (item !== null) {
+            tracker?.record(item);
+          }
         } else {
           throw new Error('Cannot write frames directly to Muxer. Use an encoder first.');
         }
@@ -1291,11 +1466,13 @@ function runNamedPipeline<K extends StreamName>(
   output: Muxer | NamedOutputs<K>,
   options?: PipelineOptions,
 ): PipelineControl {
+  const tracker = new ProgressTracker(options?.onProgress, options?.progressInterval);
   let control: PipelineControl;
   // eslint-disable-next-line prefer-const
   control = new PipelineControlImpl(
-    runNamedPipelineAsync(inputs, stages, output, () => control?.isStopped() ?? false),
+    runNamedPipelineAsync(inputs, stages, output, () => control?.isStopped() ?? false, tracker),
     options?.signal,
+    tracker,
   );
   return control;
 }
@@ -1311,6 +1488,8 @@ function runNamedPipeline<K extends StreamName>(
  *
  * @param shouldStop - Function to check if pipeline should stop
  *
+ * @param tracker - Optional progress tracker for output statistics
+ *
  * @internal
  */
 async function runNamedPipelineAsync<K extends StreamName>(
@@ -1318,6 +1497,7 @@ async function runNamedPipelineAsync<K extends StreamName>(
   stages: NamedStages<K>,
   output: Muxer | NamedOutputs<K>,
   shouldStop: () => boolean,
+  tracker?: ProgressTracker,
 ): Promise<void> {
   // Check if all inputs reference the same Demuxer instance
   const inputValues: Demuxer[] = Object.values(inputs);
@@ -1534,7 +1714,7 @@ async function runNamedPipelineAsync<K extends StreamName>(
     for (const [name, stream] of Object.entries(processedStreams) as [StreamName, AsyncIterable<Packet>][]) {
       const streamIndex = streamIndices[name];
       if (streamIndex !== undefined) {
-        promises.push(consumeStreamInParallel(stream, output, streamIndex, shouldStop));
+        promises.push(consumeStreamInParallel(stream, output, streamIndex, shouldStop, tracker));
       }
     }
 
@@ -1549,7 +1729,7 @@ async function runNamedPipelineAsync<K extends StreamName>(
       const streamOutput = (outputs as any)[streamName] as Muxer | undefined;
       const metadata = streamMetadata[streamName];
       if (streamOutput && metadata) {
-        promises.push(consumeNamedStream(stream, streamOutput, metadata, shouldStop));
+        promises.push(consumeNamedStream(stream, streamOutput, metadata, shouldStop, tracker));
       }
     }
 
@@ -1671,9 +1851,17 @@ async function* buildNamedStreamPipeline(
  *
  * @param shouldStop - Function to check if pipeline should stop
  *
+ * @param tracker - Optional progress tracker for output statistics
+ *
  * @internal
  */
-async function consumeStreamInParallel(stream: AsyncIterable<Packet | null>, output: Muxer, streamIndex: number, shouldStop: () => boolean): Promise<void> {
+async function consumeStreamInParallel(
+  stream: AsyncIterable<Packet | null>,
+  output: Muxer,
+  streamIndex: number,
+  shouldStop: () => boolean,
+  tracker?: ProgressTracker,
+): Promise<void> {
   // Get iterator to properly clean up on stop
   const iterator = stream[Symbol.asyncIterator]();
 
@@ -1690,6 +1878,9 @@ async function consumeStreamInParallel(stream: AsyncIterable<Packet | null>, out
 
       try {
         await output.writePacket(packet, streamIndex);
+        if (packet !== null) {
+          tracker?.record(packet);
+        }
       } finally {
         // Free the packet after use (but not null)
         if (packet && typeof packet.free === 'function') {
@@ -1718,9 +1909,17 @@ async function consumeStreamInParallel(stream: AsyncIterable<Packet | null>, out
  *
  * @param shouldStop - Function to check if pipeline should stop
  *
+ * @param tracker - Optional progress tracker for output statistics
+ *
  * @internal
  */
-async function consumeNamedStream(stream: AsyncIterable<Packet | null>, output: Muxer, metadata: StreamMetadata, shouldStop: () => boolean): Promise<void> {
+async function consumeNamedStream(
+  stream: AsyncIterable<Packet | null>,
+  output: Muxer,
+  metadata: StreamMetadata,
+  shouldStop: () => boolean,
+  tracker?: ProgressTracker,
+): Promise<void> {
   // Add stream to output
   let streamIndex = 0;
 
@@ -1773,6 +1972,9 @@ async function consumeNamedStream(stream: AsyncIterable<Packet | null>, output: 
 
       try {
         await output.writePacket(packet, streamIndex);
+        if (packet !== null) {
+          tracker?.record(packet);
+        }
       } finally {
         // Free the packet after use (but not null)
         if (packet && typeof packet.free === 'function') {

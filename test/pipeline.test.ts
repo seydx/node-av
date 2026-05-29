@@ -63,6 +63,69 @@ describe('Pipeline - Comprehensive Tests', () => {
     }
   });
 
+  describe('Progress', () => {
+    it('should report progress during a transcode', async () => {
+      const outputFile = getTestOutputPath('progress.mp4');
+
+      try {
+        await using input = await Demuxer.open(inputFile);
+        const output = await Muxer.open(outputFile);
+
+        const videoStream = input.video();
+        assert.ok(videoStream, 'No video stream found');
+
+        using decoder = await Decoder.create(videoStream);
+        using encoder = await Encoder.create(FF_ENCODER_LIBX264, { decoder, bitrate: '1M' });
+
+        const updates: number[] = [];
+        const control = pipeline(input, decoder, encoder, output, {
+          progressInterval: 0, // emit on every packet for the test
+          onProgress: (p) => updates.push(p.frames),
+        });
+        await control.completion;
+        await output.close();
+
+        assert.ok(updates.length > 0, 'onProgress should be called at least once');
+
+        const final = control.progress;
+        assert.ok(final.frames > 0, 'Should have written frames');
+        assert.ok(final.bytes > 0, 'Should have written bytes');
+        assert.ok(final.time > 0, 'Should have advanced media time');
+        assert.ok(final.elapsed >= 0, 'Elapsed should be non-negative');
+        assert.ok(Number.isFinite(final.fps), 'fps should be finite');
+        assert.ok(Number.isFinite(final.speed), 'speed should be finite');
+        assert.ok(Number.isFinite(final.bitrate), 'bitrate should be finite');
+      } finally {
+        cleanupTestFile(outputFile);
+      }
+    });
+
+    it('should expose empty progress before any output (poll-only)', async () => {
+      const outputFile = getTestOutputPath('progress-poll.mp4');
+
+      try {
+        await using input = await Demuxer.open(inputFile);
+        const output = await Muxer.open(outputFile);
+        const videoStream = input.video();
+        assert.ok(videoStream);
+
+        using decoder = await Decoder.create(videoStream);
+        using encoder = await Encoder.create(FF_ENCODER_LIBX264, { decoder, bitrate: '1M' });
+
+        // No onProgress callback - progress is still pollable.
+        const control = pipeline(input, decoder, encoder, output);
+        assert.strictEqual(control.progress.frames, 0, 'No frames before processing');
+
+        await control.completion;
+        await output.close();
+
+        assert.ok(control.progress.frames > 0, 'Progress should be pollable after completion');
+      } finally {
+        cleanupTestFile(outputFile);
+      }
+    });
+  });
+
   describe('Simple Pipeline - Stream Copy', () => {
     it('should copy all streams from input to output', async () => {
       const outputFile = getTestOutputPath('copy.mp4');
