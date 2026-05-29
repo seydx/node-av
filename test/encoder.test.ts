@@ -1,9 +1,52 @@
 import assert from 'node:assert';
 import { describe, it } from 'node:test';
 
-import { AV_CHANNEL_LAYOUT_STEREO, AV_PIX_FMT_YUV420P, AV_SAMPLE_FMT_FLTP, Encoder, FF_ENCODER_AAC, FF_ENCODER_LIBX264, HardwareContext } from '../src/index.js';
+import {
+  AVCOL_RANGE_JPEG,
+  AV_CHANNEL_LAYOUT_STEREO,
+  AV_PIX_FMT_YUV420P,
+  AV_SAMPLE_FMT_FLTP,
+  Encoder,
+  FF_ENCODER_AAC,
+  FF_ENCODER_LIBX264,
+  FF_ENCODER_MJPEG,
+  HardwareContext,
+} from '../src/index.js';
 import { Frame, Rational } from '../src/lib/index.js';
 import { encodeFrame, encodeFrameSync } from './index.js';
+
+// Check for JPEG magic bytes: SOI (FFD8) at the start and EOI (FFD9) at the end.
+function isJpeg(buf: Buffer): boolean {
+  return buf.length > 4 && buf[0] === 0xff && buf[1] === 0xd8 && buf[buf.length - 2] === 0xff && buf[buf.length - 1] === 0xd9;
+}
+
+// Create an MJPEG-compatible test frame (full-range YUV) filled with a gradient.
+function createMjpegFrame(width: number, height: number): Frame {
+  const frame = new Frame();
+  frame.alloc();
+  frame.width = width;
+  frame.height = height;
+  frame.format = AV_PIX_FMT_YUV420P;
+  frame.colorRange = AVCOL_RANGE_JPEG; // mjpeg requires full-range YUV
+  frame.pts = 0n;
+  frame.timeBase = new Rational(1, 25);
+  frame.getBuffer();
+
+  if (frame.data?.[0]) {
+    for (let i = 0; i < width * height; i++) {
+      frame.data[0][i] = i % 256;
+    }
+    if (frame.data[1] && frame.data[2]) {
+      const chromaSize = (width * height) / 4;
+      for (let i = 0; i < chromaSize; i++) {
+        frame.data[1][i] = 128;
+        frame.data[2][i] = 128;
+      }
+    }
+  }
+
+  return frame;
+}
 
 describe('Encoder', () => {
   describe('create', () => {
@@ -385,6 +428,57 @@ describe('Encoder', () => {
       frame.timeBase = new Rational(1, 25);
 
       assert.doesNotThrow(() => encoder.encodeSync(frame));
+    });
+  });
+
+  describe('encodeOne', () => {
+    it('should encode a single frame to JPEG (async)', async () => {
+      using frame = createMjpegFrame(320, 240);
+
+      const jpeg = await Encoder.encodeOne(FF_ENCODER_MJPEG, frame);
+
+      assert.ok(Buffer.isBuffer(jpeg));
+      assert.ok(jpeg.length > 0, 'should produce bytes');
+      assert.ok(isJpeg(jpeg), 'should be a valid JPEG');
+    });
+
+    it('should encode a single frame to JPEG (sync)', () => {
+      using frame = createMjpegFrame(320, 240);
+
+      const jpeg = Encoder.encodeOneSync(FF_ENCODER_MJPEG, frame);
+
+      assert.ok(isJpeg(jpeg), 'should be a valid JPEG');
+    });
+
+    it('should handle varying dimensions without reconfiguration (async)', async () => {
+      using small = createMjpegFrame(100, 100);
+      using large = createMjpegFrame(256, 144);
+
+      const a = await Encoder.encodeOne(FF_ENCODER_MJPEG, small);
+      const b = await Encoder.encodeOne(FF_ENCODER_MJPEG, large);
+
+      assert.ok(isJpeg(a), 'small frame should be a valid JPEG');
+      assert.ok(isJpeg(b), 'large frame should be a valid JPEG');
+    });
+
+    it('should handle varying dimensions without reconfiguration (sync)', () => {
+      using small = createMjpegFrame(100, 100);
+      using large = createMjpegFrame(256, 144);
+
+      const a = Encoder.encodeOneSync(FF_ENCODER_MJPEG, small);
+      const b = Encoder.encodeOneSync(FF_ENCODER_MJPEG, large);
+
+      assert.ok(isJpeg(a), 'small frame should be a valid JPEG');
+      assert.ok(isJpeg(b), 'large frame should be a valid JPEG');
+    });
+
+    it('should not mutate the input frame pts (async)', async () => {
+      using frame = createMjpegFrame(320, 240);
+      frame.pts = 42n;
+
+      await Encoder.encodeOne(FF_ENCODER_MJPEG, frame);
+
+      assert.equal(frame.pts, 42n, 'frame pts should be preserved');
     });
   });
 

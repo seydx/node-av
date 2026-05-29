@@ -506,6 +506,96 @@ export class Encoder implements Disposable {
   }
 
   /**
+   * Encode a single frame into a self-contained image buffer.
+   *
+   * One-shot, stateless helper for intra-only image codecs (MJPEG, PNG, WebP, ...).
+   * Creates a fresh encoder, encodes the frame, flushes and frees everything in one call.
+   * The encoder adopts dimensions, pixel format and hardware context from the frame,
+   * so any frame size works without reconfiguration.
+   *
+   * @param encoderCodec - Encoder codec (name, ID, branded constant, or Codec)
+   *
+   * @param frame - Frame to encode
+   *
+   * @param options - Optional encoder configuration (e.g. `{ options: { q: 3 } }` for MJPEG quality)
+   *
+   * @returns Encoded image bytes
+   *
+   * @throws {FFmpegError} If the encoder is not found or encoding fails
+   *
+   * @throws {Error} If the encoder produced no output
+   *
+   * @example
+   * ```typescript
+   * const jpeg = await Encoder.encodeOne(FF_ENCODER_MJPEG, frame, { options: { q: 3 } });
+   * ```
+   *
+   * @see {@link EncoderPool} For reusing encoders across recurring resolutions
+   */
+  static async encodeOne<const C extends FFEncoderCodec | AVCodecID | Codec>(encoderCodec: C, frame: Frame, options: EncoderOptions<C> = {}): Promise<Buffer> {
+    using encoder = await Encoder.create(encoderCodec, options);
+
+    const packets = [...(await encoder.encodeAll(frame)), ...(await encoder.encodeAll(null))];
+    try {
+      const data = packets[0]?.data;
+      if (!data) {
+        throw new Error(`Encoder '${encoder.getCodec().name}' produced no output for frame`);
+      }
+      return data;
+    } finally {
+      for (const packet of packets) {
+        packet.free();
+      }
+    }
+  }
+
+  /**
+   * Encode a single frame into a self-contained image buffer synchronously.
+   * Synchronous version of encodeOne.
+   *
+   * One-shot, stateless helper for intra-only image codecs (MJPEG, PNG, WebP, ...).
+   * Creates a fresh encoder, encodes the frame, flushes and frees everything in one call.
+   * The encoder adopts dimensions, pixel format and hardware context from the frame,
+   * so any frame size works without reconfiguration.
+   *
+   * @param encoderCodec - Encoder codec (name, ID, branded constant, or Codec)
+   *
+   * @param frame - Frame to encode
+   *
+   * @param options - Optional encoder configuration (e.g. `{ options: { q: 3 } }` for MJPEG quality)
+   *
+   * @returns Encoded image bytes
+   *
+   * @throws {FFmpegError} If the encoder is not found or encoding fails
+   *
+   * @throws {Error} If the encoder produced no output
+   *
+   * @example
+   * ```typescript
+   * const jpeg = Encoder.encodeOneSync(FF_ENCODER_MJPEG, frame, { options: { q: 3 } });
+   * ```
+   *
+   * @see {@link encodeOne} For async version
+   * @see {@link EncoderPool} For reusing encoders across recurring resolutions
+   */
+  static encodeOneSync<const C extends FFEncoderCodec | AVCodecID | Codec>(encoderCodec: C, frame: Frame, options: EncoderOptions<C> = {}): Buffer {
+    using encoder = Encoder.createSync(encoderCodec, options);
+
+    const packets = [...encoder.encodeAllSync(frame), ...encoder.encodeAllSync(null)];
+    try {
+      const data = packets[0]?.data;
+      if (!data) {
+        throw new Error(`Encoder '${encoder.getCodec().name}' produced no output for frame`);
+      }
+      return data;
+    } finally {
+      for (const packet of packets) {
+        packet.free();
+      }
+    }
+  }
+
+  /**
    * Check if encoder is open.
    *
    * @example
