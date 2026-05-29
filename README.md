@@ -11,7 +11,7 @@
 [![FFmpeg](https://img.shields.io/badge/FFmpeg-8.1-green.svg)](https://ffmpeg.org)
 [![Platform](https://img.shields.io/badge/platform-Windows%20(MSVC%20%7C%20MinGW)%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](https://github.com/seydx/node-av)
 
-Native Node.js bindings for FFmpeg with full TypeScript support. Provides direct access to FFmpeg's C APIs through N-API. Includes both raw FFmpeg bindings for full control and higher-level abstractions. Automatic resource management via Disposable pattern, hardware acceleration support and prebuilt binaries for Windows, Linux, and macOS.
+Native Node.js bindings for FFmpeg with full TypeScript support - including type-safe options (autocomplete + validation) for every codec, format, filter, and bitstream filter, generated from FFmpeg's own metadata. Provides direct access to FFmpeg's C APIs through N-API. Includes both raw FFmpeg bindings for full control and higher-level abstractions. Automatic resource management via Disposable pattern, hardware acceleration support and prebuilt binaries for Windows, Linux, and macOS.
 
 📚 **[Documentation](https://seydx.github.io/node-av)**
 
@@ -446,6 +446,9 @@ import * as ffmpeg from 'node-av';
 
 Beyond basic transcoding, NodeAV provides advanced media processing capabilities:
 
+**Fully Typed FFmpeg Options**
+Every FFmpeg option is typed - across codecs, formats, ~580 filters, and bitstream filters. Keys autocomplete, enum values are validated, and typos become compile-time errors, all generated directly from FFmpeg's `AVOption` metadata (including each option's description and a link to the FFmpeg docs as JSDoc). No more grepping the FFmpeg docs for flag names.
+
 **Speech Recognition with Whisper**
 Integrate automatic speech-to-text transcription using OpenAI's Whisper model through the whisper.cpp implementation. The library handles automatic model downloading from HuggingFace, supports multiple model sizes (tiny, base, small, medium, large) for different accuracy/performance tradeoffs, and provides hardware-accelerated inference through Metal (macOS), Vulkan (cross-platform), or OpenCL backends. Transcription results include precise timestamps and can be processed in real-time from any audio source.
 
@@ -522,11 +525,13 @@ If you encounter module resolution errors like `Cannot find module 'lib/binary-s
 | `electron-builder` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/electron/builder) |
 | `electron-forge` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/electron/forge) |
 | `api-abort-signal` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-abort-signal.ts) |
+| `api-bitstream-filter` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-bitstream-filter.ts) |
 | `api-dash` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-dash.ts) |
 | `api-device-capture` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-device-capture.ts) |
 | `api-encode-decode` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-encode-decode.ts) |
 | `api-filter-complex` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-filter-complex.ts) |
 | `api-filter-complex-grid` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-filter-complex-grid.ts) |
+| `api-filter-complex-typed` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-filter-complex-typed.ts) |
 | `api-fmp4` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-fmp4.ts) |
 | `api-frame-extract` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-frame-extract.ts) |
 | `api-hw-codecs` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-hw-codecs.ts) |
@@ -539,8 +544,11 @@ If you encounter module resolution errors like `Cannot find module 'lib/binary-s
 | `api-hw-filter-sync` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-hw-filter-sync.ts) |
 | `api-muxing` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-muxing.ts) |
 | `api-pipeline-hw-rtsp` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-pipeline-hw-rtsp.ts) |
+| `api-pipeline-progress` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-pipeline-progress.ts) |
 | `api-pipeline-raw-muxing` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-pipeline-raw-muxing.ts) |
+| `api-probe` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-probe.ts) |
 | `api-rtp` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-rtp.ts) |
+| `api-rtsp-backchannel` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-rtsp-backchannel.ts) |
 | `api-sdp-custom` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-sdp-custom.ts) |
 | `api-sdp-input` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-sdp-input.ts) |
 | `api-stream-input` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-stream-input.ts) |
