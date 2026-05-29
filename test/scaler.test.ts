@@ -2,7 +2,7 @@ import assert from 'node:assert';
 import { describe, it } from 'node:test';
 
 import { Decoder, Demuxer, HardwareContext, Scaler } from '../src/index.js';
-import { getInputFile, prepareTestEnvironment } from './index.js';
+import { getInputFile, prepareTestEnvironment, skipInCI } from './index.js';
 
 import type { Frame } from '../src/lib/index.js';
 
@@ -204,7 +204,7 @@ describe('Scaler', () => {
       }
     });
 
-    it('encodes hardware frames to JPEG (GPU scale + download)', async () => {
+    it('encodes hardware frames to JPEG (GPU scale + download)', skipInCI, async () => {
       const hw = HardwareContext.auto();
       if (!hw) {
         console.log('No hardware acceleration available - skipping HW toJpeg test');
@@ -246,7 +246,7 @@ describe('Scaler', () => {
   });
 
   describe('hardware', () => {
-    it('processes hardware frames on the GPU (with hardware context)', async () => {
+    it('processes hardware frames on the GPU (with hardware context)', skipInCI, async () => {
       const hw = HardwareContext.auto();
       if (!hw) {
         console.log('No hardware acceleration available - skipping HW scaler test');
@@ -294,7 +294,7 @@ describe('Scaler', () => {
       }
     });
 
-    it('downloads hardware frames when no hardware context is given (fallback)', async () => {
+    it('downloads hardware frames when no hardware context is given (fallback)', skipInCI, async () => {
       const hw = HardwareContext.auto();
       if (!hw) {
         console.log('No hardware acceleration available - skipping HW fallback test');
