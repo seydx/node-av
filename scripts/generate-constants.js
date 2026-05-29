@@ -767,6 +767,78 @@ export type EOFSignal = typeof EOF;
     output += '\n';
   }
 
+  // Public FF_ value families that fall outside the branded-prefix allowlist
+  // above. These map to AVCodecContext/AVFrame option values and fields users set
+  // or read (e.g. global_quality needs FF_QP2LAMBDA, decode_error_flags uses
+  // FF_DECODE_ERROR_*, me_cmp uses FF_CMP_*, ...). Captured by FAMILY pattern (not
+  // individual names), so new members are picked up automatically without having
+  // to maintain a list. Internal families (FF_API_*, FF_VK_*, FF_CODEC_CAP_*, ...)
+  // and deprecated ones (FF_PROFILE_* -> AV_PROFILE_*) are intentionally excluded.
+  // FF_THREAD_*, FF_LEVEL_*, FF_SUB_CHARENC_MODE_* are emitted elsewhere as
+  // branded/enum constants and must not be duplicated here.
+  {
+    const familyPattern =
+      /^FF_(QP2LAMBDA|LAMBDA_[A-Z0-9_]+|QUALITY_SCALE|DECODE_ERROR_[A-Z0-9_]+|MB_DECISION_[A-Z0-9_]+|CMP_[A-Z0-9_]+|DCT_[A-Z0-9_]+|IDCT_[A-Z0-9_]+|DEBUG_[A-Z0-9_]+|BUG_[A-Z0-9_]+|LOSS_[A-Z0-9_]+|EC_[A-Z0-9_]+|COMPLIANCE_[A-Z0-9_]+|CODEC_PROPERTY_[A-Z0-9_]+|PRED_[A-Z0-9_]+|CODER_TYPE_[A-Z0-9_]+)$/;
+
+    // Collect raw #define values for matching names across the public headers.
+    const rawDefines = {};
+    const familyLibs = ['libavutil', 'libavcodec', 'libavformat'];
+    for (const lib of familyLibs) {
+      const libPath = join(FFMPEG_PATH, lib);
+      if (!existsSync(libPath)) continue;
+      for (const header of readdirSync(libPath).filter((f) => f.endsWith('.h'))) {
+        const content = readFileSync(join(libPath, header), 'utf8');
+        const defineRe = /^#define\s+(FF_[A-Z0-9_]+)\s+(.+)$/gm;
+        let dm;
+        while ((dm = defineRe.exec(content)) !== null) {
+          const name = dm[1];
+          if (!familyPattern.test(name) || rawDefines[name] !== undefined) continue;
+          rawDefines[name] = dm[2]
+            .replace(/\/\*.*?\*\//g, '')
+            .replace(/\/\/.*$/, '')
+            .trim();
+        }
+      }
+    }
+
+    // Resolve a raw value to a number, substituting references to other FF_ macros
+    // in this set (e.g. FF_LAMBDA_SCALE -> (1<<FF_LAMBDA_SHIFT), FF_QUALITY_SCALE
+    // alias) and evaluating the resulting arithmetic/bitwise expression.
+    const resolveExtra = (name, seen = new Set()) => {
+      if (seen.has(name)) return null;
+      seen.add(name);
+      let expr = rawDefines[name];
+      if (expr === undefined) return null;
+      expr = expr.replace(/FF_[A-Z0-9_]+/g, (ref) => {
+        const resolved = resolveExtra(ref, seen);
+        return resolved === null ? ref : String(resolved);
+      });
+      // Only allow numeric/arithmetic/bitwise/hex expressions before evaluating.
+      if (!/^[-+*/<>()\s\d]+$/.test(expr) && !/^[-+*/<>()\s0-9a-fA-FxX]+$/.test(expr)) return null;
+      try {
+        const result = Function(`"use strict";return (${expr});`)();
+        return typeof result === 'number' && Number.isFinite(result) ? result : null;
+      } catch {
+        return null;
+      }
+    };
+
+    const extraLines = [];
+    for (const name of Object.keys(rawDefines).sort()) {
+      const value = resolveExtra(name);
+      if (value !== null) {
+        extraLines.push(`export const ${name} = ${value};`);
+      } else {
+        console.warn(`[constants] WARNING: skipped FF_ constant ${name} (unresolvable value: ${rawDefines[name]})`);
+      }
+    }
+
+    if (extraLines.length > 0) {
+      output += `// FF_ value constants for AVCodecContext/AVFrame option values and fields (${extraLines.length} constants)\n`;
+      output += extraLines.join('\n') + '\n\n';
+    }
+  }
+
   // Extract and process AVERROR constants from error.h and grouped constants
   if (!processedTypes.has('AVError')) {
     const errorConstants = [];
