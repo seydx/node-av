@@ -41,6 +41,14 @@ FilterPreset.chain()
 
 ### Added
 
+#### `Scaler` — hardware-aware image scale / crop / convert / encode
+
+High-level `Scaler` (from `node-av/api`) that scales, crops, and converts decoded frames to raw pixel buffers or JPEG/PNG. Pools its contexts, GPU graphs, and encoders for the detection/thumbnail/snapshot workload; hardware frames are processed on the GPU.
+
+#### `EncoderPool` — pooled image encoders
+
+`EncoderPool` (from `node-av/api`) reuses image encoders across recurring resolutions. Adds `Encoder.encodeOne()` / `encodeOneSync()` for one-shot single-frame encodes.
+
 #### `Frame.exportIOSurface()` — zero-copy IOSurface export (macOS)
 
 Exports the `IOSurfaceRef` backing a decoded VideoToolbox frame as an 8-byte pointer `Buffer` — the inverse of `Frame.fromIOSurface()`. Enables zero-copy interop with Metal / CoreVideo (e.g. feeding hardware-decoded frames into a GPU compositor) without a GPU → CPU readback.
