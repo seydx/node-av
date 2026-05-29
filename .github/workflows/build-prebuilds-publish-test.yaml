@@ -155,6 +155,8 @@ jobs:
           ls -la *.zip
 
       - name: Generate test release notes with commit history
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           # Get the most recent tag
           LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
@@ -181,16 +183,22 @@ jobs:
             echo "" >> test_release_notes.md
             echo "### 📝 Recent changes since $LATEST_TAG" >> test_release_notes.md
             echo "" >> test_release_notes.md
-            
-            # Get commit messages since last tag
-            git log --pretty=format:"- %s (%h) - @%an" $LATEST_TAG..HEAD >> test_release_notes.md
+
+            CHANGES=$(gh api --paginate "repos/${{ github.repository }}/compare/${LATEST_TAG}...HEAD" \
+              --jq '.commits[] | "- \(.commit.message | split("\n")[0]) (\(.sha[:7])) - \(if .author then "@\(.author.login)" else (.commit.author.name | if test("^[A-Za-z0-9-]+$") then "@\(.)" else . end) end)"' 2>/dev/null | tac)
+            if [ -n "$CHANGES" ]; then
+              echo "$CHANGES" >> test_release_notes.md
+            else
+              git log --pretty=format:"- %s (%h) - %an" "$LATEST_TAG..HEAD" >> test_release_notes.md
+            fi
           else
             echo "" >> test_release_notes.md
             echo "### 📝 Recent changes" >> test_release_notes.md
             echo "" >> test_release_notes.md
-            
-            # Get last 20 commits if no tags exist
-            git log --pretty=format:"- %s (%h) - @%an" -20 >> test_release_notes.md
+
+            # Get last 20 commits if no tags exist (author name only; no GitHub
+            # login resolution without a base for the compare API)
+            git log --pretty=format:"- %s (%h) - %an" -20 >> test_release_notes.md
           fi
 
       - name: Test GitHub Release (DRY RUN)
