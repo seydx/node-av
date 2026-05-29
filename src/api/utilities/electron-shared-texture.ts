@@ -172,13 +172,20 @@ const MATRIX_MAP: Record<string, AVColorSpace> = {
 };
 
 /**
+ * Map an Electron color space descriptor to FFmpeg color properties.
+ *
+ * Translates Electron's `textureInfo.colorSpace` strings (range, primaries,
+ * transfer, matrix) to the corresponding `AVCOL_*` enums. Unknown values map to
+ * the `UNSPECIFIED` variants; a missing descriptor falls back to the BGRA/sRGB
+ * defaults typical of Electron textures.
+ *
  * @param colorSpace - Electron color space descriptor from textureInfo.colorSpace
  *
  * @returns Mapped FFmpeg color properties (colorRange, colorPrimaries, colorTrc, colorSpace) with fallbacks
  *
  * @internal
  */
-function mapColorSpace(colorSpace?: TextureColorSpace): {
+export function mapColorSpace(colorSpace?: TextureColorSpace): {
   colorRange: AVColorRange;
   colorPrimaries: AVColorPrimaries;
   colorTrc: AVColorTransferCharacteristic;
@@ -200,6 +207,28 @@ function mapColorSpace(colorSpace?: TextureColorSpace): {
     colorTrc: TRANSFER_MAP[colorSpace.transfer ?? ''] ?? AVCOL_TRC_UNSPECIFIED,
     colorSpace: MATRIX_MAP[colorSpace.matrix ?? ''] ?? AVCOL_SPC_UNSPECIFIED,
   };
+}
+
+/**
+ * Resolve the software pixel format for a hardware mapping context.
+ *
+ * The mapping context's sw_format must be the *software* layout of the frames
+ * (e.g. NV12, BGRA), never a hardware wrapper format like AV_PIX_FMT_DRM_PRIME /
+ * D3D11 / VIDEOTOOLBOX (which is what `srcFrame.format` is for an imported GPU
+ * frame). Prefer the source frame's own hwframe context software format (set on
+ * macOS IOSurface imports), and fall back to the layout used at the last import
+ * for bare frames (Windows D3D11, Linux DMA-BUF) that carry no hwframe context.
+ *
+ * @param srcFrame - The source hardware frame being mapped
+ *
+ * @param fallback - Software format to use when the frame carries no hwframe context
+ *
+ * @returns The software pixel format to set on the mapping context
+ *
+ * @internal
+ */
+export function resolveMappingSwFormat(srcFrame: Frame, fallback: AVPixelFormat): AVPixelFormat {
+  return srcFrame.hwFramesCtx?.swFormat ?? fallback;
 }
 
 /**
@@ -236,6 +265,7 @@ export class SharedTexture implements Disposable {
   private _currentWidth = 0;
   private _currentHeight = 0;
   private _swFormat: AVPixelFormat;
+  private _importSwFormat: AVPixelFormat;
   private _isDisposed = false;
 
   // Mapping context cache for mapTo() helper
@@ -245,6 +275,7 @@ export class SharedTexture implements Disposable {
   private constructor(hardware: HardwareContext, options: SharedTextureOptions) {
     this._hardware = hardware;
     this._swFormat = options.swFormat ?? AV_PIX_FMT_BGRA;
+    this._importSwFormat = this._swFormat;
     if (options.width) this._currentWidth = options.width;
     if (options.height) this._currentHeight = options.height;
   }
@@ -460,8 +491,15 @@ export class SharedTexture implements Disposable {
    * @internal
    */
   private ensureMappingContext(srcFrame: Frame, targetHw: HardwareContext): void {
-    // Re-create if target hardware changed or dimensions changed
-    if (this._mappingHw !== targetHw || this._mappingCtx?.width !== srcFrame.width || this._mappingCtx?.height !== srcFrame.height) {
+    const swFormat = resolveMappingSwFormat(srcFrame, this._importSwFormat);
+
+    // Re-create if target hardware, dimensions, or software format changed
+    if (
+      this._mappingHw !== targetHw ||
+      this._mappingCtx?.width !== srcFrame.width ||
+      this._mappingCtx?.height !== srcFrame.height ||
+      this._mappingCtx?.swFormat !== swFormat
+    ) {
       // Free previous context
       if (this._mappingCtx) {
         this._mappingCtx.free();
@@ -472,7 +510,7 @@ export class SharedTexture implements Disposable {
       const ctx = new HardwareFramesContext();
       ctx.alloc(targetHw.deviceContext);
       ctx.format = targetHw.devicePixelFormat;
-      ctx.swFormat = this._swFormat;
+      ctx.swFormat = swFormat;
       ctx.width = srcFrame.width;
       ctx.height = srcFrame.height;
 
@@ -540,6 +578,10 @@ export class SharedTexture implements Disposable {
     options: TextureFrameOptions,
     colorSpace?: TextureColorSpace,
   ): Frame {
+    // Remember the layout actually used, so mapTo() can fall back to it for
+    // bare hardware frames (D3D11/DMA-BUF) that carry no hw_frames_ctx.
+    this._importSwFormat = swFormat;
+
     let frame: Frame;
 
     if (handle.ioSurface && handle.ioSurface.length > 0) {

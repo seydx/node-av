@@ -200,6 +200,10 @@ await control.completion;
   - Faster VVC/H.266 and HEVC decoding (AArch64 NEON, x86 SSSE3)
 - Regenerated constants, encoders, and decoders from updated FFmpeg headers
 
+### Fixed
+
+- **`SharedTexture.mapTo()` used a hardware wrapper as the mapping software format.** The mapping `HardwareFramesContext` was configured with `sw_format = srcFrame.format`, which for an imported GPU frame is a hardware format (`AV_PIX_FMT_DRM_PRIME` on Linux DMA-BUF, `AV_PIX_FMT_D3D11` on Windows, `AV_PIX_FMT_VIDEOTOOLBOX` on macOS) — never a valid software layout, so `av_hwframe_ctx_init()` rejected it (e.g. "Unsupported format: drm_prime" mapping DMA-BUF → VAAPI). It now uses the source frame's own hwframe context software format when present (macOS IOSurface imports), and otherwise the software layout used at import time, which also fixes a stale-format case when `importHandle()` was called with a per-call `pixelFormat`. Thanks to @alyssaxuu ([#243](https://github.com/seydx/node-av/pull/243)).
+
 ## [5.2.3] - 2026-04-14
 
 ### Changed
