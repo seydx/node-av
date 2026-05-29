@@ -472,7 +472,7 @@ export class SharedTexture implements Disposable {
       const ctx = new HardwareFramesContext();
       ctx.alloc(targetHw.deviceContext);
       ctx.format = targetHw.devicePixelFormat;
-      ctx.swFormat = srcFrame.format as AVPixelFormat; // Use source format
+      ctx.swFormat = this._swFormat;
       ctx.width = srcFrame.width;
       ctx.height = srcFrame.height;
 
