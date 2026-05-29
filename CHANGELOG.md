@@ -127,6 +127,67 @@ for (const opt of codec?.getOptions() ?? []) {
 
 Returns an empty array for codecs without private options.
 
+#### `probe()` — high-level media probing
+
+New high-level helper that opens a source, reads stream info, and returns a typed, structured summary - the `ffprobe -show_format -show_streams` equivalent as a plain object, without managing a `Demuxer`:
+
+```typescript
+import { probe } from 'node-av/api';
+
+const info = await probe('input.mkv');
+console.log(info.format, info.duration, info.bitrate);
+if (info.video) {
+  console.log(`${info.video.codec} ${info.video.width}x${info.video.height} @ ${info.video.frameRate}fps`);
+}
+```
+
+Returns `format`, `duration`, `bitrate`, per-stream `ProbeStream[]` (codec, type, dimensions, frame rate, sample rate, channels, language, …), plus `video`/`audio` convenience accessors. A `probeSync()` variant is also available. When `format` is a known literal, the options bag is typed to that demuxer's options.
+
+#### Typed `FFmpegError` code helpers
+
+`FFmpegError` instances gained boolean getters for the common FFmpeg/POSIX codes, so error branching no longer needs manual numeric comparison:
+
+```typescript
+const error = FFmpegError.fromCode(ret);
+if (error?.isEAGAIN) {
+  // feed more input, then retry
+} else if (error?.isEOF) {
+  // end of stream
+} else if (error?.isInvalidData) {
+  // corrupt input
+}
+```
+
+Adds `isEAGAIN`, `isEOF`, `isInvalidData`, `isEINVAL`, `isENOMEM`, `isENOENT`, `isEACCES`, `isEIO`, `isEPIPE`, `isExit`, and an instance `is(code)` for arbitrary codes.
+
+#### Type-safe `filter_complex` graph builder
+
+New `FilterComplexGraph` builder brings the type-safe `filter(name, options)` API (autocomplete + enum validation, generated from FFmpeg's `AVOption` metadata) to multi-input/output graphs. It composes labeled chains and renders the description string `FilterComplexAPI.create()` accepts (and can be passed to it directly):
+
+```typescript
+const graph = FilterComplexGraph.create()
+  .chain({ inputs: ['0:v', '1:v'], outputs: 'tmp' }, (c) => c.filter('overlay', { x: 100, y: 50 }))
+  .chain({ inputs: 'tmp', outputs: 'out' }, (c) => c.filter('hue', { s: 0 }))
+  .build();
+// "[0:v][1:v]overlay=x=100:y=50[tmp];[tmp]hue=s=0[out]"
+
+using complex = FilterComplexAPI.create(graph, { inputs: [{ label: '0:v' }, { label: '1:v' }], outputs: [{ label: 'out' }] });
+```
+
+#### Pipeline progress reporting
+
+`pipeline()` now reports progress. Pass `onProgress` (throttled via `progressInterval`) for push updates, or poll `control.progress` - mirroring FFmpeg's CLI figures (`frame= fps= time= bitrate= speed=`):
+
+```typescript
+const control = pipeline(input, decoder, encoder, output, {
+  progressInterval: 200,
+  onProgress: (p) => console.log(`frame=${p.frames} fps=${p.fps.toFixed(1)} time=${p.time.toFixed(2)}s speed=${p.speed.toFixed(2)}x`),
+});
+await control.completion;
+```
+
+`PipelineProgress` exposes `frames`, `bytes`, `time` (media seconds), `fps`, `bitrate`, `speed`, and `elapsed`. Works across simple, stream-copy, and named pipelines.
+
 ### Changed
 
 - Synced FFmpeg with the latest master (~700 upstream commits) — numerous bug fixes, stability and performance improvements. Highlights relevant to node-av users:
