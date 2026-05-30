@@ -113,6 +113,10 @@ int importDmaBuf(AVFrame* frame, int* fds, int* strides, int* offsets, int* size
     desc->layers[0].planes[i].pitch = strides[i];
   }
 
+  // Release any descriptor a previous import left on this frame - otherwise
+  // re-importing into the same frame overwrites buf[0] and leaks it (NULL-safe).
+  av_buffer_unref(&frame->buf[0]);
+
   // Configure AVFrame
   frame->format = AV_PIX_FMT_DRM_PRIME;
   frame->width = width;

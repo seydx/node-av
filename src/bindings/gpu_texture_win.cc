@@ -43,6 +43,11 @@ int importD3D11Texture(AVFrame* frame, const uint8_t* handleData, size_t handleS
   D3D11_TEXTURE2D_DESC desc;
   texture->GetDesc(&desc);
 
+  // Release any texture a previous import left on this frame - otherwise
+  // re-importing into the same frame overwrites buf[0] and leaks the prior
+  // texture's COM reference (NULL-safe).
+  av_buffer_unref(&frame->buf[0]);
+
   // Configure AVFrame
   frame->format = AV_PIX_FMT_D3D11;
   frame->width = desc.Width;

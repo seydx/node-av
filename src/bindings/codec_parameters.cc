@@ -1355,17 +1355,27 @@ Napi::Value CodecParameters::AddCodedSideData(const Napi::CallbackInfo& info) {
   enum AVPacketSideDataType type = static_cast<AVPacketSideDataType>(info[0].As<Napi::Number>().Int32Value());
   Napi::Buffer<uint8_t> buffer = info[1].As<Napi::Buffer<uint8_t>>();
 
-  // Use av_packet_side_data_add to add the side data
+  // av_packet_side_data_add() takes ownership of `data` - it stores the pointer
+  // directly (no copy; the `flags` argument is ignored) and later av_free()s it.
+  // Passing buffer.Data() (V8-owned memory) would crash on free and dangle after
+  // GC, so hand it an av_malloc'd copy, like Packet::AddSideData does.
+  uint8_t* data = static_cast<uint8_t*>(av_malloc(buffer.Length()));
+  if (!data) {
+    Napi::Error::New(env, "Failed to allocate coded side data (ENOMEM)").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+  memcpy(data, buffer.Data(), buffer.Length());
+
   AVPacketSideData* sd = av_packet_side_data_add(
     &params_->coded_side_data,
     &params_->nb_coded_side_data,
     type,
-    buffer.Data(),
+    data,
     buffer.Length(),
-    0  // flags - 0 means copy the data
-  );
+    0);
 
   if (!sd) {
+    av_free(data);
     Napi::Error::New(env, "Failed to add coded side data (ENOMEM)").ThrowAsJavaScriptException();
     return env.Undefined();
   }
