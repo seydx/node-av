@@ -253,6 +253,12 @@ export class Packet implements Disposable, NativeWrapper<NativePacket> {
    *
    * Direct mapping to av_packet_ref().
    *
+   * IMPORTANT: per FFmpeg's contract, this packet (the destination) is completely
+   * overwritten - it MUST be unreferenced or freshly allocated before calling.
+   * Re-using a packet as the destination without {@link unref} first leaks its
+   * previous buffer and side data. When reusing one packet across a loop, call
+   * `packet.unref()` before each `packet.ref(src)`.
+   *
    * @param src - Source packet to reference
    *
    * @returns 0 on success, negative AVERROR on error:
@@ -263,14 +269,14 @@ export class Packet implements Disposable, NativeWrapper<NativePacket> {
    * ```typescript
    * import { FFmpegError } from 'node-av';
    *
-   * const packet2 = new Packet();
-   * packet2.alloc();
+   * // Reusing one packet across a loop: unref before re-referencing.
+   * packet2.unref();
    * const ret = packet2.ref(packet1);
    * FFmpegError.throwIfError(ret, 'ref');
    * // packet2 now references packet1's data
    * ```
    *
-   * @see {@link unref} To remove reference
+   * @see {@link unref} To remove reference (call before re-referencing a reused packet)
    * @see {@link clone} To create independent copy
    */
   ref(src: Packet): number {

@@ -1079,6 +1079,12 @@ export class Frame implements Disposable, NativeWrapper<NativeFrame> {
    *
    * Direct mapping to av_frame_ref().
    *
+   * IMPORTANT: per FFmpeg's contract, this frame (the destination) MUST be
+   * unreferenced or freshly allocated before calling. Re-using a frame as the
+   * destination without {@link unref} first leaks its previous buffers (the old
+   * references are overwritten, not freed). When reusing one frame across a loop,
+   * call `frame.unref()` before each `frame.ref(src)`.
+   *
    * @param src - Source frame to reference
    *
    * @returns 0 on success, negative AVERROR on error:
@@ -1089,14 +1095,14 @@ export class Frame implements Disposable, NativeWrapper<NativeFrame> {
    * ```typescript
    * import { FFmpegError } from 'node-av';
    *
-   * const frame2 = new Frame();
-   * frame2.alloc();
+   * // Reusing one frame across a loop: unref before re-referencing.
+   * frame2.unref();
    * const ret = frame2.ref(frame1);
    * FFmpegError.throwIfError(ret, 'ref');
    * // frame2 now references frame1's data
    * ```
    *
-   * @see {@link unref} To remove reference
+   * @see {@link unref} To remove reference (call before re-referencing a reused frame)
    * @see {@link clone} To create independent copy
    */
   ref(src: Frame): number {

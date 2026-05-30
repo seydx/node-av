@@ -418,7 +418,12 @@ void Packet::SetData(const Napi::CallbackInfo& info, const Napi::Value& value) {
   
   Napi::Buffer<uint8_t> buffer = value.As<Napi::Buffer<uint8_t>>();
   size_t size = buffer.Length();
-  
+
+  // Release any data/side-data the packet already holds. av_new_packet() overwrites
+  // pkt->buf without freeing it, so reusing the same packet (set data repeatedly)
+  // would leak the previous buffer and side data without this unref.
+  av_packet_unref(packet_);
+
   // Allocate new buffer for packet
   int ret = av_new_packet(packet_, size);
   if (ret < 0) {

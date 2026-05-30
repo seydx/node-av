@@ -273,6 +273,22 @@ describe('Packet', () => {
       assert.equal(packet.size, 0);
       // Note: Actual data is set during demuxing/encoding operations
     });
+
+    it('replaces data cleanly on a reused packet (no buffer/side-data leak)', () => {
+      // Regression: setting `data` must release the packet's previous buffer and
+      // side data. av_new_packet() overwrites pkt->buf without freeing it, so
+      // reusing one packet (the common decode/encode loop pattern) used to leak.
+      packet.data = Buffer.from([1, 2, 3, 4]);
+      assert.equal(packet.size, 4);
+      packet.addSideData(AV_PKT_DATA_NEW_EXTRADATA, Buffer.from([9, 9, 9]));
+      assert.ok(packet.getSideData(AV_PKT_DATA_NEW_EXTRADATA));
+
+      // Re-assigning data resets the packet: new payload, side data cleared.
+      packet.data = Buffer.from([5, 6]);
+      assert.equal(packet.size, 2);
+      assert.deepEqual([...packet.data], [5, 6]);
+      assert.equal(packet.getSideData(AV_PKT_DATA_NEW_EXTRADATA), null);
+    });
   });
 
   describe('Error Handling', () => {

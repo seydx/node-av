@@ -210,6 +210,7 @@ await control.completion;
 
 ### Fixed
 
+- **`Packet.data` setter leaked the previous buffer and side data when a packet was reused.** Assigning `packet.data = buffer` called `av_new_packet()` without first releasing the packet's existing payload, so reusing one packet across a decode/encode loop (the common pattern) leaked the prior buffer and any side data every iteration. The setter now unreferences the packet before allocating, so re-assigning `data` cleanly replaces it. Reported via [mediabunny#392](https://github.com/Vanilagy/mediabunny/issues/392).
 - **`SharedTexture.mapTo()` used a hardware wrapper as the mapping software format.** The mapping `HardwareFramesContext` was configured with `sw_format = srcFrame.format`, which for an imported GPU frame is a hardware format (`AV_PIX_FMT_DRM_PRIME` on Linux DMA-BUF, `AV_PIX_FMT_D3D11` on Windows, `AV_PIX_FMT_VIDEOTOOLBOX` on macOS) — never a valid software layout, so `av_hwframe_ctx_init()` rejected it (e.g. "Unsupported format: drm_prime" mapping DMA-BUF → VAAPI). It now uses the source frame's own hwframe context software format when present (macOS IOSurface imports), and otherwise the software layout used at import time, which also fixes a stale-format case when `importHandle()` was called with a per-call `pixelFormat`. Thanks to @alyssaxuu ([#243](https://github.com/seydx/node-av/pull/243)).
 
 ## [5.2.3] - 2026-04-14
