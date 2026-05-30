@@ -1644,6 +1644,9 @@ export class FilterComplexAPI implements Disposable {
       throw new Error('Failed to parse filter segment');
     }
 
+    let inputs: FilterInOut | undefined;
+    let outputs: FilterInOut | undefined;
+
     try {
       // Step 2: Create filter instances (but don't initialize yet)
       let ret = segment.createFilters();
@@ -1670,8 +1673,8 @@ export class FilterComplexAPI implements Disposable {
       FFmpegError.throwIfError(ret, 'Failed to apply options to segment');
 
       // Step 5: Initialize and link filters in the segment
-      const inputs = new FilterInOut();
-      const outputs = new FilterInOut();
+      inputs = new FilterInOut();
+      outputs = new FilterInOut();
 
       ret = segment.apply(inputs, outputs);
       FFmpegError.throwIfError(ret, 'Failed to apply segment');
@@ -1681,12 +1684,11 @@ export class FilterComplexAPI implements Disposable {
 
       // Step 7: Link segment outputs to buffersink filters
       this.linkBufferSinks(outputs);
-
-      // Clean up FilterInOut structures
-      inputs.free();
-      outputs.free();
     } finally {
-      // Always free the segment
+      // Always free the FilterInOut structures and the segment, including on the
+      // error paths above (apply/link failures) where they would otherwise leak.
+      inputs?.free();
+      outputs?.free();
       segment.free();
     }
   }

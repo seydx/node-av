@@ -242,8 +242,8 @@ export class Encoder implements Disposable {
 
     this.packet = new Packet();
     this.packet.alloc();
-    this.inputQueue = new AsyncQueue<Frame>(FRAME_THREAD_QUEUE_SIZE);
-    this.outputQueue = new AsyncQueue<Packet>(PACKET_THREAD_QUEUE_SIZE);
+    this.inputQueue = new AsyncQueue<Frame>(FRAME_THREAD_QUEUE_SIZE, (f) => f.free());
+    this.outputQueue = new AsyncQueue<Packet>(PACKET_THREAD_QUEUE_SIZE, (p) => p.free());
   }
 
   /**
@@ -1701,8 +1701,17 @@ export class Encoder implements Disposable {
     this.inputQueue.close();
     this.outputQueue.close();
 
+    // Free any frames/packets left buffered on an aborted/early-closed pipeline.
+    this.inputQueue.clear();
+    this.outputQueue.clear();
+
     this.packet.free();
     this.codecContext.freeContext();
+
+    // Release the audio frame buffer (owns a native Frame + AudioFifo) used by
+    // fixed-frame-size audio encoders.
+    this.audioFrameBuffer?.[Symbol.dispose]();
+    this.audioFrameBuffer = undefined;
 
     this.initialized = false;
   }

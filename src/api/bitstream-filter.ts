@@ -110,8 +110,8 @@ export class BitStreamFilterAPI implements Disposable {
     this.packet = new Packet();
     this.packet.alloc();
 
-    this.inputQueue = new AsyncQueue<Packet>(PACKET_THREAD_QUEUE_SIZE);
-    this.outputQueue = new AsyncQueue<Packet>(PACKET_THREAD_QUEUE_SIZE);
+    this.inputQueue = new AsyncQueue<Packet>(PACKET_THREAD_QUEUE_SIZE, (p) => p.free());
+    this.outputQueue = new AsyncQueue<Packet>(PACKET_THREAD_QUEUE_SIZE, (p) => p.free());
   }
 
   /**
@@ -1167,6 +1167,10 @@ export class BitStreamFilterAPI implements Disposable {
     // Close queues
     this.inputQueue.close();
     this.outputQueue.close();
+
+    // Free any packets left buffered on an aborted/early-closed pipeline.
+    this.inputQueue.clear();
+    this.outputQueue.clear();
 
     this.packet.free();
     this.ctx.free();

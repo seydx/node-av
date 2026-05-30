@@ -228,8 +228,8 @@ export class Decoder implements Disposable {
     this.frame = new Frame();
     this.frame.alloc();
     this.lastFrameTb = new Rational(0, 1);
-    this.inputQueue = new AsyncQueue<Packet>(PACKET_THREAD_QUEUE_SIZE);
-    this.outputQueue = new AsyncQueue<Frame>(FRAME_THREAD_QUEUE_SIZE);
+    this.inputQueue = new AsyncQueue<Packet>(PACKET_THREAD_QUEUE_SIZE, (p) => p.free());
+    this.outputQueue = new AsyncQueue<Frame>(FRAME_THREAD_QUEUE_SIZE, (f) => f.free());
   }
 
   /**
@@ -1618,6 +1618,10 @@ export class Decoder implements Disposable {
 
     this.inputQueue?.close();
     this.outputQueue?.close();
+
+    // Free any packets/frames left buffered on an aborted/early-closed pipeline.
+    this.inputQueue?.clear();
+    this.outputQueue?.clear();
 
     this.frame.free();
     this.codecContext.freeContext();

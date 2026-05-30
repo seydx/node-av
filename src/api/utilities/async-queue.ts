@@ -25,17 +25,23 @@ export class AsyncQueue<T> {
   private maxSize: number;
   private closed = false;
   private error: Error | null = null;
+  private disposeItem?: (item: T) => void;
 
   /**
    * Creates a new AsyncQueue.
    *
    * @param maxSize Maximum number of items in queue before send() blocks
+   *
+   * @param disposeItem Optional disposer for items still buffered at teardown
+   *   (see {@link clear}). Pass `(item) => item.free()` for queues of owned
+   *   native resources (Frame/Packet) so aborted pipelines don't leak them.
    */
-  constructor(maxSize: number) {
+  constructor(maxSize: number, disposeItem?: (item: T) => void) {
     if (maxSize <= 0) {
       maxSize = 1;
     }
     this.maxSize = maxSize;
+    this.disposeItem = disposeItem;
   }
 
   /**
@@ -233,5 +239,37 @@ export class AsyncQueue<T> {
 
     this.error = error;
     this.close();
+  }
+
+  /**
+   * Drop and dispose any items still buffered in the queue.
+   *
+   * Call during final teardown (a component's `close()`, after the worker and
+   * consumer tasks have settled) to deterministically free items that were
+   * produced but never consumed - e.g. when a pipeline is aborted before
+   * draining. Without this they are only reclaimed by GC, which for hardware
+   * frames pins GPU/hwframe memory in the meantime.
+   *
+   * Items are owned by the queue (the consumer frees what it receives), so
+   * disposing buffered items here cannot double-free. Do NOT call this while a
+   * consumer may still drain the queue after `close()` (the flush path relies on
+   * that) - only at final teardown.
+   *
+   * @example
+   * ```typescript
+   * this.outputQueue.close();
+   * this.outputQueue.clear(); // free anything left behind on abort
+   * ```
+   */
+  clear(): void {
+    if (this.queue.length === 0) {
+      return;
+    }
+    const pending = this.queue.splice(0);
+    if (this.disposeItem) {
+      for (const item of pending) {
+        this.disposeItem(item);
+      }
+    }
   }
 }

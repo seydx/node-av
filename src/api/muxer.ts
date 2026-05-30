@@ -2597,9 +2597,13 @@ export class Muxer implements AsyncDisposable, Disposable {
       // Create new dictionary with filtered entries
       const metadata = Dictionary.fromObject(filteredEntries);
 
-      // Set metadata to format context
-      // This will copy the dictionary content via av_dict_copy
-      this.formatContext.metadata = metadata;
+      // Set metadata to format context. The setter copies the content via
+      // av_dict_copy, so the local dictionary must be freed afterwards.
+      try {
+        this.formatContext.metadata = metadata;
+      } finally {
+        metadata.free();
+      }
     }
 
     this.containerMetadataCopied = true;
