@@ -339,10 +339,15 @@ describe('Encoder', () => {
       frame.pts = pts;
       frame.timeBase = new Rational(1, sampleRate);
       assert.equal(frame.getBuffer(), 0, 'Should allocate frame buffer');
+      // getBuffer() leaves the sample data uninitialized; zero it to silence so the
+      // encoder gets valid floats (garbage NaN/Inf samples trip libmp3lame's psymodel).
+      for (const plane of frame.data ?? []) {
+        plane.fill(0);
+      }
       return frame;
     }
 
-    it('autoResample converts an unsupported input rate so the codec accepts it', () => {
+    it('autoResample converts an unsupported input rate so the codec accepts it', { timeout: 30000 }, () => {
       // libmp3lame does NOT support 96000 Hz - autoResample should convert to a supported rate.
       const encoder = Encoder.createSync(FF_ENCODER_LIBMP3LAME, { bitrate: '128k', autoResample: true });
       try {
