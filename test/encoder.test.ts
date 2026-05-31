@@ -8,6 +8,7 @@ import {
   AV_SAMPLE_FMT_FLTP,
   Encoder,
   FF_ENCODER_AAC,
+  FF_ENCODER_LIBMP3LAME,
   FF_ENCODER_LIBX264,
   FF_ENCODER_MJPEG,
   HardwareContext,
@@ -326,6 +327,55 @@ describe('Encoder', () => {
       }
 
       encoder.close();
+    });
+
+    function makeAudioFrame(sampleRate: number, pts: bigint): Frame {
+      const frame = new Frame();
+      frame.alloc();
+      frame.nbSamples = 1152;
+      frame.sampleRate = sampleRate;
+      frame.format = AV_SAMPLE_FMT_FLTP;
+      frame.channelLayout = AV_CHANNEL_LAYOUT_STEREO;
+      frame.pts = pts;
+      frame.timeBase = new Rational(1, sampleRate);
+      assert.equal(frame.getBuffer(), 0, 'Should allocate frame buffer');
+      return frame;
+    }
+
+    it('autoResample converts an unsupported input rate so the codec accepts it', () => {
+      // libmp3lame does NOT support 96000 Hz - autoResample should convert to a supported rate.
+      const encoder = Encoder.createSync(FF_ENCODER_LIBMP3LAME, { bitrate: '128k', autoResample: true });
+      try {
+        let packets = 0;
+        for (let i = 0; i < 10; i++) {
+          using frame = makeAudioFrame(96000, BigInt(i * 1152));
+          for (const p of encoder.encodeAllSync(frame)) {
+            packets++;
+            p.free();
+          }
+        }
+        encoder.flushSync();
+        let pkt;
+        while ((pkt = encoder.receiveSync())) {
+          packets++;
+          pkt.free();
+        }
+
+        assert.ok(packets > 0, 'should produce MP3 packets from a 96 kHz input');
+        assert.equal(encoder.getCodecContext()?.sampleRate, 48000, 'encoder should have resampled to a supported rate');
+      } finally {
+        encoder.close();
+      }
+    });
+
+    it('throws a descriptive error for an unsupported input rate when autoResample is off (default)', () => {
+      const encoder = Encoder.createSync(FF_ENCODER_LIBMP3LAME, { bitrate: '128k' });
+      try {
+        using frame = makeAudioFrame(96000, 0n);
+        assert.throws(() => encoder.encodeSync(frame), /autoResample|does not support/i);
+      } finally {
+        encoder.close();
+      }
     });
 
     it('should handle null packets gracefully (async)', async () => {

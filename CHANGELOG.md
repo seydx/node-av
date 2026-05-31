@@ -41,6 +41,10 @@ FilterPreset.chain()
 
 ### Added
 
+#### `Encoder` audio auto-resampling (`autoResample`)
+
+New `autoResample` option (default `false`) on `Encoder.create()`/`createSync()`. When enabled, the encoder transparently converts incoming audio to the nearest codec-supported sample rate, sample format, and channel layout — e.g. a 96 kHz microphone feeding libmp3lame (which only supports up to 48 kHz), or packed `s16` feeding AAC (which needs planar `fltp`). When disabled, an unsupported input now raises a descriptive error naming the mismatch.
+
 #### `Scaler` — hardware-aware image scale / crop / convert / encode
 
 High-level `Scaler` (from `node-av/api`) that scales, crops, and converts decoded frames to raw pixel buffers or JPEG/PNG. Pools its contexts, GPU graphs, and encoders for the detection/thumbnail/snapshot workload; hardware frames are processed on the GPU.
