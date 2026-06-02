@@ -45,6 +45,10 @@ FilterPreset.chain()
 
 New `autoResample` option (default `false`) on `Encoder.create()`/`createSync()`. When enabled, the encoder transparently converts incoming audio to the nearest codec-supported sample rate, sample format, and channel layout — e.g. a 96 kHz microphone feeding libmp3lame (which only supports up to 48 kHz), or packed `s16` feeding AAC (which needs planar `fltp`). When disabled, an unsupported input now raises a descriptive error naming the mismatch.
 
+#### `Frame` and `Packet` buffers now report their size to V8's garbage collector
+
+Native frame and packet buffers are reported to V8 via `napi_adjust_external_memory`, so the GC sees the real memory pressure of decoded/filtered/resampled/scaled/transferred/hardware-allocated frames and demuxed/decoded/encoded/filtered packets instead of just the tiny JS wrapper. Objects abandoned without an explicit `close()`/`using`/`free()` are now reclaimed far sooner — in a decode-and-drop loop the steady-state RSS dropped from ~2.7 GB to ~0.6 GB. Explicit disposal remains the deterministic path; this only lowers the watermark when you rely on the GC.
+
 #### `Scaler` — hardware-aware image scale / crop / convert / encode
 
 High-level `Scaler` (from `node-av/api`) that scales, crops, and converts decoded frames to raw pixel buffers or JPEG/PNG. Pools its contexts, GPU graphs, and encoders for the detection/thumbnail/snapshot workload; hardware frames are processed on the GPU.

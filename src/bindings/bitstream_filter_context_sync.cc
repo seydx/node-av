@@ -87,6 +87,11 @@ Napi::Value BitStreamFilterContext::ReceivePacketSync(const Napi::CallbackInfo& 
   // Direct synchronous call
   int ret = av_bsf_receive_packet(context_, packet->Get());
 
+  // The bitstream filter fills the packet's buffer internally; reconcile V8.
+  if (ret >= 0) {
+    packet->SyncExternalMemory(env);
+  }
+
   return Napi::Number::New(env, ret);
 }
 

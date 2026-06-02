@@ -292,8 +292,13 @@ Napi::Value Stream::GetAttachedPic(const Napi::CallbackInfo& info) {
   Packet* packet = UnwrapNativeObject<Packet>(env, packetObj, "Packet");
   
   // The packet constructor already allocates, so we just need to copy
-  av_packet_ref(packet->Get(), &stream_->attached_pic);
-  
+  int ret = av_packet_ref(packet->Get(), &stream_->attached_pic);
+
+  // Refs the attached picture's buffer into the JS packet; reconcile V8.
+  if (ret >= 0) {
+    packet->SyncExternalMemory(env);
+  }
+
   return packetObj;
 }
 

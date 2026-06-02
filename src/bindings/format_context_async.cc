@@ -186,6 +186,11 @@ public:
 
   void OnOK() override {
     Napi::HandleScope scope(Env());
+    // av_read_frame filled the packet's buffer on the worker thread; reconcile
+    // V8 accounting now that we are back on the JS thread.
+    if (result_ >= 0) {
+      packet_->SyncExternalMemory(Env());
+    }
     deferred_.Resolve(Napi::Number::New(Env(), result_));
   }
 

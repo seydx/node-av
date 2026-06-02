@@ -27,6 +27,11 @@ Napi::Value SoftwareScaleContext::ScaleFrameSync(const Napi::CallbackInfo& info)
   // Direct synchronous call
   int ret = sws_scale_frame(ctx_, dst->Get(), src->Get());
 
+  // sws_scale_frame auto-allocates the destination buffers; reconcile V8.
+  if (ret >= 0) {
+    dst->SyncExternalMemory(env);
+  }
+
   return Napi::Number::New(env, ret);
 }
 

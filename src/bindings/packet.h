@@ -18,6 +18,8 @@ public:
 
   AVPacket* Get() { return packet_; }
 
+  void SyncExternalMemory(napi_env env);
+
 private:
   friend class Stream;
   friend class SyncQueue;
@@ -25,6 +27,10 @@ private:
   static Napi::FunctionReference constructor;
 
   AVPacket* packet_ = nullptr;
+
+  // Bytes of native payload currently reported to V8 via
+  // napi_adjust_external_memory. Kept in sync by SyncExternalMemory().
+  int64_t reported_memory_ = 0;
 
   Napi::Value Alloc(const Napi::CallbackInfo& info);
   Napi::Value Free(const Napi::CallbackInfo& info);

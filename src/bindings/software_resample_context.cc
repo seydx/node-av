@@ -200,10 +200,16 @@ Napi::Value SoftwareResampleContext::ConvertFrame(const Napi::CallbackInfo& info
     }
   }
   
-  int ret = swr_convert_frame(ctx, 
+  int ret = swr_convert_frame(ctx,
     out ? out->Get() : nullptr,
     in ? in->Get() : nullptr);
-  
+
+  // swr_convert_frame auto-allocates the output buffers when out has none;
+  // reconcile V8's external-memory accounting for the destination frame.
+  if (ret >= 0 && out) {
+    out->SyncExternalMemory(env);
+  }
+
   return Napi::Number::New(env, ret);
 }
 

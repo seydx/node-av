@@ -98,6 +98,12 @@ Napi::Value CodecContext::ReceiveFrameSync(const Napi::CallbackInfo& info) {
   // Direct synchronous call
   int ret = avcodec_receive_frame(context_, frame->Get());
 
+  // Receiving fills the frame's buffers internally (no JS getBuffer call), so
+  // reconcile V8's external-memory accounting here.
+  if (ret >= 0) {
+    frame->SyncExternalMemory(env);
+  }
+
   return Napi::Number::New(env, ret);
 }
 
@@ -141,6 +147,11 @@ Napi::Value CodecContext::ReceivePacketSync(const Napi::CallbackInfo& info) {
 
   // Direct synchronous call
   int ret = avcodec_receive_packet(context_, packet->Get());
+
+  // Receiving fills the packet's buffer internally; reconcile V8 accounting.
+  if (ret >= 0) {
+    packet->SyncExternalMemory(env);
+  }
 
   return Napi::Number::New(env, ret);
 }

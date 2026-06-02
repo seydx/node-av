@@ -40,6 +40,11 @@ public:
   }
 
   void OnOK() override {
+    // The transfer allocated the destination's (software) buffers on the worker
+    // thread; reconcile V8 accounting now that we are back on the JS thread.
+    if (ret_ >= 0) {
+      dst_->SyncExternalMemory(Env());
+    }
     deferred_.Resolve(Napi::Number::New(Env(), ret_));
   }
 

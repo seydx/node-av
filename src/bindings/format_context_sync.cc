@@ -45,6 +45,11 @@ Napi::Value FormatContext::ReadFrameSync(const Napi::CallbackInfo& info) {
   // Decrement counter to signal read operation is complete
   active_read_operations_.fetch_sub(1);
 
+  // av_read_frame fills the packet's buffer internally; reconcile V8 accounting.
+  if (result >= 0) {
+    packet->SyncExternalMemory(env);
+  }
+
   return Napi::Number::New(env, result);
 }
 

@@ -46,6 +46,11 @@ public:
   }
 
   void OnOK() override {
+    // sws_scale_frame auto-allocated the destination buffers on the worker
+    // thread; reconcile V8 accounting now that we are back on the JS thread.
+    if (ret_ >= 0) {
+      dst_->SyncExternalMemory(Env());
+    }
     deferred_.Resolve(Napi::Number::New(Env(), ret_));
   }
 

@@ -149,6 +149,12 @@ public:
   }
 
   void OnOK() override {
+    // avcodec_receive_frame filled the frame's buffers on the worker thread;
+    // reconcile V8's external-memory accounting now that we are back on the JS
+    // thread with a valid env.
+    if (ret_ >= 0) {
+      frame_->SyncExternalMemory(Env());
+    }
     deferred_.Resolve(Napi::Number::New(Env(), ret_));
   }
 
@@ -271,6 +277,11 @@ public:
   }
 
   void OnOK() override {
+    // avcodec_receive_packet filled the packet's buffer on the worker thread;
+    // reconcile V8 accounting now that we are back on the JS thread.
+    if (ret_ >= 0) {
+      packet_->SyncExternalMemory(Env());
+    }
     deferred_.Resolve(Napi::Number::New(Env(), ret_));
   }
 

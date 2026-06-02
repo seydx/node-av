@@ -44,7 +44,37 @@ Packet::Packet(const Napi::CallbackInfo& info)
   // Constructor does nothing - user must explicitly call alloc()
 }
 
+// Sum the packet's native payload: its data buffer plus any side-data buffers.
+// Shared (ref'd) buffers are counted per-packet; that over-counts slightly
+// across refs but stays conservative, the right bias for a GC pressure signal.
+static int64_t PacketPayloadSize(AVPacket* packet) {
+  if (!packet) {
+    return 0;
+  }
+  int64_t total = packet->buf ? packet->buf->size : 0;
+  for (int i = 0; i < packet->side_data_elems; i++) {
+    total += packet->side_data[i].size;
+  }
+  return total;
+}
+
+void Packet::SyncExternalMemory(napi_env env) {
+  int64_t current = PacketPayloadSize(packet_);
+  int64_t delta = current - reported_memory_;
+  if (delta != 0) {
+    Napi::MemoryManagement::AdjustExternalMemory(env, delta);
+    reported_memory_ = current;
+  }
+}
+
 Packet::~Packet() {
+  // Release our share of V8's external-memory accounting before freeing the
+  // buffers. Runs during GC finalization; the env is still valid here, and
+  // napi_adjust_external_memory does not run JS so it is finalizer-safe.
+  if (reported_memory_ != 0) {
+    Napi::MemoryManagement::AdjustExternalMemory(Env(), -reported_memory_);
+    reported_memory_ = 0;
+  }
   av_packet_free(&packet_);
 }
 
@@ -60,12 +90,14 @@ Napi::Value Packet::Alloc(const Napi::CallbackInfo& info) {
   av_packet_free(&packet_);
 
   packet_ = pkt;
+  SyncExternalMemory(env);
   return env.Undefined();
 }
 
 Napi::Value Packet::Free(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   av_packet_free(&packet_);
+  SyncExternalMemory(env);
   return env.Undefined();
 }
 
@@ -88,6 +120,7 @@ Napi::Value Packet::Ref(const Napi::CallbackInfo& info) {
   }
   
   int ret = av_packet_ref(packet_, src->Get());
+  SyncExternalMemory(env);
   return Napi::Number::New(env, ret);
 }
 
@@ -97,7 +130,8 @@ Napi::Value Packet::Unref(const Napi::CallbackInfo& info) {
   if (packet_) {
     av_packet_unref(packet_);
   }
-  
+  SyncExternalMemory(env);
+
   return env.Undefined();
 }
 
@@ -117,6 +151,7 @@ Napi::Value Packet::Clone(const Napi::CallbackInfo& info) {
   Napi::Object newPacket = constructor.New({});
   Packet* wrapper = Napi::ObjectWrap<Packet>::Unwrap(newPacket);
   wrapper->packet_ = cloned;
+  wrapper->SyncExternalMemory(env);
 
   return newPacket;
 }
@@ -149,6 +184,7 @@ Napi::Value Packet::MakeRefcounted(const Napi::CallbackInfo& info) {
   }
   
   int ret = av_packet_make_refcounted(packet_);
+  SyncExternalMemory(env);
   return Napi::Number::New(env, ret);
 }
 
@@ -160,6 +196,7 @@ Napi::Value Packet::MakeWritable(const Napi::CallbackInfo& info) {
   }
   
   int ret = av_packet_make_writable(packet_);
+  SyncExternalMemory(env);
   return Napi::Number::New(env, ret);
 }
 
@@ -222,7 +259,8 @@ Napi::Value Packet::AddSideData(const Napi::CallbackInfo& info) {
     Napi::Error::New(env, std::string("Failed to add side data: ") + errbuf).ThrowAsJavaScriptException();
     return env.Undefined();
   }
-  
+
+  SyncExternalMemory(env);
   return Napi::Number::New(env, 0);
 }
 
@@ -248,6 +286,8 @@ Napi::Value Packet::NewSideData(const Napi::CallbackInfo& info) {
     return env.Undefined();
   }
   
+  SyncExternalMemory(env);
+
   // Return as Buffer that references the side data (not a copy)
   // Note: The buffer lifetime is tied to the packet
   return Napi::Buffer<uint8_t>::NewOrCopy(env, data, size, [](Napi::Env, uint8_t*) {
@@ -264,6 +304,7 @@ Napi::Value Packet::FreeSideData(const Napi::CallbackInfo& info) {
   }
 
   av_packet_free_side_data(packet_);
+  SyncExternalMemory(env);
   return env.Undefined();
 }
 
@@ -433,6 +474,8 @@ void Packet::SetData(const Napi::CallbackInfo& info, const Napi::Value& value) {
   
   // Copy data
   memcpy(packet_->data, buffer.Data(), size);
+
+  SyncExternalMemory(env);
 }
 
 Napi::Value Packet::GetIsKeyframe(const Napi::CallbackInfo& info) {

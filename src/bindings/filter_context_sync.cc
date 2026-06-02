@@ -53,6 +53,11 @@ Napi::Value FilterContext::BuffersinkGetFrameSync(const Napi::CallbackInfo& info
   // Direct synchronous call
   int ret = av_buffersink_get_frame(ctx, frame->Get());
 
+  // buffersink fills the frame's buffers internally; reconcile V8 accounting.
+  if (ret >= 0) {
+    frame->SyncExternalMemory(env);
+  }
+
   return Napi::Number::New(env, ret);
 }
 

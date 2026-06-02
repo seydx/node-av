@@ -96,6 +96,14 @@ public:
   }
 
   void OnOK() override {
+    // The bitstream filter filled the packet's buffer on the worker thread;
+    // reconcile V8 accounting now that we are back on the JS thread.
+    if (ret_ >= 0) {
+      Packet* wrapper = Napi::ObjectWrap<Packet>::Unwrap(packet_ref_.Value().As<Napi::Object>());
+      if (wrapper) {
+        wrapper->SyncExternalMemory(Env());
+      }
+    }
     deferred_.Resolve(Napi::Number::New(Env(), ret_));
   }
 

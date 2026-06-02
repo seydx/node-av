@@ -40,6 +40,11 @@ Napi::Value Frame::HwframeTransferDataSync(const Napi::CallbackInfo& info) {
   // Direct synchronous call
   int ret = av_hwframe_transfer_data(dst->frame_, frame_, flags);
 
+  // The transfer allocated the destination's (software) buffers; reconcile V8.
+  if (ret >= 0) {
+    dst->SyncExternalMemory(env);
+  }
+
   return Napi::Number::New(env, ret);
 }
 

@@ -86,7 +86,44 @@ Frame::Frame(const Napi::CallbackInfo& info)
   // Constructor does nothing - user must explicitly call alloc()
 }
 
+// Sum the sizes of every AVBufferRef backing this frame's data planes.
+// Shared (ref'd) buffers are counted per-frame; that over-counts slightly across
+// refs but stays conservative, which is the right bias for a GC pressure signal.
+static int64_t FrameBufferSize(AVFrame* frame) {
+  if (!frame) {
+    return 0;
+  }
+  int64_t total = 0;
+  for (int i = 0; i < AV_NUM_DATA_POINTERS; i++) {
+    if (frame->buf[i]) {
+      total += frame->buf[i]->size;
+    }
+  }
+  for (int i = 0; i < frame->nb_extended_buf; i++) {
+    if (frame->extended_buf && frame->extended_buf[i]) {
+      total += frame->extended_buf[i]->size;
+    }
+  }
+  return total;
+}
+
+void Frame::SyncExternalMemory(napi_env env) {
+  int64_t current = FrameBufferSize(frame_);
+  int64_t delta = current - reported_memory_;
+  if (delta != 0) {
+    Napi::MemoryManagement::AdjustExternalMemory(env, delta);
+    reported_memory_ = current;
+  }
+}
+
 Frame::~Frame() {
+  // Release our share of V8's external-memory accounting before freeing the
+  // buffers. Runs during GC finalization; the env is still valid here, and
+  // napi_adjust_external_memory does not run JS so it is finalizer-safe.
+  if (reported_memory_ != 0) {
+    Napi::MemoryManagement::AdjustExternalMemory(Env(), -reported_memory_);
+    reported_memory_ = 0;
+  }
   av_frame_free(&frame_);
 }
 
@@ -102,12 +139,14 @@ Napi::Value Frame::Alloc(const Napi::CallbackInfo& info) {
   av_frame_free(&frame_);
 
   frame_ = frame;
+  SyncExternalMemory(env);
   return env.Undefined();
 }
 
 Napi::Value Frame::Free(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   av_frame_free(&frame_);
+  SyncExternalMemory(env);
   return env.Undefined();
 }
 
@@ -130,6 +169,7 @@ Napi::Value Frame::Ref(const Napi::CallbackInfo& info) {
   }
   
   int ret = av_frame_ref(frame_, src->Get());
+  SyncExternalMemory(env);
   return Napi::Number::New(env, ret);
 }
 
@@ -139,7 +179,8 @@ Napi::Value Frame::Unref(const Napi::CallbackInfo& info) {
   if (frame_) {
     av_frame_unref(frame_);
   }
-  
+  SyncExternalMemory(env);
+
   return env.Undefined();
 }
 
@@ -159,6 +200,7 @@ Napi::Value Frame::Clone(const Napi::CallbackInfo& info) {
   Napi::Object newFrame = constructor.New({});
   Frame* wrapper = Napi::ObjectWrap<Frame>::Unwrap(newFrame);
   wrapper->frame_ = cloned;
+  wrapper->SyncExternalMemory(env);
 
   return newFrame;
 }
@@ -176,6 +218,7 @@ Napi::Value Frame::GetBuffer(const Napi::CallbackInfo& info) {
   }
   
   int ret = av_frame_get_buffer(frame_, align);
+  SyncExternalMemory(env);
   return Napi::Number::New(env, ret);
 }
 
@@ -192,6 +235,7 @@ Napi::Value Frame::MakeWritable(const Napi::CallbackInfo& info) {
   }
   
   int ret = av_frame_make_writable(frame_);
+  SyncExternalMemory(env);
   return Napi::Number::New(env, ret);
 }
 

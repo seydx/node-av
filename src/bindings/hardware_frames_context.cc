@@ -127,6 +127,13 @@ Napi::Value HardwareFramesContext::GetBuffer(const Napi::CallbackInfo& info) {
   }
   
   int ret = av_hwframe_get_buffer(ref, frame->Get(), flags);
+
+  // Allocates the frame's hardware (GPU) surface buffer; reconcile V8 so the
+  // GC releases abandoned hardware frames sooner.
+  if (ret >= 0) {
+    frame->SyncExternalMemory(env);
+  }
+
   return Napi::Number::New(env, ret);
 }
 

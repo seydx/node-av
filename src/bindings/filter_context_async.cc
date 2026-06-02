@@ -101,6 +101,11 @@ public:
   }
 
   void OnOK() override {
+    // buffersink filled the frame's buffers on the worker thread; reconcile V8
+    // accounting now that we are back on the JS thread.
+    if (ret_ >= 0) {
+      frame_->SyncExternalMemory(Env());
+    }
     deferred_.Resolve(Napi::Number::New(Env(), ret_));
   }
 
