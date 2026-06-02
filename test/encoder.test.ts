@@ -4,6 +4,7 @@ import { describe, it } from 'node:test';
 import {
   AVCOL_RANGE_JPEG,
   AV_CHANNEL_LAYOUT_STEREO,
+  AV_CHANNEL_ORDER_UNSPEC,
   AV_PIX_FMT_YUV420P,
   AV_SAMPLE_FMT_FLTP,
   Encoder,
@@ -378,6 +379,49 @@ describe('Encoder', () => {
       try {
         using frame = makeAudioFrame(96000, 0n);
         assert.throws(() => encoder.encodeSync(frame), /autoResample|does not support/i);
+      } finally {
+        encoder.close();
+      }
+    });
+
+    it('accepts an unspecified channel layout (PCM) by normalizing it', () => {
+      // PCM/raw frames carry an unspecified layout (order UNSPEC, mask 0). The encoder
+      // must normalize it to a concrete native layout, otherwise avcodec_open2 rejects
+      // it with "Invalid argument". 44100 Hz fltp stereo needs no resampling here, so
+      // this isolates the layout handling.
+      const makeUnspecFrame = (pts: bigint): Frame => {
+        const frame = new Frame();
+        frame.alloc();
+        frame.nbSamples = 1024;
+        frame.sampleRate = 44100;
+        frame.format = AV_SAMPLE_FMT_FLTP;
+        frame.channelLayout = { order: AV_CHANNEL_ORDER_UNSPEC, nbChannels: 2, mask: 0n };
+        frame.pts = pts;
+        frame.timeBase = new Rational(1, 44100);
+        assert.equal(frame.getBuffer(), 0, 'Should allocate frame buffer');
+        for (const plane of frame.data ?? []) {
+          plane.fill(0);
+        }
+        return frame;
+      };
+
+      const encoder = Encoder.createSync(FF_ENCODER_AAC, { bitrate: '128k' });
+      try {
+        let packets = 0;
+        for (let i = 0; i < 10; i++) {
+          using frame = makeUnspecFrame(BigInt(i * 1024));
+          for (const p of encoder.encodeAllSync(frame)) {
+            packets++;
+            p.free();
+          }
+        }
+        encoder.flushSync();
+        let pkt;
+        while ((pkt = encoder.receiveSync())) {
+          packets++;
+          pkt.free();
+        }
+        assert.ok(packets > 0, 'should encode frames carrying an unspecified layout');
       } finally {
         encoder.close();
       }

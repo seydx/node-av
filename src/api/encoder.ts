@@ -1,5 +1,6 @@
 /* eslint-disable @stylistic/indent-binary-ops */
 import {
+  AV_CHANNEL_ORDER_UNSPEC,
   AV_CODEC_CAP_ENCODER_REORDERED_OPAQUE,
   AV_CODEC_CAP_PARAM_CHANGE,
   AV_CODEC_FLAG_COPY_OPAQUE,
@@ -25,7 +26,7 @@ import { Frame } from '../lib/frame.js';
 import { Packet } from '../lib/packet.js';
 import { Rational } from '../lib/rational.js';
 import { SoftwareResampleContext } from '../lib/software-resample-context.js';
-import { avGetSampleFmtName, avRescaleQ } from '../lib/utilities.js';
+import { avChannelLayoutDefault, avGetSampleFmtName, avRescaleQ } from '../lib/utilities.js';
 import { AudioFrameBuffer } from './audio-frame-buffer.js';
 import { FRAME_THREAD_QUEUE_SIZE, PACKET_THREAD_QUEUE_SIZE } from './constants.js';
 import { AsyncQueue } from './utilities/async-queue.js';
@@ -294,6 +295,7 @@ export class Encoder implements Disposable {
   private autoResample: boolean;
   private audioResampler?: SoftwareResampleContext;
   private resampledFrame?: Frame;
+  private audioInputLayout?: ChannelLayout;
 
   // Worker pattern for push-based processing
   private inputQueue: AsyncQueue<Frame>;
@@ -926,6 +928,12 @@ export class Encoder implements Disposable {
     this.initializePromise ??= this.initialize(frame);
     await this.initializePromise;
 
+    // Give an unspecified-layout frame the concrete native layout the codec was
+    // opened with (and the resampler configured for), so both accept it.
+    if (this.audioInputLayout) {
+      frame.channelLayout = this.audioInputLayout;
+    }
+
     // Resample audio to the codec's format first
     const input = this.audioResampler ? this.resampleAudio(frame) : frame;
 
@@ -1000,6 +1008,12 @@ export class Encoder implements Disposable {
     // Open encoder if not already done
     if (!this.initialized) {
       this.initializeSync(frame);
+    }
+
+    // Give an unspecified-layout frame the concrete native layout the codec was
+    // opened with (and the resampler configured for), so both accept it.
+    if (this.audioInputLayout) {
+      frame.channelLayout = this.audioInputLayout;
     }
 
     // Resample audio to the codec's format first
@@ -2266,7 +2280,16 @@ export class Encoder implements Disposable {
 
     const inRate = frame.sampleRate;
     const inFmt = frame.format as AVSampleFormat;
-    const inLayout = frame.channelLayout;
+
+    // Codec open and swr both need a concrete layout. PCM/raw frames often carry
+    // an unspecified layout (order UNSPEC, mask 0); normalize it to the canonical
+    // native layout and re-apply it to each incoming frame (see encode()) so it
+    // matches the opened codec context / resampler input.
+    let inLayout = frame.channelLayout;
+    if (inLayout.order === AV_CHANNEL_ORDER_UNSPEC) {
+      inLayout = avChannelLayoutDefault(inLayout.nbChannels);
+      this.audioInputLayout = inLayout;
+    }
 
     const targetRate = pickSupportedRate(inRate, this.codec.supportedSamplerates);
     const targetFmt = pickSupportedFormat(inFmt, this.codec.sampleFormats);
