@@ -79,6 +79,7 @@ Napi::Object Utilities::Init(Napi::Env env, Napi::Object exports) {
 
   // Channel layout utilities
   exports.Set("avChannelLayoutDescribe", Napi::Function::New(env, ChannelLayoutDescribe));
+  exports.Set("avChannelLayoutDefault", Napi::Function::New(env, ChannelLayoutDefault));
 
   // SDP utilities
   exports.Set("avSdpCreate", Napi::Function::New(env, SdpCreate));
@@ -1435,12 +1436,33 @@ Napi::Value Utilities::ChannelLayoutDescribe(const Napi::CallbackInfo& info) {
   // Describe the channel layout
   char buf[256];
   int ret = av_channel_layout_describe(&ch_layout, buf, sizeof(buf));
-  
+
   if (ret < 0) {
     return env.Null();
   }
-  
+
   return Napi::String::New(env, buf);
+}
+
+Napi::Value Utilities::ChannelLayoutDefault(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+  if (info.Length() < 1 || !info[0].IsNumber()) {
+    Napi::TypeError::New(env, "Expected number of channels").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  int nb_channels = info[0].As<Napi::Number>().Int32Value();
+
+  AVChannelLayout ch_layout;
+  memset(&ch_layout, 0, sizeof(AVChannelLayout));
+  av_channel_layout_default(&ch_layout, nb_channels);
+
+  Napi::Object result = Napi::Object::New(env);
+  result.Set("order", Napi::Number::New(env, static_cast<int>(ch_layout.order)));
+  result.Set("nbChannels", Napi::Number::New(env, ch_layout.nb_channels));
+  result.Set("mask", Napi::BigInt::New(env, ch_layout.u.mask));
+  return result;
 }
 
 // === SDP utilities ===

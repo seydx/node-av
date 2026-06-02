@@ -1257,6 +1257,30 @@ export function avChannelLayoutDescribe(channelLayout: Partial<ChannelLayout>): 
 }
 
 /**
+ * Get the default channel layout for a given number of channels.
+ *
+ * Returns the canonical native layout FFmpeg uses for that channel count
+ * (e.g. 1 → mono, 2 → stereo, 6 → 5.1). Useful to turn an unspecified layout
+ * (order `AV_CHANNEL_ORDER_UNSPEC`, common for PCM) into a concrete one.
+ *
+ * Direct mapping to av_channel_layout_default().
+ *
+ * @param nbChannels - Number of channels
+ *
+ * @returns The default channel layout for that channel count
+ *
+ * @example
+ * ```typescript
+ * const stereo = avChannelLayoutDefault(2); // { order: 1, nbChannels: 2, mask: 3n }
+ * ```
+ *
+ * @see [av_channel_layout_default](https://ffmpeg.org/doxygen/7.1/group__lavu__audio__channels.html) - FFmpeg Doxygen
+ */
+export function avChannelLayoutDefault(nbChannels: number): ChannelLayout {
+  return bindings.avChannelLayoutDefault(nbChannels);
+}
+
+/**
  * Create SDP from format contexts.
  *
  * Creates an SDP (Session Description Protocol) string from format contexts.
