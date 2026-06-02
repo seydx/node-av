@@ -18,6 +18,8 @@ extern "C" {
 #include <libavutil/ffversion.h>
 #include <libavutil/intreadwrite.h>
 #include <libavutil/bprint.h>
+#include <libavutil/pixdesc.h>
+#include <libavcodec/avcodec.h>
 #include <libavformat/internal.h>
 }
 
@@ -80,6 +82,9 @@ Napi::Object Utilities::Init(Napi::Env env, Napi::Object exports) {
   // Channel layout utilities
   exports.Set("avChannelLayoutDescribe", Napi::Function::New(env, ChannelLayoutDescribe));
   exports.Set("avChannelLayoutDefault", Napi::Function::New(env, ChannelLayoutDefault));
+
+  // Pixel format negotiation
+  exports.Set("avcodecFindBestPixFmtOfList", Napi::Function::New(env, FindBestPixFmtOfList));
 
   // SDP utilities
   exports.Set("avSdpCreate", Napi::Function::New(env, SdpCreate));
@@ -1463,6 +1468,42 @@ Napi::Value Utilities::ChannelLayoutDefault(const Napi::CallbackInfo& info) {
   result.Set("nbChannels", Napi::Number::New(env, ch_layout.nb_channels));
   result.Set("mask", Napi::BigInt::New(env, ch_layout.u.mask));
   return result;
+}
+
+Napi::Value Utilities::FindBestPixFmtOfList(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+  if (info.Length() < 2 || !info[0].IsArray() || !info[1].IsNumber()) {
+    Napi::TypeError::New(env, "Expected (pixFmtList: number[], srcPixFmt: number)").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  Napi::Array list = info[0].As<Napi::Array>();
+  uint32_t n = list.Length();
+  if (n == 0) {
+    Napi::TypeError::New(env, "pixFmtList must not be empty").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  // avcodec_find_best_pix_fmt_of_list wants an AV_PIX_FMT_NONE-terminated array.
+  std::vector<AVPixelFormat> fmts;
+  fmts.reserve(n + 1);
+  for (uint32_t i = 0; i < n; i++) {
+    Napi::Value v = list[i];
+    fmts.push_back(static_cast<AVPixelFormat>(v.As<Napi::Number>().Int32Value()));
+  }
+  fmts.push_back(AV_PIX_FMT_NONE);
+
+  AVPixelFormat src = static_cast<AVPixelFormat>(info[1].As<Napi::Number>().Int32Value());
+
+  // Tell the picker whether the source carries alpha, so it prefers an
+  // alpha-capable target when the input has one.
+  const AVPixFmtDescriptor* desc = av_pix_fmt_desc_get(src);
+  int has_alpha = (desc && (desc->flags & AV_PIX_FMT_FLAG_ALPHA)) ? 1 : 0;
+
+  int loss = 0;
+  AVPixelFormat best = avcodec_find_best_pix_fmt_of_list(fmts.data(), src, has_alpha, &loss);
+  return Napi::Number::New(env, static_cast<int>(best));
 }
 
 // === SDP utilities ===

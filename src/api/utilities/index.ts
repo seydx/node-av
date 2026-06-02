@@ -4,6 +4,9 @@ export { AudioSampleUtils, type AudioSampleAllocation, type AudioSampleBufferSiz
 // Channel Layouts
 export { ChannelLayoutUtils } from './channel-layout.js';
 
+// Codec-format negotiation
+export { pickSupportedLayout, pickSupportedPixelFormat, pickSupportedRate, pickSupportedSampleFormat } from './codec-format.js';
+
 // Image
 export { ImageUtils, type ImageAllocation } from './image.js';
 

@@ -335,6 +335,7 @@ export interface NativeBinding {
   avSamplesGetBufferSize: (nbChannels: number, nbSamples: number, sampleFmt: AVSampleFormat, align: number) => { size: number; linesize: number } | number;
   avChannelLayoutDescribe: (channelLayout: Partial<ChannelLayout>) => string | null;
   avChannelLayoutDefault: (nbChannels: number) => ChannelLayout;
+  avcodecFindBestPixFmtOfList: (pixFmtList: AVPixelFormat[], srcPixFmt: AVPixelFormat) => AVPixelFormat;
   avSdpCreate: (contexts: NativeFormatContext[]) => string | null;
   dtsPredict: (packet: NativePacket, stream: NativeStream, state: DtsPredictState) => DtsPredictState;
 }
