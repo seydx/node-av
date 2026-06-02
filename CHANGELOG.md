@@ -45,6 +45,10 @@ FilterPreset.chain()
 
 New `autoResample` option (default `false`) on `Encoder.create()`/`createSync()`. When enabled, the encoder transparently converts incoming audio to the nearest codec-supported sample rate, sample format, and channel layout — e.g. a 96 kHz microphone feeding libmp3lame (which only supports up to 48 kHz), or packed `s16` feeding AAC (which needs planar `fltp`). When disabled, an unsupported input now raises a descriptive error naming the mismatch.
 
+#### `Encoder` video auto pixel-format conversion (`autoFormat`)
+
+New `autoFormat` option (default `false`) on `Encoder.create()`/`createSync()` — the video counterpart of `autoResample`. When enabled, the encoder transparently converts incoming video to a codec-supported pixel format via swscale — e.g. `rgb24` or `yuv444p` feeding libx264. The target is chosen with `avcodec_find_best_pix_fmt_of_list`, so it keeps as much of the source as possible (an RGB input picks `yuv444p` over `yuv420p`) instead of always falling back to the codec's first format. Resolution is never changed (the encoder already adopts the frame's dimensions) and hardware frames are left untouched (their format is negotiated through the hardware frames context). When disabled, an unsupported input now raises a descriptive error naming the mismatch. Also adds the `avcodecFindBestPixFmtOfList()` utility.
+
 #### `Decoder` audio output resampling (`resample`)
 
 New `resample` option on `Decoder.create()`/`createSync()` — the audio mirror of the encoder's `autoResample` and of `hwaccelOutputFormat` for video. When set, decoded audio frames are transparently converted to the requested `{ sampleRate, sampleFormat, channelLayout }` (any omitted field keeps the decoded value, and conversion is skipped when the source already matches). Unspecified PCM channel layouts are normalized to their canonical native layout automatically. Useful when a capture device delivers a rate you cannot control (e.g. avfoundation ignoring a microphone sample-rate request) and every downstream stage should still receive the rate you asked for. Also adds the `avChannelLayoutDefault()` utility.
