@@ -1,4 +1,5 @@
 import {
+  AV_CHANNEL_ORDER_UNSPEC,
   AV_CODEC_FLAG_COPY_OPAQUE,
   AV_FRAME_FLAG_CORRUPT,
   AV_NOPTS_VALUE,
@@ -19,14 +20,15 @@ import { FFmpegError } from '../lib/error.js';
 import { Frame } from '../lib/frame.js';
 import { Packet } from '../lib/packet.js';
 import { Rational } from '../lib/rational.js';
-import { avGcd, avInvQ, avMulQ, avRescaleDelta, avRescaleQ, avRescaleQRnd } from '../lib/utilities.js';
+import { SoftwareResampleContext } from '../lib/software-resample-context.js';
+import { avChannelLayoutDefault, avGcd, avInvQ, avMulQ, avRescaleDelta, avRescaleQ, avRescaleQRnd } from '../lib/utilities.js';
 import { FRAME_THREAD_QUEUE_SIZE, PACKET_THREAD_QUEUE_SIZE } from './constants.js';
 import { AsyncQueue } from './utilities/async-queue.js';
 import { Scheduler } from './utilities/scheduler.js';
 
-import type { AVCodecID, AVPixelFormat, AVThreadType, DecoderOptionsFor, EOFSignal, FFDecoderCodec } from '../constants/index.js';
+import type { AVCodecID, AVPixelFormat, AVSampleFormat, AVThreadType, DecoderOptionsFor, EOFSignal, FFDecoderCodec } from '../constants/index.js';
 import type { Stream } from '../lib/stream.js';
-import type { IRational } from '../lib/types.js';
+import type { ChannelLayout, IRational } from '../lib/types.js';
 import type { Encoder } from './encoder.js';
 import type { FilterAPI } from './filter.js';
 import type { HardwareContext } from './hardware.js';
@@ -97,6 +99,29 @@ export interface DecoderOptions<C = unknown> {
    * @default false
    */
   applyCropping?: boolean;
+
+  /**
+   * Resample decoded audio to a target format (audio only).
+   *
+   * When set, decoded audio frames are transparently converted to the requested
+   * sample rate, sample format, and/or channel layout before they are returned —
+   * the audio mirror of `hwaccelOutputFormat`. Any omitted field keeps the
+   * decoded value, and conversion is skipped entirely when the source already
+   * matches the target. Useful when a capture device delivers a rate you cannot
+   * control (e.g. avfoundation ignoring a microphone sample-rate request) and you
+   * want every downstream stage to receive the rate you asked for.
+   *
+   * @example
+   * ```typescript
+   * // Guarantee 48 kHz frames regardless of the device's actual rate
+   * const decoder = await Decoder.create(stream, { resample: { sampleRate: 48000 } });
+   * ```
+   */
+  resample?: {
+    sampleRate?: number;
+    sampleFormat?: AVSampleFormat;
+    channelLayout?: ChannelLayout;
+  };
 
   /**
    * Number of threads to use for decoding.
@@ -198,6 +223,16 @@ export class Decoder implements Disposable {
   // Audio-specific frame tracking
   private lastFrameSampleRate = 0;
   private lastFilterInRescaleDelta = AV_NOPTS_VALUE;
+
+  // Audio output resampling (DecoderOptions.resample)
+  private audioResampler?: SoftwareResampleContext;
+  private resampledFrame?: Frame;
+  private resampleTarget?: { rate: number; fmt: AVSampleFormat; layout: ChannelLayout };
+  // When the decoded layout is unspecified (e.g. PCM), the concrete native layout
+  // applied to each input frame so swr's input matches its configuration.
+  private resampleInputLayout?: ChannelLayout;
+  private audioResamplerSetup = false;
+  private audioResamplerDrained = false;
 
   // Worker pattern for push-based processing
   private inputQueue: AsyncQueue<Packet>;
@@ -1423,6 +1458,14 @@ export class Decoder implements Disposable {
       // Handles timestamp extrapolation, sample rate changes, and duration calculation
       if (this.codecContext.codecType === AVMEDIA_TYPE_AUDIO) {
         this.processAudioFrame(this.frame);
+
+        if (!this.audioResamplerSetup) {
+          this.setupAudioResampler(this.frame);
+        }
+        if (this.audioResampler) {
+          // null = resampler buffered the input without emitting; caller feeds more
+          return this.resampleAudioClone(this.frame);
+        }
       }
 
       // Got a frame, clone it for the user
@@ -1435,6 +1478,14 @@ export class Decoder implements Disposable {
       // Need more data
       return null;
     } else if (ret === AVERROR_EOF) {
+      // Flush any samples buffered inside the resampler before signaling EOF
+      if (this.audioResampler && !this.audioResamplerDrained) {
+        const drained = this.drainResamplerClone();
+        if (drained) {
+          return drained;
+        }
+        this.audioResamplerDrained = true;
+      }
       // End of stream
       return EOF;
     } else {
@@ -1530,6 +1581,14 @@ export class Decoder implements Disposable {
       // Handles timestamp extrapolation, sample rate changes, and duration calculation
       if (this.codecContext.codecType === AVMEDIA_TYPE_AUDIO) {
         this.processAudioFrame(this.frame);
+
+        if (!this.audioResamplerSetup) {
+          this.setupAudioResampler(this.frame);
+        }
+        if (this.audioResampler) {
+          // null = resampler buffered the input without emitting; caller feeds more
+          return this.resampleAudioClone(this.frame);
+        }
       }
 
       // Got a frame, clone it for the user
@@ -1542,6 +1601,14 @@ export class Decoder implements Disposable {
       // Need more data
       return null;
     } else if (ret === AVERROR_EOF) {
+      // Flush any samples buffered inside the resampler before signaling EOF
+      if (this.audioResampler && !this.audioResamplerDrained) {
+        const drained = this.drainResamplerClone();
+        if (drained) {
+          return drained;
+        }
+        this.audioResamplerDrained = true;
+      }
       // End of stream
       return EOF;
     } else {
@@ -1624,6 +1691,10 @@ export class Decoder implements Disposable {
     this.outputQueue?.clear();
 
     this.frame.free();
+    this.audioResampler?.[Symbol.dispose]();
+    this.audioResampler = undefined;
+    this.resampledFrame?.free();
+    this.resampledFrame = undefined;
     this.codecContext.freeContext();
 
     this.initialized = false;
@@ -2071,6 +2142,144 @@ export class Decoder implements Disposable {
     frame.pts = avRescaleQ(frame.pts, tb, tbFilter);
     frame.duration = BigInt(frame.nbSamples);
     frame.timeBase = new Rational(tbFilter.num, tbFilter.den);
+  }
+
+  /**
+   * Lazily configure the audio output resampler from the first decoded frame.
+   *
+   * Reads the source format from the frame, resolves the target from
+   * `options.resample` (omitted fields keep the source value), and builds a
+   * `SoftwareResampleContext` only when something actually differs. Runs once.
+   *
+   * @param frame - First decoded audio frame
+   *
+   * @throws {FFmpegError} If the resampler cannot be configured or initialized
+   *
+   * @internal
+   */
+  private setupAudioResampler(frame: Frame): void {
+    this.audioResamplerSetup = true;
+
+    const cfg = this.options.resample;
+    if (!cfg) {
+      return;
+    }
+
+    const inRate = frame.sampleRate;
+    const inFmt = frame.format as AVSampleFormat;
+
+    // swr requires a concrete layout on both sides. Decoded PCM frames often carry
+    // an unspecified layout (order UNSPEC, mask 0); normalize it to the canonical
+    // native layout and re-apply it to each input frame so swr's input matches.
+    let inLayout = frame.channelLayout;
+    if (inLayout.order === AV_CHANNEL_ORDER_UNSPEC) {
+      inLayout = avChannelLayoutDefault(inLayout.nbChannels);
+      this.resampleInputLayout = inLayout;
+    }
+
+    const targetRate = cfg.sampleRate ?? inRate;
+    const targetFmt = cfg.sampleFormat ?? inFmt;
+    const targetLayout = cfg.channelLayout ?? inLayout;
+
+    const needsResample = targetRate !== inRate || targetFmt !== inFmt || targetLayout.nbChannels !== inLayout.nbChannels;
+    if (!needsResample) {
+      this.resampleInputLayout = undefined;
+      return;
+    }
+
+    this.resampleTarget = { rate: targetRate, fmt: targetFmt, layout: targetLayout };
+    const swr = new SoftwareResampleContext();
+    FFmpegError.throwIfError(swr.allocSetOpts2(targetLayout, targetFmt, targetRate, inLayout, inFmt, inRate), 'Failed to configure audio resampler');
+    FFmpegError.throwIfError(swr.init(), 'Failed to initialize audio resampler');
+    this.audioResampler = swr;
+  }
+
+  /**
+   * Lazily allocate the reused resampler output frame.
+   *
+   * @returns The allocated output frame
+   *
+   * @internal
+   */
+  private getResampleFrame(): Frame {
+    if (!this.resampledFrame) {
+      this.resampledFrame = new Frame();
+      this.resampledFrame.alloc();
+    }
+    return this.resampledFrame;
+  }
+
+  /**
+   * Resample a decoded audio frame to the target format and clone it for the user.
+   *
+   * `swr_convert_frame` allocates/sizes the output buffer; the sample timestamp
+   * (carried in the frame's own timebase) is preserved, while `nb_samples` and
+   * `sample_rate` reflect the new rate. Returns null when the resampler buffered
+   * the input without emitting samples yet (caller should feed more).
+   *
+   * @param frame - Decoded source audio frame
+   *
+   * @returns Cloned resampled frame owned by the caller, or null if none emitted
+   *
+   * @throws {FFmpegError} If resampling fails
+   *
+   * @internal
+   */
+  private resampleAudioClone(frame: Frame): Frame | null {
+    // Give swr the concrete layout it was configured with when the source is unspecified.
+    if (this.resampleInputLayout) {
+      frame.channelLayout = this.resampleInputLayout;
+    }
+    const out = this.getResampleFrame();
+    out.unref();
+    out.format = this.resampleTarget!.fmt;
+    out.sampleRate = this.resampleTarget!.rate;
+    out.channelLayout = this.resampleTarget!.layout;
+    FFmpegError.throwIfError(this.audioResampler!.convertFrame(out, frame), 'Failed to resample audio frame');
+    if (out.nbSamples <= 0) {
+      return null;
+    }
+    // Keep the frame self-consistent: audio timebase is 1/sampleRate, so the
+    // output carries the target rate's timebase with the pts rescaled into it
+    // (and the duration in the same units), not the source frame's timebase.
+    const outTb = new Rational(1, this.resampleTarget!.rate);
+    out.timeBase = outTb;
+    out.pts = frame.pts === AV_NOPTS_VALUE ? AV_NOPTS_VALUE : avRescaleQ(frame.pts, frame.timeBase, outTb);
+    out.duration = BigInt(out.nbSamples);
+    const cloned = out.clone();
+    if (!cloned) {
+      throw new Error('Failed to clone resampled frame (out of memory)');
+    }
+    return cloned;
+  }
+
+  /**
+   * Drain samples buffered inside the resampler (rate-conversion delay) at EOF.
+   *
+   * @returns Cloned drained frame owned by the caller, or null when empty
+   *
+   * @throws {FFmpegError} If draining fails
+   *
+   * @internal
+   */
+  private drainResamplerClone(): Frame | null {
+    const out = this.getResampleFrame();
+    out.unref();
+    out.format = this.resampleTarget!.fmt;
+    out.sampleRate = this.resampleTarget!.rate;
+    out.channelLayout = this.resampleTarget!.layout;
+    const ret = this.audioResampler!.convertFrame(out, null);
+    if (ret < 0 || out.nbSamples <= 0) {
+      return null;
+    }
+    out.timeBase = new Rational(1, this.resampleTarget!.rate);
+    out.pts = AV_NOPTS_VALUE;
+    out.duration = BigInt(out.nbSamples);
+    const cloned = out.clone();
+    if (!cloned) {
+      throw new Error('Failed to clone resampled frame (out of memory)');
+    }
+    return cloned;
   }
 
   /**

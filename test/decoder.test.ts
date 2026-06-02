@@ -3,7 +3,8 @@ import { describe, it } from 'node:test';
 
 import { Decoder } from '../src/api/decoder.js';
 import { Demuxer } from '../src/api/demuxer.js';
-import { AV_CODEC_ID_H264, AV_PIX_FMT_YUV420P } from '../src/constants/constants.js';
+import { AV_CODEC_ID_H264, AV_PIX_FMT_YUV420P, AV_SAMPLE_FMT_FLTP } from '../src/constants/constants.js';
+import { AV_CHANNEL_LAYOUT_MONO } from '../src/constants/channel-layouts.js';
 import { FF_DECODER_AAC, FF_DECODER_H264 } from '../src/constants/decoders.js';
 import { Codec, Packet } from '../src/lib/index.js';
 import { decodePacket, decodePacketSync, getInputFile, prepareTestEnvironment } from './index.js';
@@ -11,6 +12,7 @@ import { decodePacket, decodePacketSync, getInputFile, prepareTestEnvironment } 
 prepareTestEnvironment();
 
 const inputFile = getInputFile('demux.mp4');
+const audioInputFile = getInputFile('audio.wav');
 
 describe('Decoder', () => {
   describe('create', () => {
@@ -1124,6 +1126,83 @@ describe('Decoder', () => {
         { name: 'AbortError' },
       );
       assert.ok(count >= 3);
+    });
+  });
+
+  // The DecoderOptions.resample audio output option (the decoder-side mirror of the
+  // encoder's autoResample). audio.wav is 44100 Hz stereo PCM with an *unspecified*
+  // channel layout, so these also exercise the unspecified→native layout
+  // normalization that swr requires.
+  describe('audio resample', () => {
+    it('converts every decoded frame to the requested sample rate (async)', async () => {
+      await using media = await Demuxer.open(audioInputFile);
+      const stream = media.audio();
+      assert.ok(stream, 'has an audio stream');
+      assert.equal(stream.codecpar.sampleRate, 44100, 'source is 44100 Hz');
+
+      using decoder = await Decoder.create(stream, { resample: { sampleRate: 48000 } });
+
+      let frames = 0;
+      for await (using frame of decoder.frames(media.packets(stream.index))) {
+        if (frame === null) continue; // trailing EOF marker
+        assert.equal(frame.sampleRate, 48000, `frame ${frames} is at the requested rate`);
+        frames++;
+      }
+
+      assert.ok(frames > 0, 'produced frames');
+    });
+
+    it('converts sample rate, format, and channel layout together', async () => {
+      await using media = await Demuxer.open(audioInputFile);
+      const stream = media.audio();
+      assert.ok(stream);
+
+      using decoder = await Decoder.create(stream, {
+        resample: { sampleRate: 16000, sampleFormat: AV_SAMPLE_FMT_FLTP, channelLayout: AV_CHANNEL_LAYOUT_MONO },
+      });
+
+      let frames = 0;
+      for await (using frame of decoder.frames(media.packets(stream.index))) {
+        if (frame === null) continue;
+        assert.equal(frame.sampleRate, 16000, 'rate converted');
+        assert.equal(frame.format, AV_SAMPLE_FMT_FLTP, 'format converted');
+        assert.equal(frame.channelLayout.nbChannels, 1, 'downmixed to mono');
+        frames++;
+      }
+      assert.ok(frames > 0);
+    });
+
+    it('is a no-op passthrough when the target already matches the source', async () => {
+      await using media = await Demuxer.open(audioInputFile);
+      const stream = media.audio();
+      assert.ok(stream);
+
+      // Request the source's own rate -> no resampler should be built.
+      using decoder = await Decoder.create(stream, { resample: { sampleRate: 44100 } });
+
+      let frames = 0;
+      for await (using frame of decoder.frames(media.packets(stream.index))) {
+        if (frame === null) continue;
+        assert.equal(frame.sampleRate, 44100);
+        frames++;
+      }
+      assert.ok(frames > 0);
+    });
+
+    it('works with the synchronous decode path', () => {
+      using media = Demuxer.openSync(audioInputFile);
+      const stream = media.audio();
+      assert.ok(stream);
+
+      using decoder = Decoder.createSync(stream, { resample: { sampleRate: 24000 } });
+
+      let frames = 0;
+      for (using frame of decoder.framesSync(media.packetsSync(stream.index))) {
+        if (frame === null) continue;
+        assert.equal(frame.sampleRate, 24000);
+        frames++;
+      }
+      assert.ok(frames > 0);
     });
   });
 });
