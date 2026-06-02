@@ -39,6 +39,19 @@ FilterPreset.chain()
   .build();
 ```
 
+#### `Decoder` `hwaccelOutputFormat` replaced by `rescale`
+
+The `hwaccelOutputFormat` decoder option was removed in favor of the new `rescale` option (see Added), which both downloads hardware frames to system memory **and** guarantees the final pixel format/size in one step. Unlike `hwaccelOutputFormat` (whose value had to be a format the hardware could transfer to directly — typically `nv12`), `rescale: { pixelFormat }` accepts any pixel format and converts on the CPU after the download, so it actually delivers the format you ask for across both hardware- and software-decoded streams.
+
+**Migration:**
+```typescript
+// Before
+const decoder = await Decoder.create(stream, { hardware: hw, hwaccelOutputFormat: AV_PIX_FMT_YUV420P });
+
+// After
+const decoder = await Decoder.create(stream, { hardware: hw, rescale: { pixelFormat: AV_PIX_FMT_YUV420P } });
+```
+
 ### Added
 
 #### `Encoder` audio auto-resampling (`autoResample`)
@@ -51,7 +64,11 @@ New `autoFormat` option (default `false`) on `Encoder.create()`/`createSync()` �
 
 #### `Decoder` audio output resampling (`resample`)
 
-New `resample` option on `Decoder.create()`/`createSync()` — the audio mirror of the encoder's `autoResample` and of `hwaccelOutputFormat` for video. When set, decoded audio frames are transparently converted to the requested `{ sampleRate, sampleFormat, channelLayout }` (any omitted field keeps the decoded value, and conversion is skipped when the source already matches). Unspecified PCM channel layouts are normalized to their canonical native layout automatically. Useful when a capture device delivers a rate you cannot control (e.g. avfoundation ignoring a microphone sample-rate request) and every downstream stage should still receive the rate you asked for. Also adds the `avChannelLayoutDefault()` utility.
+New `resample` option on `Decoder.create()`/`createSync()` — the audio mirror of the encoder's `autoResample` and of `rescale` for video. When set, decoded audio frames are transparently converted to the requested `{ sampleRate, sampleFormat, channelLayout }` (any omitted field keeps the decoded value, and conversion is skipped when the source already matches). Unspecified PCM channel layouts are normalized to their canonical native layout automatically. Useful when a capture device delivers a rate you cannot control (e.g. avfoundation ignoring a microphone sample-rate request) and every downstream stage should still receive the rate you asked for. Also adds the `avChannelLayoutDefault()` utility.
+
+#### `Decoder` video output rescaling (`rescale`)
+
+New `rescale` option on `Decoder.create()`/`createSync()` — the video mirror of `resample`. When set, decoded video frames are transparently converted to the requested `{ width, height, pixelFormat }` (any omitted field keeps the decoded value, and conversion is skipped when the source already matches). Hardware frames are automatically transferred to a supported software format first and then converted, so a single option normalizes both hardware- and software-decoded streams; software frames are converted directly. Hardware frames are left on the GPU (zero-copy) when `rescale` is not set. This **replaces** the former `hwaccelOutputFormat` (see Breaking Changes) — `rescale: { pixelFormat }` both downloads hardware frames and guarantees the format. Useful to normalize a heterogeneous set of sources (e.g. RTSP cameras each delivering a different pixel format) so every downstream stage receives a uniform format/size.
 
 #### `Frame` and `Packet` buffers now report their size to V8's garbage collector
 

@@ -1164,11 +1164,9 @@ export class BitStreamFilterAPI implements Disposable {
 
     this.isClosed = true;
 
-    // Close queues
     this.inputQueue.close();
     this.outputQueue.close();
 
-    // Free any packets left buffered on an aborted/early-closed pipeline.
     this.inputQueue.clear();
     this.outputQueue.clear();
 

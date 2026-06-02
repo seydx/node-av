@@ -3,7 +3,8 @@ import { describe, it } from 'node:test';
 
 import { Decoder } from '../src/api/decoder.js';
 import { Demuxer } from '../src/api/demuxer.js';
-import { AV_CODEC_ID_H264, AV_PIX_FMT_YUV420P, AV_SAMPLE_FMT_FLTP } from '../src/constants/constants.js';
+import { HardwareContext } from '../src/api/hardware.js';
+import { AV_CODEC_ID_H264, AV_PIX_FMT_RGB24, AV_PIX_FMT_YUV420P, AV_PIX_FMT_YUV444P, AV_SAMPLE_FMT_FLTP } from '../src/constants/constants.js';
 import { AV_CHANNEL_LAYOUT_MONO } from '../src/constants/channel-layouts.js';
 import { FF_DECODER_AAC, FF_DECODER_H264 } from '../src/constants/decoders.js';
 import { Codec, Packet } from '../src/lib/index.js';
@@ -404,17 +405,17 @@ describe('Decoder', () => {
   });
 
   describe('options', () => {
-    it('should create decoder with hwaccelOutputFormat option', async () => {
+    it('should create decoder with rescale option', async () => {
       const media = await Demuxer.open(inputFile);
       const videoStream = media.video();
       assert.ok(videoStream);
 
-      // Test with hwaccelOutputFormat option (won't use HW acceleration without hardware context)
+      // Test with rescale option (software frames are converted directly)
       const decoder = await Decoder.create(videoStream, {
-        hwaccelOutputFormat: AV_PIX_FMT_YUV420P,
+        rescale: { pixelFormat: AV_PIX_FMT_YUV420P },
       });
 
-      assert.ok(decoder, 'Should create decoder with hwaccelOutputFormat');
+      assert.ok(decoder, 'Should create decoder with rescale');
 
       decoder.close();
       await media.close();
@@ -471,7 +472,7 @@ describe('Decoder', () => {
       assert.ok(videoStream);
 
       const decoder = await Decoder.create(videoStream, {
-        hwaccelOutputFormat: AV_PIX_FMT_YUV420P,
+        rescale: { pixelFormat: AV_PIX_FMT_YUV420P },
         forcedFramerate: { num: 25, den: 1 },
         sarOverride: { num: 1, den: 1 },
         applyCropping: true,
@@ -1203,6 +1204,111 @@ describe('Decoder', () => {
         frames++;
       }
       assert.ok(frames > 0);
+    });
+  });
+
+  describe('video rescale', () => {
+    it('converts every decoded frame to the requested pixel format and size (async)', async () => {
+      await using media = await Demuxer.open(inputFile);
+      const stream = media.video();
+      assert.ok(stream, 'has a video stream');
+
+      using decoder = await Decoder.create(stream, { rescale: { width: 320, height: 240, pixelFormat: AV_PIX_FMT_RGB24 } });
+
+      let frames = 0;
+      for await (using frame of decoder.frames(media.packets(stream.index))) {
+        if (frame === null) continue; // trailing EOF marker
+        assert.equal(frame.width, 320, `frame ${frames} width`);
+        assert.equal(frame.height, 240, `frame ${frames} height`);
+        assert.equal(frame.format, AV_PIX_FMT_RGB24, `frame ${frames} pixel format`);
+        frames++;
+      }
+      assert.ok(frames > 0, 'produced frames');
+    });
+
+    it('rescales size only, keeping the source pixel format', async () => {
+      await using media = await Demuxer.open(inputFile);
+      const stream = media.video();
+      assert.ok(stream);
+
+      // demux.mp4 decodes to yuv444p; a size-only rescale must keep that format.
+      using decoder = await Decoder.create(stream, { rescale: { width: 160, height: 120 } });
+
+      let frames = 0;
+      for await (using frame of decoder.frames(media.packets(stream.index))) {
+        if (frame === null) continue;
+        assert.equal(frame.width, 160);
+        assert.equal(frame.height, 120);
+        assert.equal(frame.format, AV_PIX_FMT_YUV444P, 'pixel format unchanged');
+        frames++;
+      }
+      assert.ok(frames > 0);
+    });
+
+    it('is a no-op passthrough when the target already matches the source', async () => {
+      await using media = await Demuxer.open(inputFile);
+      const stream = media.video();
+      assert.ok(stream);
+
+      // Request the source's own format (yuv444p) -> no rescaler should be built.
+      using decoder = await Decoder.create(stream, { rescale: { pixelFormat: AV_PIX_FMT_YUV444P } });
+
+      let frames = 0;
+      for await (using frame of decoder.frames(media.packets(stream.index))) {
+        if (frame === null) continue;
+        assert.equal(frame.format, AV_PIX_FMT_YUV444P);
+        frames++;
+      }
+      assert.ok(frames > 0);
+    });
+
+    it('works with the synchronous decode path', () => {
+      using media = Demuxer.openSync(inputFile);
+      const stream = media.video();
+      assert.ok(stream);
+
+      using decoder = Decoder.createSync(stream, { rescale: { width: 64, height: 64, pixelFormat: AV_PIX_FMT_RGB24 } });
+
+      let frames = 0;
+      for (using frame of decoder.framesSync(media.packetsSync(stream.index))) {
+        if (frame === null) continue;
+        assert.equal(frame.width, 64);
+        assert.equal(frame.height, 64);
+        assert.equal(frame.format, AV_PIX_FMT_RGB24);
+        frames++;
+      }
+      assert.ok(frames > 0);
+    });
+
+    it('downloads and converts hardware frames (when hardware is available)', async () => {
+      const hw = HardwareContext.auto();
+      if (!hw) {
+        return; // no hardware on this machine - skip
+      }
+
+      try {
+        // bunny-30s.mp4 is yuv420p H.264 (hardware-decodable); demux.mp4 is yuv444p
+        // which VideoToolbox rejects, so use a 4:2:0 source here.
+        await using media = await Demuxer.open(getInputFile('bunny-30s.mp4'));
+        const stream = media.video();
+        assert.ok(stream);
+
+        // Hardware decode + rescale: frames must be transferred to system memory and
+        // converted to the requested format (a single option, regardless of backend).
+        using decoder = await Decoder.create(stream, { hardware: hw, rescale: { pixelFormat: AV_PIX_FMT_YUV420P } });
+
+        let frames = 0;
+        for await (using frame of decoder.frames(media.packets(stream.index))) {
+          if (frame === null) continue;
+          assert.equal(frame.format, AV_PIX_FMT_YUV420P, 'converted to the requested format');
+          assert.ok(!frame.isHwFrame(), 'downloaded to a software frame');
+          frames++;
+          if (frames >= 5) break;
+        }
+        assert.ok(frames > 0, 'produced frames');
+      } finally {
+        hw.dispose();
+      }
     });
   });
 });

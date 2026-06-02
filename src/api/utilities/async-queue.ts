@@ -202,13 +202,11 @@ export class AsyncQueue<T> {
 
     this.closed = true;
 
-    // Wake up all waiting senders
     const senders = this.sendWaiters.splice(0);
     for (const sender of senders) {
       sender();
     }
 
-    // Wake up all waiting receivers (they will get null from empty queue check)
     const receivers = this.receiveWaiters.splice(0);
     for (const receiver of receivers) {
       receiver();

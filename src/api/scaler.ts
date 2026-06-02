@@ -426,16 +426,23 @@ export class Scaler implements Disposable {
     if (this.disposed) {
       return;
     }
+
     this.disposed = true;
+
     this.native.close();
+
     for (const entry of this.graphs.values()) {
       entry.filter[Symbol.dispose]();
     }
+
     this.graphs.clear();
+
     this.jpegPool?.close();
     this.jpegPool = undefined;
+
     this.pngPool?.close();
     this.pngPool = undefined;
+
     this.downloadFrame?.free();
     this.downloadFrame = undefined;
   }

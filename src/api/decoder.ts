@@ -2,7 +2,9 @@ import {
   AV_CHANNEL_ORDER_UNSPEC,
   AV_CODEC_FLAG_COPY_OPAQUE,
   AV_FRAME_FLAG_CORRUPT,
+  AV_HWFRAME_TRANSFER_DIRECTION_FROM,
   AV_NOPTS_VALUE,
+  AV_PIX_FMT_NONE,
   AV_ROUND_UP,
   AVERROR_DECODER_NOT_FOUND,
   AVERROR_EAGAIN,
@@ -12,6 +14,7 @@ import {
   AVMEDIA_TYPE_VIDEO,
   EOF,
   INT_MAX,
+  SWS_BILINEAR,
 } from '../constants/constants.js';
 import { CodecContext } from '../lib/codec-context.js';
 import { Codec } from '../lib/codec.js';
@@ -21,6 +24,7 @@ import { Frame } from '../lib/frame.js';
 import { Packet } from '../lib/packet.js';
 import { Rational } from '../lib/rational.js';
 import { SoftwareResampleContext } from '../lib/software-resample-context.js';
+import { SoftwareScaleContext } from '../lib/software-scale-context.js';
 import { avChannelLayoutDefault, avGcd, avInvQ, avMulQ, avRescaleDelta, avRescaleQ, avRescaleQRnd } from '../lib/utilities.js';
 import { FRAME_THREAD_QUEUE_SIZE, PACKET_THREAD_QUEUE_SIZE } from './constants.js';
 import { AsyncQueue } from './utilities/async-queue.js';
@@ -65,14 +69,6 @@ export interface DecoderOptions<C = unknown> {
   extraHWFrames?: number;
 
   /**
-   * Hardware frame output format.
-   *
-   * When set, hardware frames will be automatically transferred to this software pixel format.
-   * Useful when you need software frames for further processing but want to use hardware decoding.
-   */
-  hwaccelOutputFormat?: AVPixelFormat;
-
-  /**
    * Force constant framerate mode.
    *
    * When set, ignores all timestamps and generates frames at a constant rate.
@@ -105,11 +101,11 @@ export interface DecoderOptions<C = unknown> {
    *
    * When set, decoded audio frames are transparently converted to the requested
    * sample rate, sample format, and/or channel layout before they are returned —
-   * the audio mirror of `hwaccelOutputFormat`. Any omitted field keeps the
-   * decoded value, and conversion is skipped entirely when the source already
-   * matches the target. Useful when a capture device delivers a rate you cannot
-   * control (e.g. avfoundation ignoring a microphone sample-rate request) and you
-   * want every downstream stage to receive the rate you asked for.
+   * the audio mirror of {@link rescale}. Any omitted field keeps the decoded
+   * value, and conversion is skipped entirely when the source already matches the
+   * target. Useful when a capture device delivers a rate you cannot control (e.g.
+   * avfoundation ignoring a microphone sample-rate request) and you want every
+   * downstream stage to receive the rate you asked for.
    *
    * @example
    * ```typescript
@@ -121,6 +117,36 @@ export interface DecoderOptions<C = unknown> {
     sampleRate?: number;
     sampleFormat?: AVSampleFormat;
     channelLayout?: ChannelLayout;
+  };
+
+  /**
+   * Rescale decoded video to a target pixel format and/or size (video only).
+   *
+   * When set, decoded video frames are transparently converted to the requested
+   * pixel format and/or dimensions before they are returned — the video mirror of
+   * {@link resample}. Any omitted field keeps the decoded value, and conversion is
+   * skipped entirely when the source already matches the target.
+   *
+   * Hardware frames are automatically transferred to a supported software format
+   * first and then converted to the requested one; software frames are converted
+   * directly. Hardware frames are left untouched (kept on the GPU, zero-copy) when
+   * `rescale` is not set. This replaces the former `hwaccelOutputFormat` option:
+   * use `rescale: { pixelFormat }` to get decoded frames in a fixed software format.
+   *
+   * Useful to normalize a heterogeneous set of sources (e.g. RTSP cameras that each
+   * deliver a different pixel format) so every downstream stage receives a uniform
+   * format/size, regardless of whether a stream was hardware- or software-decoded.
+   *
+   * @example
+   * ```typescript
+   * // Normalize any source to yuv420p, whether it was hardware- or software-decoded
+   * const decoder = await Decoder.create(stream, { hardware: hw, rescale: { pixelFormat: AV_PIX_FMT_YUV420P } });
+   * ```
+   */
+  rescale?: {
+    width?: number;
+    height?: number;
+    pixelFormat?: AVPixelFormat;
   };
 
   /**
@@ -224,15 +250,18 @@ export class Decoder implements Disposable {
   private lastFrameSampleRate = 0;
   private lastFilterInRescaleDelta = AV_NOPTS_VALUE;
 
-  // Audio output resampling (DecoderOptions.resample)
+  // Audio output resampling
   private audioResampler?: SoftwareResampleContext;
   private resampledFrame?: Frame;
   private resampleTarget?: { rate: number; fmt: AVSampleFormat; layout: ChannelLayout };
-  // When the decoded layout is unspecified (e.g. PCM), the concrete native layout
-  // applied to each input frame so swr's input matches its configuration.
   private resampleInputLayout?: ChannelLayout;
   private audioResamplerSetup = false;
   private audioResamplerDrained = false;
+
+  // Video output rescaling
+  private videoScaler?: SoftwareScaleContext;
+  private scaledFrame?: Frame;
+  private hwTransferFormat?: AVPixelFormat;
 
   // Worker pattern for push-based processing
   private inputQueue: AsyncQueue<Packet>;
@@ -1686,15 +1715,21 @@ export class Decoder implements Disposable {
     this.inputQueue?.close();
     this.outputQueue?.close();
 
-    // Free any packets/frames left buffered on an aborted/early-closed pipeline.
     this.inputQueue?.clear();
     this.outputQueue?.clear();
 
     this.frame.free();
+
     this.audioResampler?.[Symbol.dispose]();
     this.audioResampler = undefined;
     this.resampledFrame?.free();
     this.resampledFrame = undefined;
+
+    this.videoScaler?.[Symbol.dispose]();
+    this.videoScaler = undefined;
+    this.scaledFrame?.free();
+    this.scaledFrame = undefined;
+
     this.codecContext.freeContext();
 
     this.initialized = false;
@@ -1946,36 +1981,21 @@ export class Decoder implements Disposable {
    * @internal
    */
   private processVideoFrame(frame: Frame): void {
-    // Hardware acceleration retrieve
-    // If hwaccel_output_format is set and frame is in hardware format, transfer to software format
-    if (this.options.hwaccelOutputFormat !== undefined && frame.isHwFrame()) {
-      const swFrame = new Frame();
-      swFrame.alloc();
-      swFrame.format = this.options.hwaccelOutputFormat;
-
-      // Transfer data from hardware to software frame
-      const ret = frame.hwframeTransferDataSync(swFrame, 0);
-      if (ret < 0) {
-        swFrame.free();
-        if (this.options.exitOnError) {
-          FFmpegError.throwIfError(ret, 'Failed to transfer hardware frame data');
+    // Video output rescaling (DecoderOptions.rescale). Replaces the former
+    // hwaccelOutputFormat: hardware frames are first transferred to a supported
+    // software format (swscale can't read GPU surfaces), then converted to the
+    // requested pixel format / size on the CPU. Hardware frames are left untouched
+    // (kept on the GPU) when rescale is not set.
+    if (this.options.rescale) {
+      if (frame.isHwFrame()) {
+        if (!this.transferHwFrameToSoftware(frame)) {
+          return; // transfer failed and exitOnError is off - leave the frame as-is
         }
-        return;
       }
-
-      // Copy properties from hw frame to sw frame
-      swFrame.copyProps(frame);
-
-      // Replace frame with software version (unref old, move ref)
-      frame.unref();
-      const refRet = frame.ref(swFrame);
-      swFrame.free();
-
-      if (refRet < 0) {
-        if (this.options.exitOnError) {
-          FFmpegError.throwIfError(refRet, 'Failed to reference software frame');
-        }
-        return;
+      // Only software frames can be converted with swscale; a still-hardware frame
+      // (transfer above is the only path to software) is left untouched.
+      if (!frame.isHwFrame()) {
+        this.rescaleVideoInPlace(frame);
       }
     }
 
@@ -2280,6 +2300,156 @@ export class Decoder implements Disposable {
       throw new Error('Failed to clone resampled frame (out of memory)');
     }
     return cloned;
+  }
+
+  /**
+   * Resolve (once, then cache) the software format to download hardware frames to.
+   *
+   * When `rescale.pixelFormat` is set and the frame's hardware frames context can
+   * transfer directly to it, that format is used so the subsequent swscale can be
+   * skipped entirely (when no resize is requested) or stay format-preserving. When
+   * it cannot, `AV_PIX_FMT_NONE` is returned so `av_hwframe_transfer_data` picks a
+   * supported format and the swscale handles the final conversion. Cached because
+   * the hardware frames context is stable for the lifetime of the decoder.
+   *
+   * @param frame - First hardware frame (used to read the hardware frames context)
+   *
+   * @returns The download format, or `AV_PIX_FMT_NONE` to let FFmpeg choose
+   *
+   * @internal
+   */
+  private resolveHwTransferFormat(frame: Frame): AVPixelFormat {
+    if (this.hwTransferFormat !== undefined) {
+      return this.hwTransferFormat;
+    }
+
+    let chosen: AVPixelFormat = AV_PIX_FMT_NONE;
+    const target = this.options.rescale?.pixelFormat;
+    const hwCtx = frame.hwFramesCtx;
+    if (target !== undefined && hwCtx) {
+      const formats = hwCtx.transferGetFormats(AV_HWFRAME_TRANSFER_DIRECTION_FROM);
+      if (Array.isArray(formats) && formats.includes(target)) {
+        chosen = target;
+      }
+    }
+
+    this.hwTransferFormat = chosen;
+    return chosen;
+  }
+
+  /**
+   * Transfer a hardware frame down to system memory, replacing it in place.
+   *
+   * The destination software format is the requested one when the GPU can transfer
+   * to it directly (see {@link resolveHwTransferFormat}), otherwise one chosen
+   * automatically by FFmpeg. The downloaded data replaces the hardware frame's
+   * contents so the rest of the pipeline operates on a software frame.
+   *
+   * @param frame - Hardware frame to download (modified in place)
+   *
+   * @returns True on success; false when the transfer failed and `exitOnError` is off
+   *
+   * @throws {FFmpegError} If the transfer fails and `exitOnError` is enabled
+   *
+   * @internal
+   */
+  private transferHwFrameToSoftware(frame: Frame): boolean {
+    const swFrame = new Frame();
+    swFrame.alloc();
+    // Transfer straight to the requested pixel format when the GPU supports it (so
+    // the later swscale can be skipped); otherwise let FFmpeg pick a supported one.
+    swFrame.format = this.resolveHwTransferFormat(frame);
+
+    const ret = frame.hwframeTransferDataSync(swFrame, 0);
+    if (ret < 0) {
+      swFrame.free();
+      if (this.options.exitOnError) {
+        FFmpegError.throwIfError(ret, 'Failed to transfer hardware frame data');
+      }
+      return false;
+    }
+
+    swFrame.copyProps(frame);
+    frame.unref();
+    const refRet = frame.ref(swFrame);
+    swFrame.free();
+
+    if (refRet < 0) {
+      if (this.options.exitOnError) {
+        FFmpegError.throwIfError(refRet, 'Failed to reference software frame');
+      }
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Lazily allocate the reused rescaler output frame.
+   *
+   * @returns The allocated output frame
+   *
+   * @internal
+   */
+  private getScaledFrame(): Frame {
+    if (!this.scaledFrame) {
+      this.scaledFrame = new Frame();
+      this.scaledFrame.alloc();
+    }
+    return this.scaledFrame;
+  }
+
+  /**
+   * Convert a (software) video frame to the requested `rescale` pixel format and/or
+   * size, replacing it in place.
+   *
+   * Each omitted target field keeps the source value, and the conversion is skipped
+   * entirely when the frame already matches. The swscale context is configured
+   * lazily from the first frame that needs conversion. `sws_scale_frame` copies the
+   * frame properties (timing, colorimetry, aspect ratio).
+   *
+   * @param frame - Software video frame to convert (modified in place)
+   *
+   * @throws {FFmpegError} If the rescaler fails to configure or convert and `exitOnError` is enabled
+   *
+   * @internal
+   */
+  private rescaleVideoInPlace(frame: Frame): void {
+    const srcW = frame.width;
+    const srcH = frame.height;
+    const srcFmt = frame.format as AVPixelFormat;
+    const dstW = this.options.rescale!.width ?? srcW;
+    const dstH = this.options.rescale!.height ?? srcH;
+    const dstFmt = this.options.rescale!.pixelFormat ?? srcFmt;
+
+    // Already in the requested shape - nothing to do.
+    if (dstW === srcW && dstH === srcH && dstFmt === srcFmt) {
+      return;
+    }
+
+    if (!this.videoScaler) {
+      const sws = new SoftwareScaleContext();
+      sws.getContext(srcW, srcH, srcFmt, dstW, dstH, dstFmt, SWS_BILINEAR);
+      FFmpegError.throwIfError(sws.initContext(), 'Failed to configure video rescaler');
+      this.videoScaler = sws;
+    }
+
+    const out = this.getScaledFrame();
+    out.unref();
+    out.format = dstFmt;
+    out.width = dstW;
+    out.height = dstH;
+    const ret = this.videoScaler.scaleFrameSync(out, frame);
+    if (ret < 0) {
+      if (this.options.exitOnError) {
+        FFmpegError.throwIfError(ret, 'Failed to rescale video frame');
+      }
+      return; // leave the original frame untouched on failure
+    }
+
+    // Move the converted result back into `frame` so the rest of processVideoFrame
+    // (and the caller) sees it (mirrors the hardware-transfer replace above).
+    frame.unref();
+    frame.ref(out);
   }
 
   /**

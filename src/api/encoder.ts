@@ -1786,33 +1786,28 @@ export class Encoder implements Disposable {
 
     this.isClosed = true;
 
-    // Close queues
     this.inputQueue.close();
     this.outputQueue.close();
 
-    // Free any frames/packets left buffered on an aborted/early-closed pipeline.
     this.inputQueue.clear();
     this.outputQueue.clear();
 
     this.packet.free();
-    this.codecContext.freeContext();
 
-    // Release the audio frame buffer (owns a native Frame + AudioFifo) used by
-    // fixed-frame-size audio encoders.
     this.audioFrameBuffer?.[Symbol.dispose]();
     this.audioFrameBuffer = undefined;
 
-    // Release the audio resampler and its reused output frame.
     this.audioResampler?.[Symbol.dispose]();
     this.audioResampler = undefined;
     this.resampledFrame?.free();
     this.resampledFrame = undefined;
 
-    // Release the video scaler and its reused output frame.
     this.videoScaler?.[Symbol.dispose]();
     this.videoScaler = undefined;
     this.scaledFrame?.free();
     this.scaledFrame = undefined;
+
+    this.codecContext.freeContext();
 
     this.initialized = false;
   }
