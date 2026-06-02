@@ -5,7 +5,10 @@ import {
   AVCOL_RANGE_JPEG,
   AV_CHANNEL_LAYOUT_STEREO,
   AV_CHANNEL_ORDER_UNSPEC,
+  AV_PIX_FMT_RGB24,
   AV_PIX_FMT_YUV420P,
+  AV_PIX_FMT_YUV422P,
+  AV_PIX_FMT_YUV444P,
   AV_SAMPLE_FMT_FLTP,
   Encoder,
   FF_ENCODER_AAC,
@@ -14,7 +17,7 @@ import {
   FF_ENCODER_MJPEG,
   HardwareContext,
 } from '../src/index.js';
-import { Frame, Rational } from '../src/lib/index.js';
+import { Frame, Rational, avcodecFindBestPixFmtOfList } from '../src/lib/index.js';
 import { encodeFrame, encodeFrameSync } from './index.js';
 
 // Check for JPEG magic bytes: SOI (FFD8) at the start and EOI (FFD9) at the end.
@@ -34,15 +37,20 @@ function createMjpegFrame(width: number, height: number): Frame {
   frame.timeBase = new Rational(1, 25);
   frame.getBuffer();
 
-  if (frame.data?.[0]) {
+  // Hoist the native data getter out of the loops (it allocates on every access).
+  const planes = frame.data;
+  if (planes?.[0]) {
+    const y = planes[0];
     for (let i = 0; i < width * height; i++) {
-      frame.data[0][i] = i % 256;
+      y[i] = i % 256;
     }
-    if (frame.data[1] && frame.data[2]) {
+    if (planes[1] && planes[2]) {
+      const u = planes[1];
+      const v = planes[2];
       const chromaSize = (width * height) / 4;
       for (let i = 0; i < chromaSize; i++) {
-        frame.data[1][i] = 128;
-        frame.data[2][i] = 128;
+        u[i] = 128;
+        v[i] = 128;
       }
     }
   }
@@ -212,18 +220,22 @@ describe('Encoder', () => {
       const ret = frame.getBuffer();
       assert.equal(ret, 0, 'Should allocate frame buffer');
 
-      // Fill with test data
-      if (frame.data?.[0]) {
+      // Fill with test data (hoist the native data getter out of the loops)
+      const planes = frame.data;
+      if (planes?.[0]) {
         // Y plane - gradient
+        const y = planes[0];
         for (let i = 0; i < 320 * 240; i++) {
-          frame.data[0][i] = i % 256;
+          y[i] = i % 256;
         }
         // U and V planes - gray
-        if (frame.data[1] && frame.data[2]) {
+        if (planes[1] && planes[2]) {
+          const u = planes[1];
+          const v = planes[2];
           const chromaSize = (320 * 240) / 4;
           for (let i = 0; i < chromaSize; i++) {
-            frame.data[1][i] = 128;
-            frame.data[2][i] = 128;
+            u[i] = 128;
+            v[i] = 128;
           }
         }
       }
@@ -254,18 +266,22 @@ describe('Encoder', () => {
       const ret = frame.getBuffer();
       assert.equal(ret, 0, 'Should allocate frame buffer');
 
-      // Fill with test data
-      if (frame.data?.[0]) {
+      // Fill with test data (hoist the native data getter out of the loops)
+      const planes = frame.data;
+      if (planes?.[0]) {
         // Y plane - gradient
+        const y = planes[0];
         for (let i = 0; i < 320 * 240; i++) {
-          frame.data[0][i] = i % 256;
+          y[i] = i % 256;
         }
         // U and V planes - gray
-        if (frame.data[1] && frame.data[2]) {
+        if (planes[1] && planes[2]) {
+          const u = planes[1];
+          const v = planes[2];
           const chromaSize = (320 * 240) / 4;
           for (let i = 0; i < chromaSize; i++) {
-            frame.data[1][i] = 128;
-            frame.data[2][i] = 128;
+            u[i] = 128;
+            v[i] = 128;
           }
         }
       }
@@ -527,6 +543,85 @@ describe('Encoder', () => {
       frame.timeBase = new Rational(1, 25);
 
       assert.doesNotThrow(() => encoder.encodeSync(frame));
+    });
+  });
+
+  describe('autoFormat', () => {
+    // RGB24 is not in libx264's supported pixel format list, so it exercises the
+    // pixel-format negotiation path (the input must be converted to planar YUV).
+    const makeRgbFrame = (pts: bigint): Frame => {
+      const frame = new Frame();
+      frame.alloc();
+      frame.width = 320;
+      frame.height = 240;
+      frame.format = AV_PIX_FMT_RGB24;
+      frame.pts = pts;
+      frame.timeBase = new Rational(1, 25);
+      assert.equal(frame.getBuffer(), 0, 'Should allocate frame buffer');
+      // Hoist the native data getter out of the loop (it marshals the plane buffers
+      // on every access); fill the single RGB plane with a gradient in one pass.
+      const plane = frame.data?.[0];
+      if (plane) {
+        for (let i = 0; i < 320 * 240 * 3; i++) {
+          plane[i] = i % 256;
+        }
+      }
+      return frame;
+    };
+
+    it('picks the least-loss supported format (rgb24 -> yuv444p)', () => {
+      // Naively picking the first supported format (yuv420p) would throw away chroma
+      // when a fuller format is available; avcodec_find_best_pix_fmt_of_list keeps it.
+      const best = avcodecFindBestPixFmtOfList([AV_PIX_FMT_YUV420P, AV_PIX_FMT_YUV422P, AV_PIX_FMT_YUV444P], AV_PIX_FMT_RGB24);
+      assert.equal(best, AV_PIX_FMT_YUV444P, 'should pick the full-chroma format for an RGB source');
+    });
+
+    it('throws a descriptive error on an unsupported pixel format when disabled (async)', async () => {
+      using encoder = await Encoder.create(FF_ENCODER_LIBX264, { bitrate: '500k' });
+      using frame = makeRgbFrame(0n);
+      await assert.rejects(() => encoder.encode(frame), /does not support the input pixel format \(rgb24\)/);
+    });
+
+    it('converts an unsupported pixel format to a codec-supported one when enabled (async)', async () => {
+      const encoder = await Encoder.create(FF_ENCODER_LIBX264, { bitrate: '500k', autoFormat: true });
+      try {
+        let packets = 0;
+        for (let i = 0; i < 10; i++) {
+          using frame = makeRgbFrame(BigInt(i));
+          for await (using _p of encoder.packets(frame)) {
+            packets++;
+          }
+        }
+        for await (using _p of encoder.packets(null)) {
+          packets++;
+        }
+        assert.ok(packets > 0, 'should encode frames whose pixel format needed conversion');
+      } finally {
+        encoder.close();
+      }
+    });
+
+    it('converts an unsupported pixel format to a codec-supported one when enabled (sync)', () => {
+      const encoder = Encoder.createSync(FF_ENCODER_LIBX264, { bitrate: '500k', autoFormat: true });
+      try {
+        let packets = 0;
+        for (let i = 0; i < 10; i++) {
+          using frame = makeRgbFrame(BigInt(i));
+          for (const p of encoder.encodeAllSync(frame)) {
+            packets++;
+            p.free();
+          }
+        }
+        encoder.flushSync();
+        let pkt;
+        while ((pkt = encoder.receiveSync())) {
+          packets++;
+          pkt.free();
+        }
+        assert.ok(packets > 0, 'should encode frames whose pixel format needed conversion');
+      } finally {
+        encoder.close();
+      }
     });
   });
 

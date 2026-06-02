@@ -17,6 +17,7 @@ import {
   AVMEDIA_TYPE_AUDIO,
   AVMEDIA_TYPE_VIDEO,
   EOF,
+  SWS_BILINEAR,
 } from '../constants/constants.js';
 import { CodecContext } from '../lib/codec-context.js';
 import { Codec } from '../lib/codec.js';
@@ -26,10 +27,12 @@ import { Frame } from '../lib/frame.js';
 import { Packet } from '../lib/packet.js';
 import { Rational } from '../lib/rational.js';
 import { SoftwareResampleContext } from '../lib/software-resample-context.js';
-import { avChannelLayoutDefault, avGetSampleFmtName, avRescaleQ } from '../lib/utilities.js';
+import { SoftwareScaleContext } from '../lib/software-scale-context.js';
+import { avChannelLayoutDefault, avGetPixFmtName, avGetSampleFmtName, avRescaleQ } from '../lib/utilities.js';
 import { AudioFrameBuffer } from './audio-frame-buffer.js';
 import { FRAME_THREAD_QUEUE_SIZE, PACKET_THREAD_QUEUE_SIZE } from './constants.js';
 import { AsyncQueue } from './utilities/async-queue.js';
+import { pickSupportedLayout, pickSupportedPixelFormat, pickSupportedRate, pickSupportedSampleFormat } from './utilities/codec-format.js';
 import { SchedulerControl } from './utilities/scheduler.js';
 import { parseBitrate } from './utils.js';
 
@@ -150,6 +153,24 @@ export interface EncoderOptions<C = unknown> {
   autoResample?: boolean;
 
   /**
+   * Automatically convert incoming video to a pixel format the codec supports.
+   *
+   * Video encoders only accept specific pixel formats (e.g. libx264 wants planar
+   * YUV like `yuv420p` and rejects `rgb24`). When `true`, the encoder transparently
+   * converts each frame to the least-loss supported pixel format via swscale (like
+   * `ffmpeg`'s automatic `format` filter), keeping the same resolution. When `false`
+   * (default), an unsupported input raises a descriptive error instead — keeping
+   * behaviour explicit and 1:1 with the codec.
+   *
+   * Resolution is never changed (the encoder already adopts the frame's dimensions),
+   * and hardware frames are left untouched (their format is negotiated via the
+   * hardware frames context). Has no effect on audio.
+   *
+   * @default false
+   */
+  autoFormat?: boolean;
+
+  /**
    * Additional codec-specific options.
    *
    * Key-value pairs of FFmpeg private codec options, passed directly to the encoder.
@@ -165,63 +186,6 @@ export interface EncoderOptions<C = unknown> {
    * When aborted, async generators stop yielding and async methods throw AbortError.
    */
   signal?: AbortSignal;
-}
-
-/**
- * Pick a codec-supported sample rate, keeping the input rate when accepted and
- * otherwise choosing the numerically nearest supported one.
- *
- * @param rate - Input sample rate in Hz
- *
- * @param supported - Codec's supported sample rates, or null when unrestricted
- *
- * @returns A sample rate the codec accepts
- *
- * @internal
- */
-function pickSupportedRate(rate: number, supported: number[] | null): number {
-  if (!supported || supported.length === 0 || supported.includes(rate)) {
-    return rate;
-  }
-  return supported.reduce((best, r) => (Math.abs(r - rate) < Math.abs(best - rate) ? r : best), supported[0]);
-}
-
-/**
- * Pick a codec-supported sample format, keeping the input when accepted and
- * otherwise the codec's preferred (first) format.
- *
- * @param fmt - Input sample format
- *
- * @param supported - Codec's supported sample formats, or null when unrestricted
- *
- * @returns A sample format the codec accepts
- *
- * @internal
- */
-function pickSupportedFormat(fmt: AVSampleFormat, supported: AVSampleFormat[] | null): AVSampleFormat {
-  if (!supported || supported.length === 0 || supported.includes(fmt)) {
-    return fmt;
-  }
-  return supported[0];
-}
-
-/**
- * Pick a codec-supported channel layout. Keeps the input layout when the codec
- * accepts its channel count, otherwise the codec's first supported layout.
- *
- * @param layout - Input channel layout
- *
- * @param supported - Codec's supported channel layouts, or null when unrestricted
- *
- * @returns A channel layout the codec accepts
- *
- * @internal
- */
-function pickSupportedLayout(layout: ChannelLayout, supported: ChannelLayout[] | null): ChannelLayout {
-  if (!supported || supported.length === 0 || supported.some((l) => l.nbChannels === layout.nbChannels)) {
-    return layout;
-  }
-  return supported[0];
 }
 
 /**
@@ -296,6 +260,10 @@ export class Encoder implements Disposable {
   private audioResampler?: SoftwareResampleContext;
   private resampledFrame?: Frame;
   private audioInputLayout?: ChannelLayout;
+  private autoFormat: boolean;
+  private videoScaler?: SoftwareScaleContext;
+  private scaledFrame?: Frame;
+  private videoTargetFormat?: AVPixelFormat;
 
   // Worker pattern for push-based processing
   private inputQueue: AsyncQueue<Frame>;
@@ -321,6 +289,7 @@ export class Encoder implements Disposable {
     this.options = options;
     this.opts = opts;
     this.autoResample = options.autoResample ?? false;
+    this.autoFormat = options.autoFormat ?? false;
 
     this.packet = new Packet();
     this.packet.alloc();
@@ -934,8 +903,8 @@ export class Encoder implements Disposable {
       frame.channelLayout = this.audioInputLayout;
     }
 
-    // Resample audio to the codec's format first
-    const input = this.audioResampler ? this.resampleAudio(frame) : frame;
+    // Convert to the codec's format first (audio resample / video pixfmt).
+    const input = this.audioResampler ? this.resampleAudio(frame) : this.videoScaler ? this.scaleVideo(frame) : frame;
 
     // Prepare frame for encoding (set quality, validate channel count)
     this.prepareFrameForEncoding(input);
@@ -1016,8 +985,8 @@ export class Encoder implements Disposable {
       frame.channelLayout = this.audioInputLayout;
     }
 
-    // Resample audio to the codec's format first
-    const input = this.audioResampler ? this.resampleAudio(frame) : frame;
+    // Convert to the codec's format first (audio resample / video pixfmt).
+    const input = this.audioResampler ? this.resampleAudio(frame) : this.videoScaler ? this.scaleVideo(frame) : frame;
 
     // Prepare frame for encoding (set quality, validate channel count)
     this.prepareFrameForEncoding(input);
@@ -1839,6 +1808,12 @@ export class Encoder implements Disposable {
     this.resampledFrame?.free();
     this.resampledFrame = undefined;
 
+    // Release the video scaler and its reused output frame.
+    this.videoScaler?.[Symbol.dispose]();
+    this.videoScaler = undefined;
+    this.scaledFrame?.free();
+    this.scaledFrame = undefined;
+
     this.initialized = false;
   }
 
@@ -2032,7 +2007,8 @@ export class Encoder implements Disposable {
       }
       this.codecContext.width = frame.width;
       this.codecContext.height = frame.height;
-      this.codecContext.pixelFormat = frame.format as AVPixelFormat;
+      // Pick a codec-supported pixel format (converting on demand when autoFormat).
+      this.setupVideoFormat(frame);
       this.codecContext.sampleAspectRatio = frame.sampleAspectRatio;
       this.codecContext.colorRange = frame.colorRange;
       this.codecContext.colorPrimaries = frame.colorPrimaries;
@@ -2136,7 +2112,8 @@ export class Encoder implements Disposable {
       }
       this.codecContext.width = frame.width;
       this.codecContext.height = frame.height;
-      this.codecContext.pixelFormat = frame.format as AVPixelFormat;
+      // Pick a codec-supported pixel format (converting on demand when autoFormat).
+      this.setupVideoFormat(frame);
       this.codecContext.sampleAspectRatio = frame.sampleAspectRatio;
       this.codecContext.colorRange = frame.colorRange;
       this.codecContext.colorPrimaries = frame.colorPrimaries;
@@ -2292,7 +2269,7 @@ export class Encoder implements Disposable {
     }
 
     const targetRate = pickSupportedRate(inRate, this.codec.supportedSamplerates);
-    const targetFmt = pickSupportedFormat(inFmt, this.codec.sampleFormats);
+    const targetFmt = pickSupportedSampleFormat(inFmt, this.codec.sampleFormats);
     const targetLayout = pickSupportedLayout(inLayout, this.codec.channelLayouts);
 
     const needsResample = targetRate !== inRate || targetFmt !== inFmt || targetLayout.nbChannels !== inLayout.nbChannels;
@@ -2380,6 +2357,98 @@ export class Encoder implements Disposable {
     if (ret < 0 || out.nbSamples <= 0) {
       return null;
     }
+    return out;
+  }
+
+  /**
+   * Configure the codec context's pixel format from the first video frame.
+   *
+   * Video encoders only accept specific pixel formats. This keeps the input format
+   * when the codec accepts it; otherwise it either sets up a swscale converter to
+   * the least-loss supported format (when `autoFormat`) or throws a descriptive
+   * error. Hardware frames are left untouched - their format is negotiated through
+   * the hardware frames context, not swscale.
+   *
+   * @param frame - First video frame
+   *
+   * @throws {Error} If the input is unsupported and `autoFormat` is disabled
+   *
+   * @throws {FFmpegError} If the converter fails to configure
+   *
+   * @internal
+   */
+  private setupVideoFormat(frame: Frame): void {
+    const inFmt = frame.format as AVPixelFormat;
+
+    // Hardware frames carry a hw pixfmt negotiated via hw_frames_ctx; swscale can't
+    // touch them - leave the format untouched.
+    if (frame.isHwFrame()) {
+      this.codecContext.pixelFormat = inFmt;
+      return;
+    }
+
+    const targetFmt = pickSupportedPixelFormat(inFmt, this.codec.pixelFormats);
+    const needsConversion = targetFmt !== inFmt;
+
+    if (needsConversion && !this.autoFormat) {
+      const supported = this.codec.pixelFormats!;
+      throw new Error(
+        `Encoder '${this.codec.name}' does not support the input pixel format ` +
+          `(${avGetPixFmtName(inFmt) ?? inFmt}). Supported: ${supported.map((f) => avGetPixFmtName(f) ?? f).join(', ')}` +
+          '. Set { autoFormat: true } on the encoder, or convert the input with a scale/format filter first.',
+      );
+    }
+
+    this.codecContext.pixelFormat = targetFmt;
+
+    // Set up a same-size swscale converter when the codec needs a different format.
+    if (needsConversion) {
+      this.videoTargetFormat = targetFmt;
+      const sws = new SoftwareScaleContext();
+      sws.getContext(frame.width, frame.height, inFmt, frame.width, frame.height, targetFmt, SWS_BILINEAR);
+      FFmpegError.throwIfError(sws.initContext(), 'Failed to configure pixel-format converter');
+      this.videoScaler = sws;
+    }
+  }
+
+  /**
+   * Lazily allocate the reused scaler output frame.
+   *
+   * @returns The allocated output frame
+   *
+   * @internal
+   */
+  private getScaledFrame(): Frame {
+    if (!this.scaledFrame) {
+      this.scaledFrame = new Frame();
+      this.scaledFrame.alloc();
+    }
+    return this.scaledFrame;
+  }
+
+  /**
+   * Convert an incoming video frame to the codec's target pixel format.
+   *
+   * Reuses a single output frame; `sws_scale_frame` allocates/sizes its buffer.
+   * Resolution is unchanged - only the pixel format differs. Timing is carried over
+   * explicitly so the encoder's PTS rescale stays correct.
+   *
+   * @param frame - Source video frame
+   *
+   * @returns The converted frame (owned by the encoder, reused across calls)
+   *
+   * @internal
+   */
+  private scaleVideo(frame: Frame): Frame {
+    const out = this.getScaledFrame();
+    out.unref();
+    out.format = this.videoTargetFormat!;
+    out.width = frame.width;
+    out.height = frame.height;
+    FFmpegError.throwIfError(this.videoScaler!.scaleFrameSync(out, frame), 'Failed to convert video frame format');
+    out.timeBase = frame.timeBase;
+    out.pts = frame.pts;
+    out.duration = frame.duration;
     return out;
   }
 
