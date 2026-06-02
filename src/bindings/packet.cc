@@ -29,6 +29,7 @@ Napi::Object Packet::Init(Napi::Env env, Napi::Object exports) {
     InstanceAccessor<&Packet::GetSize>("size"),
     InstanceAccessor("flags", &Packet::GetFlags, &Packet::SetFlagsAccessor, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
     InstanceAccessor("data", &Packet::GetData, &Packet::SetData, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
+    InstanceAccessor<&Packet::GetReportedMemory>("reportedExternalMemory"),
     InstanceAccessor("isKeyframe", &Packet::GetIsKeyframe, &Packet::SetIsKeyframe, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
   });
   
@@ -56,6 +57,10 @@ static int64_t PacketPayloadSize(AVPacket* packet) {
     total += packet->side_data[i].size;
   }
   return total;
+}
+
+Napi::Value Packet::GetReportedMemory(const Napi::CallbackInfo& info) {
+  return Napi::Number::New(info.Env(), static_cast<double>(reported_memory_));
 }
 
 void Packet::SyncExternalMemory(napi_env env) {

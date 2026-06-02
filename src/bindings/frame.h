@@ -34,6 +34,10 @@ private:
   // napi_adjust_external_memory. Kept in sync by SyncExternalMemory().
   int64_t reported_memory_ = 0;
 
+  // @internal test hook: exposes reported_memory_ so the accounting can be
+  // asserted deterministically (the value is not observable via V8 heap stats).
+  Napi::Value GetReportedMemory(const Napi::CallbackInfo& info);
+
   Napi::Value Alloc(const Napi::CallbackInfo& info);
   Napi::Value Free(const Napi::CallbackInfo& info);
   Napi::Value Ref(const Napi::CallbackInfo& info);

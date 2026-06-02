@@ -64,6 +64,7 @@ Napi::Object Frame::Init(Napi::Env env, Napi::Object exports) {
     InstanceAccessor("colorSpace", &Frame::GetColorSpace, &Frame::SetColorSpace, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
     InstanceAccessor("chromaLocation", &Frame::GetChromaLocation, &Frame::SetChromaLocation, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
     InstanceAccessor("alphaMode", &Frame::GetAlphaMode, &Frame::SetAlphaMode, static_cast<napi_property_attributes>(napi_writable | napi_configurable)),
+    InstanceAccessor<&Frame::GetReportedMemory>("reportedExternalMemory"),
     InstanceAccessor<&Frame::GetData>("data"),
     InstanceAccessor<&Frame::GetExtendedData>("extendedData"),
     InstanceAccessor<&Frame::GetIsWritable>("isWritable"),
@@ -105,6 +106,10 @@ static int64_t FrameBufferSize(AVFrame* frame) {
     }
   }
   return total;
+}
+
+Napi::Value Frame::GetReportedMemory(const Napi::CallbackInfo& info) {
+  return Napi::Number::New(info.Env(), static_cast<double>(reported_memory_));
 }
 
 void Frame::SyncExternalMemory(napi_env env) {

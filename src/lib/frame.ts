@@ -766,6 +766,17 @@ export class Frame implements Disposable, NativeWrapper<NativeFrame> {
   }
 
   /**
+   * Bytes of native buffer memory this frame currently reports to V8's GC via
+   * `napi_adjust_external_memory`. Exposed only so the accounting can be
+   * asserted in tests; the value is not observable through V8 heap statistics.
+   *
+   * @internal
+   */
+  get reportedExternalMemory(): number {
+    return this.native.reportedExternalMemory;
+  }
+
+  /**
    * Hardware frames context.
    *
    * Reference to hardware frames context for GPU frames.

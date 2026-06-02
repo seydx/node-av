@@ -158,6 +158,17 @@ export class Packet implements Disposable, NativeWrapper<NativePacket> {
   }
 
   /**
+   * Bytes of native payload this packet currently reports to V8's GC via
+   * `napi_adjust_external_memory`. Exposed only so the accounting can be
+   * asserted in tests; the value is not observable through V8 heap statistics.
+   *
+   * @internal
+   */
+  get reportedExternalMemory(): number {
+    return this.native.reportedExternalMemory;
+  }
+
+  /**
    * Packet flags.
    *
    * Combination of AV_PKT_FLAG values indicating packet properties

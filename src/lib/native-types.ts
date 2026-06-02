@@ -55,6 +55,12 @@ import type { ChannelLayout, IRational } from './types.js';
 export interface NativePacket extends Disposable {
   readonly __brand: 'NativePacket';
 
+  /**
+   * Test hook: bytes currently reported to V8 via napi_adjust_external_memory.
+   *
+   * @internal
+   */
+  readonly reportedExternalMemory: number;
   readonly size: number;
   streamIndex: number;
   pts: bigint;
@@ -93,6 +99,12 @@ export interface NativePacket extends Disposable {
 export interface NativeFrame extends Disposable {
   readonly __brand: 'NativeFrame';
 
+  /**
+   * Test hook: bytes currently reported to V8 via napi_adjust_external_memory.
+   *
+   * @internal
+   */
+  readonly reportedExternalMemory: number;
   readonly channels: number;
   readonly linesize: number[];
   readonly data: Buffer[] | null;
