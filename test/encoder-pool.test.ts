@@ -21,15 +21,20 @@ function createMjpegFrame(width: number, height: number): Frame {
   frame.timeBase = new Rational(1, 25);
   frame.getBuffer();
 
-  if (frame.data?.[0]) {
+  // Hoist the native data getter out of the loops (it allocates on every access).
+  const planes = frame.data;
+  if (planes?.[0]) {
+    const y = planes[0];
     for (let i = 0; i < width * height; i++) {
-      frame.data[0][i] = i % 256;
+      y[i] = i % 256;
     }
-    if (frame.data[1] && frame.data[2]) {
+    if (planes[1] && planes[2]) {
+      const u = planes[1];
+      const v = planes[2];
       const chromaSize = (width * height) / 4;
       for (let i = 0; i < chromaSize; i++) {
-        frame.data[1][i] = 128;
-        frame.data[2][i] = 128;
+        u[i] = 128;
+        v[i] = 128;
       }
     }
   }

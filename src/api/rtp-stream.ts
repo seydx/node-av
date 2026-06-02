@@ -3,7 +3,9 @@ import { isRtcp, RtpPacket } from 'werift';
 import { AV_HWDEVICE_TYPE_NONE } from '../constants/constants.js';
 import { FF_ENCODER_LIBOPUS, FF_ENCODER_LIBX264, FF_ENCODER_LIBX265 } from '../constants/encoders.js';
 import { Codec } from '../lib/codec.js';
+import { avChannelLayoutDefault } from '../lib/utilities.js';
 import { MAX_PACKET_SIZE } from './constants.js';
+import { pickSupportedLayout, pickSupportedRate, pickSupportedSampleFormat } from './utilities/codec-format.js';
 import { Decoder } from './decoder.js';
 import { Demuxer } from './demuxer.js';
 import { Encoder } from './encoder.js';
@@ -775,72 +777,54 @@ export class RTPStream {
   }
 
   /**
-   * Select the best supported sample format from codec.
+   * Select a codec-supported sample format for the desired one.
    *
-   * Returns the first supported format, or null if none available.
-   * This follows FFmpeg's approach of using the first supported format.
+   * Delegates to the shared {@link pickSupportedSampleFormat} so the RTP path and
+   * the encoder negotiate formats identically.
    *
    * @param codec - Audio encoder codec
    *
    * @param desiredFormat - Desired sample format
    *
-   * @returns First supported sample format or null
+   * @returns A sample format the codec accepts
    *
    * @internal
    */
   private selectSampleFormat(codec: Codec, desiredFormat: AVSampleFormat): AVSampleFormat {
-    const supportedFormats = codec.sampleFormats;
-    if (!supportedFormats || supportedFormats.length === 0) {
-      return desiredFormat; // should normally not happen
-    }
-
-    if (supportedFormats.includes(desiredFormat)) {
-      return desiredFormat;
-    }
-
-    return supportedFormats[0];
+    return pickSupportedSampleFormat(desiredFormat, codec.sampleFormats);
   }
 
   /**
-   * Select the best supported sample rate from codec.
+   * Select a codec-supported sample rate for the desired one.
    *
-   * Returns the closest supported rate to the desired rate.
-   * If no rates are specified by the codec, returns the desired rate.
+   * Delegates to the shared {@link pickSupportedRate} (keeps the desired rate when
+   * accepted, otherwise the nearest supported one).
    *
    * @param codec - Audio encoder codec
    *
    * @param desiredRate - Desired sample rate
    *
-   * @returns Best matching sample rate
+   * @returns A sample rate the codec accepts
    *
    * @internal
    */
   private selectSampleRate(codec: Codec, desiredRate: number): number {
-    const supportedRates = codec.supportedSamplerates;
-    if (!supportedRates || supportedRates.length === 0) {
-      return desiredRate; // should normally not happen
-    }
-
-    let bestSampleRate = supportedRates[0];
-    for (const rate of supportedRates) {
-      if (Math.abs(desiredRate - rate) < Math.abs(desiredRate - bestSampleRate)) {
-        bestSampleRate = rate;
-      }
-    }
-
-    return bestSampleRate;
+    return pickSupportedRate(desiredRate, codec.supportedSamplerates);
   }
 
   /**
-   * Select the best supported channel layout from codec.
+   * Select a codec-supported channel layout for the desired channel count, as an
+   * SDP layout string.
    *
-   * Returns a layout matching the desired channel count, or the first supported layout.
+   * Delegates the choice to the shared {@link pickSupportedLayout} (nearest channel
+   * count when the exact count is unsupported), then renders it as `'mono'`,
+   * `'stereo'`, or the layout mask.
    *
    * @param codec - Audio encoder codec
    *
    * @param desiredChannels - Desired number of channels
    *
-   * @returns Best matching channel layout string
+   * @returns Channel layout string the codec accepts
    *
    * @internal
    */
@@ -850,22 +834,9 @@ export class RTPStream {
       return desiredChannels === 1 ? 'mono' : 'stereo'; // should normally not happen
     }
 
-    // Try to find exact match
-    for (const layout of supportedLayouts) {
-      if (layout.nbChannels === desiredChannels) {
-        // Use standard names for common layouts
-        if (desiredChannels === 1) return 'mono';
-        if (desiredChannels === 2) return 'stereo';
-        // For other channel counts, use the mask
-        return layout.mask.toString();
-      }
-    }
-
-    // No exact match, return first supported
-    const firstLayout = supportedLayouts[0];
-    if (firstLayout.nbChannels === 1) return 'mono';
-    if (firstLayout.nbChannels === 2) return 'stereo';
-
-    return firstLayout.mask.toString();
+    const picked = pickSupportedLayout(avChannelLayoutDefault(desiredChannels), supportedLayouts);
+    if (picked.nbChannels === 1) return 'mono';
+    if (picked.nbChannels === 2) return 'stereo';
+    return picked.mask.toString();
   }
 }

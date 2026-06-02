@@ -190,6 +190,11 @@ export class Packet implements Disposable, NativeWrapper<NativePacket> {
    * Contains the compressed audio/video data.
    * May be null for packets signaling special conditions.
    *
+   * **Performance**: each access is a native call that allocates a new `Buffer`
+   * wrapper (and copies on platforms without external buffers, e.g. Electron) - it
+   * is not a cheap field read. Cache it in a local instead of re-reading `pkt.data`
+   * repeatedly.
+   *
    * Direct mapping to AVPacket->data.
    */
   get data(): Buffer | null {
