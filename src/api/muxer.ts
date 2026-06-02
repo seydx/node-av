@@ -61,6 +61,7 @@ interface StreamDescription {
   lastMuxDts: bigint;
   tsRescaleDeltaLast: { value: bigint }; // For av_rescale_delta (audio streamcopy)
   streamcopyStarted: boolean; // Track if streamcopy has started for this stream
+  startTimeOffset?: bigint; // Effective per-stream startTime offset (decided on the first packet)
 }
 
 /**
@@ -1333,19 +1334,8 @@ export class Muxer implements AsyncDisposable, Disposable {
         return;
       }
     } else if (this.options.startTime !== undefined) {
-      // For encoded (non-streamcopy) streams, apply startTime offset.
-      // Streamcopy handles this in ofStreamcopy; for encoding, the encoder preserves
-      // decoded frame timestamps which may include a device-based offset (e.g., system
-      // uptime from avfoundation). Subtract startTime to normalize timestamps to zero.
-      const startTimeUs = BigInt(Math.floor(this.options.startTime * 1000000));
-      const tsOffset = avRescaleQ(startTimeUs, AV_TIME_BASE_Q, clonedPacket.timeBase);
-
-      if (clonedPacket.pts !== AV_NOPTS_VALUE) {
-        clonedPacket.pts -= tsOffset;
-      }
-      if (clonedPacket.dts !== AV_NOPTS_VALUE) {
-        clonedPacket.dts -= tsOffset;
-      }
+      // For encoded (non-streamcopy) streams, strip the device's startTime base.
+      this.applyStartTimeOffset(clonedPacket, streamInfo);
     }
 
     // Check if any streams are still uninitialized or header is being written
@@ -1685,19 +1675,8 @@ export class Muxer implements AsyncDisposable, Disposable {
         return;
       }
     } else if (this.options.startTime !== undefined) {
-      // For encoded (non-streamcopy) streams, apply startTime offset.
-      // Streamcopy handles this in ofStreamcopy; for encoding, the encoder preserves
-      // decoded frame timestamps which may include a device-based offset (e.g., system
-      // uptime from avfoundation). Subtract startTime to normalize timestamps to zero.
-      const startTimeUs = BigInt(Math.floor(this.options.startTime * 1000000));
-      const tsOffset = avRescaleQ(startTimeUs, AV_TIME_BASE_Q, clonedPacket.timeBase);
-
-      if (clonedPacket.pts !== AV_NOPTS_VALUE) {
-        clonedPacket.pts -= tsOffset;
-      }
-      if (clonedPacket.dts !== AV_NOPTS_VALUE) {
-        clonedPacket.dts -= tsOffset;
-      }
+      // For encoded (non-streamcopy) streams, strip the device's startTime base.
+      this.applyStartTimeOffset(clonedPacket, streamInfo);
     }
 
     // Check if any streams are still uninitialized
@@ -2405,6 +2384,50 @@ export class Muxer implements AsyncDisposable, Disposable {
    *
    * @internal
    */
+
+  /**
+   * Apply the configured `startTime` offset to an encoded packet, per stream.
+   *
+   * `startTime` exists to strip a device's boot-relative timestamp base (e.g. the
+   * mach uptime avfoundation reports). But audio encoders re-stamp their output to
+   * a ~0 baseline, so subtracting a large device startTime from them would push the
+   * timestamps hugely negative and produce a broken/overflowed edit list that strict
+   * players (QuickTime) reject. The effective offset is therefore decided once on the
+   * stream's first packet and clamped to what the stream actually carries —
+   * `min(startTime, max(0, firstPts))`: boot-relative streams normalize to zero,
+   * already-zero-based streams are left untouched.
+   *
+   * @param packet - Cloned packet to adjust in place
+   *
+   * @param streamInfo - Per-stream muxing state
+   *
+   * @internal
+   */
+  private applyStartTimeOffset(packet: Packet, streamInfo: StreamDescription): void {
+    if (this.options.startTime === undefined) {
+      return;
+    }
+
+    if (streamInfo.startTimeOffset === undefined) {
+      const startTimeUs = BigInt(Math.floor(this.options.startTime * 1000000));
+      const requested = avRescaleQ(startTimeUs, AV_TIME_BASE_Q, packet.timeBase);
+      const firstTs = packet.pts !== AV_NOPTS_VALUE ? packet.pts : packet.dts;
+      const carried = firstTs !== AV_NOPTS_VALUE && firstTs > 0n ? firstTs : 0n;
+      streamInfo.startTimeOffset = requested < carried ? requested : carried;
+    }
+
+    const offset = streamInfo.startTimeOffset;
+    if (offset === 0n) {
+      return;
+    }
+    if (packet.pts !== AV_NOPTS_VALUE) {
+      packet.pts -= offset;
+    }
+    if (packet.dts !== AV_NOPTS_VALUE) {
+      packet.dts -= offset;
+    }
+  }
+
   private ofStreamcopy(pkt: Packet, streamInfo: StreamDescription, streamIndex: number): boolean {
     const outputStream = this.formatContext.streams[streamIndex];
     if (!outputStream) {

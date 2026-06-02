@@ -314,6 +314,54 @@ describe('Muxer', () => {
     });
   });
 
+  describe('startTime offset', () => {
+    it('clamps a startTime that a zero-based audio stream does not carry', async () => {
+      // audio.aac decodes to zero-based timestamps; the AAC encoder re-stamps to a 0
+      // baseline too. A huge device-style startTime must therefore NOT be subtracted
+      // (that would push pts ~ -999999*48000 and overflow the MP4 edit list, which
+      // QuickTime rejects as 0:00). The muxer should clamp it to 0 for this stream.
+      const outputFile = getTempFile('m4a');
+
+      await using media = await Demuxer.open(getInputFile('audio.aac'));
+      const stream = media.audio();
+      assert.ok(stream);
+      using decoder = await Decoder.create(stream);
+      await using output = await Muxer.open(outputFile, { startTime: 999999 });
+      using encoder = await Encoder.create(FF_ENCODER_AAC, { decoder, autoResample: true });
+      const idx = output.addStream(encoder);
+
+      for await (using packet of media.packets(stream.index)) {
+        for await (using frame of decoder.frames(packet)) {
+          if (frame === null) continue;
+          for await (using pkt of encoder.packets(frame)) {
+            await output.writePacket(pkt, idx);
+          }
+        }
+      }
+      for await (using frame of decoder.frames(null)) {
+        if (frame === null) continue;
+        for await (using pkt of encoder.packets(frame)) {
+          await output.writePacket(pkt, idx);
+        }
+      }
+      for await (using pkt of encoder.packets(null)) {
+        await output.writePacket(pkt, idx);
+      }
+      await output.close();
+
+      // Re-open and confirm timestamps start near zero, not hugely negative.
+      await using check = await Demuxer.open(outputFile);
+      let firstPts: bigint | null = null;
+      for await (using pkt of check.packets()) {
+        if (pkt === null) break;
+        firstPts = pkt.pts;
+        break;
+      }
+      assert.ok(firstPts !== null, 'should produce packets');
+      assert.ok(firstPts > -1_000_000n, `first pts should be near zero (clamped), got ${firstPts}`);
+    });
+  });
+
   describe('properties', () => {
     it('should get format name and long name (async)', async () => {
       const outputFile = getTempFile('mp4');
