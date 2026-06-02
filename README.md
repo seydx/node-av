@@ -530,6 +530,7 @@ If you encounter module resolution errors like `Cannot find module 'lib/binary-s
 | `api-abort-signal` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-abort-signal.ts) |
 | `api-bitstream-filter` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-bitstream-filter.ts) |
 | `api-dash` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-dash.ts) |
+| `api-decoder-resample` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-decoder-resample.ts) |
 | `api-device-capture` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-device-capture.ts) |
 | `api-encode-decode` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-encode-decode.ts) |
 | `api-filter-complex` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-filter-complex.ts) |
