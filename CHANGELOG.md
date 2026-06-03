@@ -70,18 +70,6 @@ New `resample` option on `Decoder.create()`/`createSync()` — the audio mirror 
 
 New `rescale` option on `Decoder.create()`/`createSync()` — the video mirror of `resample`. When set, decoded video frames are transparently converted to the requested `{ width, height, pixelFormat }` (any omitted field keeps the decoded value, and conversion is skipped when the source already matches). Hardware frames are automatically transferred to a supported software format first and then converted, so a single option normalizes both hardware- and software-decoded streams; software frames are converted directly. Hardware frames are left on the GPU (zero-copy) when `rescale` is not set. This **replaces** the former `hwaccelOutputFormat` (see Breaking Changes) — `rescale: { pixelFormat }` both downloads hardware frames and guarantees the format. Useful to normalize a heterogeneous set of sources (e.g. RTSP cameras each delivering a different pixel format) so every downstream stage receives a uniform format/size.
 
-#### `Frame.data` / `Frame.extendedData` / `Packet.data` are cached
-
-The `Frame` `data`/`extendedData` getters used to build a fresh array (plus one `Buffer` wrapper per plane) on **every** access, which could dominate per-sample/per-pixel loops — `frame.data[0][i]` re-paid the allocation on each iteration. The plane array is now built once and cached on the native wrapper, and dropped whenever the frame's buffers may have changed (alloc/free/ref/unref/getBuffer/makeWritable/applyCropping/fromBuffer and every native fill site such as decode/filter/scale/resample/hw-transfer). An un-hoisted per-pixel loop over ten RGB frames drops from ~20 s to ~120 ms.
-
-`Packet.data` similarly used to **memcpy the full payload on every access**; the copy is now made once and cached, dropped whenever the payload may have changed (alloc/free/ref/unref/clone/`data=`/side-data ops and native fills such as demuxing). Setting `packet.data = null` now also reconciles the external-memory report immediately (previously left stale until the next buffer operation).
-
-Observable side effect: `frame.data === frame.data` and `packet.data === packet.data` now hold between buffer changes (each access used to return a new array/buffer).
-
-#### `Frame` and `Packet` buffers now report their size to V8's garbage collector
-
-Native frame and packet buffers are reported to V8 via `napi_adjust_external_memory`, so the GC sees the real memory pressure of decoded/filtered/resampled/scaled/transferred/hardware-allocated frames and demuxed/decoded/encoded/filtered packets instead of just the tiny JS wrapper. Objects abandoned without an explicit `close()`/`using`/`free()` are now reclaimed far sooner — in a decode-and-drop loop the steady-state RSS dropped from ~2.7 GB to ~0.6 GB. Explicit disposal remains the deterministic path; this only lowers the watermark when you rely on the GC.
-
 #### `Scaler` — hardware-aware image scale / crop / convert / encode
 
 High-level `Scaler` (from `node-av/api`) that scales, crops, and converts decoded frames to raw pixel buffers or JPEG/PNG. Pools its contexts, GPU graphs, and encoders for the detection/thumbnail/snapshot workload; hardware frames are processed on the GPU.
@@ -236,6 +224,20 @@ await control.completion;
 ```
 
 `PipelineProgress` exposes `frames`, `bytes`, `time` (media seconds), `fps`, `bitrate`, `speed`, and `elapsed`. Works across simple, stream-copy, and named pipelines.
+
+### Performance
+
+#### `Frame.data` / `Frame.extendedData` / `Packet.data` are cached
+
+The `Frame` `data`/`extendedData` getters used to build a fresh array (plus one `Buffer` wrapper per plane) on **every** access, which could dominate per-sample/per-pixel loops — `frame.data[0][i]` re-paid the allocation on each iteration. The plane array is now built once and cached on the native wrapper, and dropped whenever the frame's buffers may have changed (alloc/free/ref/unref/getBuffer/makeWritable/applyCropping/fromBuffer and every native fill site such as decode/filter/scale/resample/hw-transfer). An un-hoisted per-pixel loop over ten RGB frames drops from ~20 s to ~120 ms.
+
+`Packet.data` similarly used to **memcpy the full payload on every access**; the copy is now made once and cached, dropped whenever the payload may have changed (alloc/free/ref/unref/clone/`data=`/side-data ops and native fills such as demuxing). Setting `packet.data = null` now also reconciles the external-memory report immediately (previously left stale until the next buffer operation).
+
+Observable side effect: `frame.data === frame.data` and `packet.data === packet.data` now hold between buffer changes (each access used to return a new array/buffer).
+
+#### `Frame` and `Packet` buffers now report their size to V8's garbage collector
+
+Native frame and packet buffers are reported to V8 via `napi_adjust_external_memory`, so the GC sees the real memory pressure of decoded/filtered/resampled/scaled/transferred/hardware-allocated frames and demuxed/decoded/encoded/filtered packets instead of just the tiny JS wrapper. Objects abandoned without an explicit `close()`/`using`/`free()` are now reclaimed far sooner — in a decode-and-drop loop the steady-state RSS dropped from ~2.7 GB to ~0.6 GB. Explicit disposal remains the deterministic path; this only lowers the watermark when you rely on the GC.
 
 ### Changed
 
