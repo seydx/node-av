@@ -351,6 +351,15 @@ jobs:
             objdump -p "binary/ffmpeg.exe" | grep "DLL Name:"
           fi
 
+      # Cache the Whisper test models so runners don't re-download them from
+      # Hugging Face on every build (parallel jobs sharing the runner IP pool
+      # get rate-limited with HTTP 429).
+      - name: Cache Whisper Models
+        uses: actions/cache@v5
+        with:
+          path: models
+          key: whisper-models-v1
+
       - name: Run Tests
         env:
           AV_FROM_SOURCE: 1
@@ -511,6 +520,15 @@ jobs:
           } else {
             Write-Host "Warning: FFmpeg binary not found at $ffmpegBin"
           }
+
+      # Cache the Whisper test models so runners don't re-download them from
+      # Hugging Face on every build (parallel jobs sharing the runner IP pool
+      # get rate-limited with HTTP 429).
+      - name: Cache Whisper Models
+        uses: actions/cache@v5
+        with:
+          path: models
+          key: whisper-models-v1
 
       - name: Run Tests
         env:
@@ -782,6 +800,15 @@ jobs:
             exit 1
           fi
 
+      # Cache the Whisper test models so runners don't re-download them from
+      # Hugging Face on every build (parallel jobs sharing the runner IP pool
+      # get rate-limited with HTTP 429).
+      - name: Cache Whisper Models
+        uses: actions/cache@v5
+        with:
+          path: models
+          key: whisper-models-v1
+
       - name: Run Tests
         env:
           AV_FROM_SOURCE: 1
@@ -978,6 +1005,15 @@ jobs:
             echo "Error: No .node file found in prebuilds directory"
             exit 1
           fi
+
+      # Cache the Whisper test models (see the other test jobs - avoids HTTP 429
+      # rate limits from Hugging Face when runners share an IP pool).
+      - name: Cache Whisper Models
+        if: matrix.arch == 'arm64'
+        uses: actions/cache@v5
+        with:
+          path: models
+          key: whisper-models-v1
 
       - name: Run Tests
         if: matrix.arch == 'arm64'
