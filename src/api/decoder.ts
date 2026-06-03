@@ -2063,7 +2063,7 @@ export class Decoder implements Disposable {
     const sr = frame.sampleRate;
 
     // No change - return existing timebase
-    if (frame.sampleRate === this.lastFrameSampleRate) {
+    if (sr === this.lastFrameSampleRate) {
       return this.lastFrameTb;
     }
 
@@ -2083,8 +2083,9 @@ export class Decoder implements Disposable {
 
     // Keep frame's timebase if strictly better
     // "Strictly better" means: num=1, den > tbNew.den, and tbNew.den divides den evenly
-    if (frame.timeBase.num === 1 && frame.timeBase.den > tbNew.den && frame.timeBase.den % tbNew.den === 0) {
-      tbNew = { num: frame.timeBase.num, den: frame.timeBase.den };
+    const frameTb = frame.timeBase;
+    if (frameTb.num === 1 && frameTb.den > tbNew.den && frameTb.den % tbNew.den === 0) {
+      tbNew = { num: frameTb.num, den: frameTb.den };
     }
 
     // Rescale existing timestamps to new timebase
@@ -2095,7 +2096,7 @@ export class Decoder implements Disposable {
     this.lastFrameDurationEst = avRescaleQ(this.lastFrameDurationEst, this.lastFrameTb, tbNew);
 
     this.lastFrameTb = new Rational(tbNew.num, tbNew.den);
-    this.lastFrameSampleRate = frame.sampleRate;
+    this.lastFrameSampleRate = sr;
 
     return this.lastFrameTb;
   }
@@ -2125,6 +2126,10 @@ export class Decoder implements Disposable {
    * @internal
    */
   private processAudioFrame(frame: Frame): void {
+    const nbSamples = frame.nbSamples;
+    let pts = frame.pts;
+    let frameTb: IRational = frame.timeBase;
+
     // Filtering timebase is always {1, sample_rate} for audio
     const tbFilter: IRational = { num: 1, den: frame.sampleRate };
 
@@ -2134,14 +2139,14 @@ export class Decoder implements Disposable {
     // Predict next PTS based on last frame + duration
     const ptsPred = this.lastFramePts === AV_NOPTS_VALUE ? 0n : this.lastFramePts + this.lastFrameDurationEst;
 
-    // No timestamp - use predicted value
-    if (frame.pts === AV_NOPTS_VALUE) {
-      frame.pts = ptsPred;
-      frame.timeBase = new Rational(tb.num, tb.den);
+    // No timestamp - use predicted value (in the internal timebase)
+    if (pts === AV_NOPTS_VALUE) {
+      pts = ptsPred;
+      frameTb = tb;
     } else if (this.lastFramePts !== AV_NOPTS_VALUE) {
       // Detect timestamp gap - compare with predicted timestamp
-      const ptsPredInFrameTb = avRescaleQRnd(ptsPred, tb, frame.timeBase, AV_ROUND_UP);
-      if (frame.pts > ptsPredInFrameTb) {
+      const ptsPredInFrameTb = avRescaleQRnd(ptsPred, tb, frameTb, AV_ROUND_UP);
+      if (pts > ptsPredInFrameTb) {
         // Gap detected - reset rescale_delta state for smooth conversion
         this.lastFilterInRescaleDelta = AV_NOPTS_VALUE;
       }
@@ -2151,16 +2156,16 @@ export class Decoder implements Disposable {
     // This maintains fractional sample accuracy across timebase conversions
     // avRescaleDelta modifies lastRef in place (simulates C's &last_filter_in_rescale_delta)
     const lastRef = { value: this.lastFilterInRescaleDelta };
-    frame.pts = avRescaleDelta(frame.timeBase, frame.pts, tb, frame.nbSamples, lastRef, tb);
+    pts = avRescaleDelta(frameTb, pts, tb, nbSamples, lastRef, tb);
     this.lastFilterInRescaleDelta = lastRef.value;
 
     // Update frame tracking
-    this.lastFramePts = frame.pts;
-    this.lastFrameDurationEst = avRescaleQ(BigInt(frame.nbSamples), tbFilter, tb);
+    this.lastFramePts = pts;
+    this.lastFrameDurationEst = avRescaleQ(BigInt(nbSamples), tbFilter, tb);
 
-    // Convert to filtering timebase
-    frame.pts = avRescaleQ(frame.pts, tb, tbFilter);
-    frame.duration = BigInt(frame.nbSamples);
+    // Convert to filtering timebase and write the results back once
+    frame.pts = avRescaleQ(pts, tb, tbFilter);
+    frame.duration = BigInt(nbSamples);
     frame.timeBase = new Rational(tbFilter.num, tbFilter.den);
   }
 

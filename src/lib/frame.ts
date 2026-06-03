@@ -738,12 +738,6 @@ export class Frame implements Disposable, NativeWrapper<NativeFrame> {
    * Array of buffers containing the frame data.
    * One buffer per plane (e.g., Y, U, V for YUV420P).
    *
-   * **Performance**: each access is a native call that allocates a fresh array and
-   * a new `Buffer` wrapper per plane - it is not a cheap field read. Reading it
-   * inside a per-sample/per-pixel loop (e.g. `frame.data[0][i]`) allocates on every
-   * iteration and can dominate runtime. Cache it in a local first:
-   * `const plane = frame.data?.[0]; for (...) plane[i] = ...`.
-   *
    * Direct mapping to AVFrame->data.
    */
   get data(): Buffer[] | null {
@@ -755,9 +749,6 @@ export class Frame implements Disposable, NativeWrapper<NativeFrame> {
    *
    * For audio with >8 channels or planar audio.
    * Points to data planes beyond the first 8.
-   *
-   * **Performance**: like {@link data}, each access allocates a fresh array and a
-   * new `Buffer` wrapper per plane. Cache it in a local before looping over samples.
    *
    * Direct mapping to AVFrame->extended_data.
    */

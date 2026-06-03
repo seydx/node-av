@@ -64,12 +64,22 @@ Napi::Value Packet::GetReportedMemory(const Napi::CallbackInfo& info) {
 }
 
 void Packet::SyncExternalMemory(napi_env env) {
+  // Every caller is a point where the packet's payload may have changed, so the
+  // cached data copy must be dropped here unconditionally - NOT gated on the
+  // delta below (e.g. ref()ing a same-sized packet keeps the total but changes
+  // the payload).
+  InvalidateDataCache();
+
   int64_t current = PacketPayloadSize(packet_);
   int64_t delta = current - reported_memory_;
   if (delta != 0) {
     Napi::MemoryManagement::AdjustExternalMemory(env, delta);
     reported_memory_ = current;
   }
+}
+
+void Packet::InvalidateDataCache() {
+  cached_data_.Reset();
 }
 
 Packet::~Packet() {
@@ -435,13 +445,23 @@ void Packet::SetFlagsAccessor(const Napi::CallbackInfo& info, const Napi::Value&
 
 Napi::Value Packet::GetData(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
-  
+
   if (!packet_ || !packet_->data || packet_->size <= 0) {
     return env.Null();
   }
-  
-  // Return a copy of the data as Buffer
-  return Napi::Buffer<uint8_t>::Copy(env, packet_->data, packet_->size);
+
+  // Serve the cached payload copy while the packet's buffers are unchanged -
+  // building it memcpys the full payload on every access otherwise. Invalidated
+  // via InvalidateDataCache().
+  if (!cached_data_.IsEmpty()) {
+    return cached_data_.Value();
+  }
+
+  // Return a copy of the data as Buffer (a copy, not a view, so the JS buffer
+  // stays valid even after the packet is unreffed/recycled).
+  Napi::Buffer<uint8_t> data = Napi::Buffer<uint8_t>::Copy(env, packet_->data, packet_->size);
+  cached_data_ = Napi::Reference<Napi::Buffer<uint8_t>>::New(data, 1);
+  return data;
 }
 
 void Packet::SetData(const Napi::CallbackInfo& info, const Napi::Value& value) {
@@ -452,8 +472,10 @@ void Packet::SetData(const Napi::CallbackInfo& info, const Napi::Value& value) {
   }
   
   if (value.IsNull() || value.IsUndefined()) {
-    // Clear data
+    // Clear data (and reconcile the external-memory report / cached payload,
+    // which the early return would otherwise leave stale).
     av_packet_unref(packet_);
+    SyncExternalMemory(env);
     return;
   }
   

@@ -34,6 +34,17 @@ private:
   // napi_adjust_external_memory. Kept in sync by SyncExternalMemory().
   int64_t reported_memory_ = 0;
 
+  // Cached JS plane arrays handed out by the data/extendedData getters. Building
+  // them allocates an Array plus a Buffer wrapper per plane on every access, which
+  // dominates per-sample/per-pixel loops. The cache is dropped whenever the frame's
+  // data pointers may have changed: every SyncExternalMemory() call site (alloc,
+  // free, ref, unref, clone, getBuffer, makeWritable, and all native fill sites)
+  // plus applyCropping (shifts data pointers) and fromBuffer (re-points them).
+  Napi::Reference<Napi::Array> cached_data_;
+  Napi::Reference<Napi::Array> cached_extended_data_;
+
+  void InvalidateDataCache();
+
   // @internal test hook: exposes reported_memory_ so the accounting can be
   // asserted deterministically (the value is not observable via V8 heap stats).
   Napi::Value GetReportedMemory(const Napi::CallbackInfo& info);

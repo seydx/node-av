@@ -264,6 +264,8 @@ export class Encoder implements Disposable {
   private videoScaler?: SoftwareScaleContext;
   private scaledFrame?: Frame;
   private videoTargetFormat?: AVPixelFormat;
+  private supportsParamChange?: boolean;
+  private encoderChannels?: number;
 
   // Worker pattern for push-based processing
   private inputQueue: AsyncQueue<Frame>;
@@ -2478,6 +2480,8 @@ export class Encoder implements Disposable {
     // - Audio: frame.timeBase from first frame (typically 1/sample_rate)
     const encoderTimebase = this.codecContext.timeBase;
     const oldTimebase = frame.timeBase;
+    const pts = frame.pts;
+    const duration = frame.duration;
 
     // IMPORTANT: Calculate duration BEFORE converting frame timebase
     // This matches FFmpeg's video_sync_process() which calculates:
@@ -2485,19 +2489,19 @@ export class Encoder implements Disposable {
     // We need the OLD timebase to convert duration properly
     let frameDuration: bigint;
 
-    if (frame.duration && frame.duration > 0n) {
+    if (duration && duration > 0n) {
       // Convert duration from frame timebase to encoder timebase
       // This ensures encoder gets correct frame duration for timestamps
-      frameDuration = avRescaleQ(frame.duration, oldTimebase, encoderTimebase);
+      frameDuration = avRescaleQ(duration, oldTimebase, encoderTimebase);
     } else {
       // Default to 1 (constant frame rate behavior)
       // Matches FFmpeg's CFR mode: frame->duration = 1
       frameDuration = 1n;
     }
 
-    if (frame.pts !== null && frame.pts !== undefined) {
+    if (pts !== null && pts !== undefined) {
       // Convert PTS to encoder timebase
-      frame.pts = avRescaleQ(frame.pts, oldTimebase, encoderTimebase);
+      frame.pts = avRescaleQ(pts, oldTimebase, encoderTimebase);
 
       // IMPORTANT: Set frame timebase to encoder timebase
       // FFmpeg does this in adjust_frame_pts_to_encoder_tb(): frame->time_base = tb_dst
@@ -2511,23 +2515,29 @@ export class Encoder implements Disposable {
     // Since we don't have automatic filter like FFmpeg, we always set it here
     frame.duration = frameDuration;
 
-    if (this.codecContext.codecType === AVMEDIA_TYPE_VIDEO) {
+    const codecType = this.codecContext.codecType;
+    if (codecType === AVMEDIA_TYPE_VIDEO) {
       // Video: Set frame quality from encoder's global quality
       // Only set if encoder has globalQuality configured and frame doesn't already have quality set
-      if (this.codecContext.globalQuality > 0 && frame.quality <= 0) {
-        frame.quality = this.codecContext.globalQuality;
+      const globalQuality = this.codecContext.globalQuality;
+      if (globalQuality > 0 && frame.quality <= 0) {
+        frame.quality = globalQuality;
       }
-    } else if (this.codecContext.codecType === AVMEDIA_TYPE_AUDIO) {
+    } else if (codecType === AVMEDIA_TYPE_AUDIO) {
       // Audio: Validate channel count consistency
-      // If encoder doesn't support AV_CODEC_CAP_PARAM_CHANGE, channel count must remain constant
-      const supportsParamChange = this.codec.hasCapabilities(AV_CODEC_CAP_PARAM_CHANGE);
+      // If encoder doesn't support AV_CODEC_CAP_PARAM_CHANGE, channel count must remain
+      // constant. The capability and the encoder's channel count are stable after open,
+      // so resolve them once instead of per frame.
+      this.supportsParamChange ??= this.codec.hasCapabilities(AV_CODEC_CAP_PARAM_CHANGE);
 
-      if (!supportsParamChange) {
-        const encoderChannels = this.codecContext.channelLayout.nbChannels;
+      if (!this.supportsParamChange) {
+        this.encoderChannels ??= this.codecContext.channelLayout.nbChannels;
         const frameChannels = frame.channelLayout?.nbChannels ?? 0;
 
-        if (encoderChannels !== frameChannels) {
-          throw new Error(`Audio channel count changed (${encoderChannels} -> ${frameChannels}) and encoder '${this.codec.name}' does not support parameter changes`);
+        if (this.encoderChannels !== frameChannels) {
+          throw new Error(
+            `Audio channel count changed (${this.encoderChannels} -> ${frameChannels}) and encoder '${this.codec.name}' does not support parameter changes`,
+          );
         }
       }
     }

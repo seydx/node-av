@@ -113,12 +113,23 @@ Napi::Value Frame::GetReportedMemory(const Napi::CallbackInfo& info) {
 }
 
 void Frame::SyncExternalMemory(napi_env env) {
+  // Every caller is a point where the frame's buffers may have changed, so the
+  // cached plane arrays must be dropped here unconditionally - NOT gated on the
+  // delta below (e.g. ref()ing a same-sized frame keeps the total but re-points
+  // the data planes).
+  InvalidateDataCache();
+
   int64_t current = FrameBufferSize(frame_);
   int64_t delta = current - reported_memory_;
   if (delta != 0) {
     Napi::MemoryManagement::AdjustExternalMemory(env, delta);
     reported_memory_ = current;
   }
+}
+
+void Frame::InvalidateDataCache() {
+  cached_data_.Reset();
+  cached_extended_data_.Reset();
 }
 
 Frame::~Frame() {
@@ -335,7 +346,9 @@ Napi::Value Frame::FromBuffer(const Napi::CallbackInfo& info) {
       frame_->height,
       1
     );
-    
+
+    // av_image_fill_arrays re-points data[] at the JS buffer - drop cached views.
+    InvalidateDataCache();
     return Napi::Number::New(env, ret);
   }
   // For audio frames
@@ -846,18 +859,25 @@ void Frame::SetAlphaMode(const Napi::CallbackInfo& info, const Napi::Value& valu
 
 Napi::Value Frame::GetData(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
-  
+
   if (!frame_) {
     return env.Null();
   }
-  
+
   AVFrame* f = frame_;
-  
+
   // Check if there's any data
   if (!f->data[0]) {
     return env.Null();
   }
-  
+
+  // Serve the cached plane array while the frame's buffers are unchanged -
+  // rebuilding it allocates an Array plus a Buffer wrapper per plane, which
+  // dominates per-sample/per-pixel loops. Invalidated via InvalidateDataCache().
+  if (!cached_data_.IsEmpty()) {
+    return cached_data_.Value();
+  }
+
   // Return array of data planes for video/audio
   Napi::Array planes = Napi::Array::New(env);
   
@@ -883,36 +903,42 @@ Napi::Value Frame::GetData(const Napi::CallbackInfo& info) {
     }
   } else {
     // Video frame
+    // Look the pixel format descriptor up once - it's the same for every plane.
+    const AVPixFmtDescriptor* desc = av_pix_fmt_desc_get(static_cast<AVPixelFormat>(f->format));
     for (int i = 0; i < AV_NUM_DATA_POINTERS && f->data[i]; i++) {
       if (f->linesize[i] > 0) {
         // Calculate plane size
         int planeHeight = f->height;
-        if (i > 0) {
+        if (i > 0 && i < 3 && desc) {
           // For chroma planes in YUV formats, they might be subsampled
-          const AVPixFmtDescriptor* desc = av_pix_fmt_desc_get(static_cast<AVPixelFormat>(f->format));
-          if (desc && i < 3) {
-            planeHeight = AV_CEIL_RSHIFT(f->height, desc->log2_chroma_h);
-          }
+          planeHeight = AV_CEIL_RSHIFT(f->height, desc->log2_chroma_h);
         }
         size_t planeSize = f->linesize[i] * planeHeight;
-        
+
         // Create buffer view (copies in Electron where external buffers are not allowed)
         planes.Set(static_cast<uint32_t>(i), Napi::Buffer<uint8_t>::NewOrCopy(env, f->data[i], planeSize));
       }
     }
   }
-  
+
+  cached_data_ = Napi::Reference<Napi::Array>::New(planes, 1);
   return planes;
 }
 
 Napi::Value Frame::GetExtendedData(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
-  
+
   AVFrame* f = frame_;
   if (!f || !f->extended_data) {
     return env.Null();
   }
-  
+
+  // Serve the cached plane array while the frame's buffers are unchanged
+  // (see GetData; same invalidation via InvalidateDataCache()).
+  if (!cached_extended_data_.IsEmpty()) {
+    return cached_extended_data_.Value();
+  }
+
   // For audio with more than 8 channels, extended_data contains all channel data
   // For video and audio with <= 8 channels, extended_data == data
   Napi::Array extData = Napi::Array::New(env);
@@ -948,24 +974,24 @@ Napi::Value Frame::GetExtendedData(const Napi::CallbackInfo& info) {
     }
   } else {
     // Video frame or no audio channels - use same logic as GetData
+    // Look the pixel format descriptor up once - it's the same for every plane.
+    const AVPixFmtDescriptor* desc = av_pix_fmt_desc_get(static_cast<AVPixelFormat>(f->format));
     for (int i = 0; i < AV_NUM_DATA_POINTERS && f->extended_data[i]; i++) {
       if (f->linesize[i] <= 0) break;
-      
+
       // Calculate plane size based on format and dimensions
       int planeHeight = f->height;
-      if (i > 0) {
+      if (i > 0 && desc) {
         // For chroma planes in YUV formats
-        const AVPixFmtDescriptor* desc = av_pix_fmt_desc_get(static_cast<AVPixelFormat>(f->format));
-        if (desc) {
-          planeHeight = AV_CEIL_RSHIFT(f->height, desc->log2_chroma_h);
-        }
+        planeHeight = AV_CEIL_RSHIFT(f->height, desc->log2_chroma_h);
       }
-      
+
       size_t planeSize = f->linesize[i] * planeHeight;
       extData.Set(i, Napi::Buffer<uint8_t>::NewOrCopy(env, f->extended_data[i], planeSize));
     }
   }
-  
+
+  cached_extended_data_ = Napi::Reference<Napi::Array>::New(extData, 1);
   return extData;
 }
 
@@ -1227,6 +1253,8 @@ Napi::Value Frame::ApplyCropping(const Napi::CallbackInfo& info) {
   // Apply cropping using FFmpeg's av_frame_apply_cropping
   int ret = av_frame_apply_cropping(frame_, flags);
 
+  // Cropping shifts the data[] pointers (without changing buf[]) - drop cached views.
+  InvalidateDataCache();
   return Napi::Number::New(env, ret);
 }
 
