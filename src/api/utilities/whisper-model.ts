@@ -10,6 +10,22 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 /**
+ * Download error carrying the HTTP status (and a numeric Retry-After, when sent)
+ * so the retry logic can tell transient failures from permanent ones.
+ *
+ * @internal
+ */
+class DownloadHttpError extends Error {
+  constructor(
+    message: string,
+    readonly statusCode: number,
+    readonly retryAfterSeconds?: number,
+  ) {
+    super(message);
+  }
+}
+
+/**
  * Model type for Whisper downloads
  */
 export type WhisperModelType = 'ggml' | 'vad';
@@ -394,7 +410,7 @@ export class WhisperDownloader {
     const url = this.getModelUrl(model, modelType);
     const tmpFilePath = `${filePath}.tmp`;
 
-    const downloadPromise = this.followRedirect(url, tmpFilePath, 0)
+    const downloadPromise = this.downloadWithRetry(url, tmpFilePath)
       .then(async () => {
         // Rename temporary file to final name after successful download
         await rename(tmpFilePath, filePath);
@@ -492,6 +508,46 @@ export class WhisperDownloader {
   }
 
   /**
+   * Download a URL to a file, retrying transient failures.
+   *
+   * Rate limiting (HTTP 429, common when several CI runners hit the model host
+   * from a shared IP pool), server errors (5xx), and network errors are retried
+   * with exponential backoff, honoring a numeric `Retry-After` header as the
+   * lower bound (capped at 30 s per wait). Other HTTP errors (e.g. 404) fail
+   * immediately. Each attempt truncates and rewrites the output file.
+   *
+   * @param url - URL to download
+   *
+   * @param outputPath - Local file path to save the download
+   *
+   * @returns Promise that resolves when the download is complete
+   *
+   * @throws {Error} The last download error once the retries are exhausted
+   *
+   * @internal
+   */
+  private static async downloadWithRetry(url: string, outputPath: string): Promise<void> {
+    const maxRetries = 3;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        await this.followRedirect(url, outputPath, 0);
+        return;
+      } catch (error) {
+        // Permanent client errors (404 wrong URL, 403, ...) are not retryable;
+        // 429/5xx and plain network errors (no statusCode) are.
+        const status = error instanceof DownloadHttpError ? error.statusCode : undefined;
+        const retryable = status === undefined || status === 429 || status >= 500;
+        if (!retryable || attempt >= maxRetries) {
+          throw error;
+        }
+        const backoffMs = 1000 * 2 ** attempt;
+        const retryAfterMs = error instanceof DownloadHttpError && error.retryAfterSeconds !== undefined ? error.retryAfterSeconds * 1000 : 0;
+        await new Promise((r) => setTimeout(r, Math.min(Math.max(backoffMs, retryAfterMs), 30_000)));
+      }
+    }
+  }
+
+  /**
    * Follow HTTP redirects recursively to download a file.
    *
    * Handles HTTP redirects (301, 302, 307, 308) up to a maximum of 5 redirects.
@@ -533,7 +589,11 @@ export class WhisperDownloader {
         if (response.statusCode !== 200) {
           // Destroy the response to close the connection
           response.destroy();
-          reject(new Error(`Failed to download: HTTP ${response.statusCode}`));
+          // Carry the status (and a numeric Retry-After, e.g. on 429 rate limits)
+          // so downloadWithRetry can decide whether and how long to back off.
+          const retryAfter = Number(response.headers['retry-after']);
+          const retryAfterSeconds = Number.isFinite(retryAfter) ? retryAfter : undefined;
+          reject(new DownloadHttpError(`Failed to download: HTTP ${response.statusCode}`, response.statusCode ?? 0, retryAfterSeconds));
           return;
         }
 
