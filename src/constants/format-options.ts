@@ -495,8 +495,12 @@ export interface MuxerPrivateOptionsMap {
     single_file?: boolean | (string & {});
     /** DASH-templated name to be used for baseURL. Implies storing all segments in one file, accessed using byte ranges */
     single_file_name?: string | number;
+    /** set MPD availabilityStartTime as epoch milliseconds */
+    availability_start_time_ms?: number | (string & {});
     /** Enable/Disable streaming mode of output. Each frame will be moof fragment */
     streaming?: boolean | (string & {});
+    /** set MPD suggestedPresentationDelay */
+    suggested_presentation_delay?: string | number;
     /** Set desired target latency for Low-latency dash */
     target_latency?: string | number;
     /** set timeout for socket I/O operations */

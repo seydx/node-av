@@ -732,6 +732,7 @@ export const AV_PKT_DATA_3D_REFERENCE_DISPLAYS = 38 as AVPacketSideDataType;
 export const AV_PKT_DATA_RTCP_SR = 39 as AVPacketSideDataType;
 export const AV_PKT_DATA_EXIF = 40 as AVPacketSideDataType;
 export const AV_PKT_DATA_DYNAMIC_HDR_SMPTE_2094_APP5 = 41 as AVPacketSideDataType;
+export const AV_PKT_DATA_HEVC_CONF = 42 as AVPacketSideDataType;
 
 // libavcodec/packet.h
 export type AVSideDataParamChangeFlags = number & { readonly [__ffmpeg_brand]: 'AVSideDataParamChangeFlags' };
@@ -778,6 +779,7 @@ export const AV_STREAM_GROUP_PARAMS_IAMF_MIX_PRESENTATION = 2 as AVStreamGroupPa
 export const AV_STREAM_GROUP_PARAMS_TILE_GRID = 3 as AVStreamGroupParamsType;
 export const AV_STREAM_GROUP_PARAMS_LCEVC = 4 as AVStreamGroupParamsType;
 export const AV_STREAM_GROUP_PARAMS_TREF = 5 as AVStreamGroupParamsType;
+export const AV_STREAM_GROUP_PARAMS_DOLBY_VISION = 6 as AVStreamGroupParamsType;
 
 // libavformat/avlanguage.h
 export type AVLangCodespace = number & { readonly [__ffmpeg_brand]: 'AVLangCodespace' };

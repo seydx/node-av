@@ -20,6 +20,7 @@ export type BsfName =
   | 'chomp'
   | 'dca_core'
   | 'dovi_rpu'
+  | 'dovi_split'
   | 'dts2pts'
   | 'dump_extra'
   | 'dv_error_marker'
@@ -107,6 +108,13 @@ export interface BsfOptionsMap {
     strip?: boolean;
     /** DV metadata compression mode */
     compression?: 'none' | 'limited' | 'extended';
+  };
+  /**
+   * @see https://ffmpeg.org/ffmpeg-bitstream-filters.html#dovi_005fsplit
+   */
+  dovi_split: {
+    /** Which Dolby Vision components to keep in the output bitstream */
+    mode?: 'bl' | 'bl_rpu' | 'el' | 'el_rpu';
   };
   /**
    * @see https://ffmpeg.org/ffmpeg-bitstream-filters.html#dump_005fextra
