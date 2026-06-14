@@ -20,7 +20,6 @@ import { fileURLToPath } from 'url';
 
 import { FrameUtils } from '../src/lib/frame-utils.js';
 
-import type { Channels } from 'sharp';
 import type { ImageOptions } from '../src/lib/frame-utils.js';
 
 async function benchmark() {
@@ -88,7 +87,7 @@ async function benchmark() {
     raw: {
       width: cropWidth,
       height: cropHeight,
-      channels: cropChannel as Channels,
+      channels: cropChannel as sharp.Channels,
     },
   });
 
@@ -111,7 +110,7 @@ async function benchmark() {
     raw: {
       width: resizeWidth,
       height: resizeHeight,
-      channels: resizeChannel as Channels,
+      channels: resizeChannel as sharp.Channels,
     },
   });
 
