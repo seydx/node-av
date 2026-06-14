@@ -55,6 +55,9 @@ if (!filename) {
   process.exit(0);
 }
 
+// os.type() reports the OS, not the build toolchain: standard (MSVC-built) Windows
+// Node.js always returns 'Windows_NT' and uses the default binary. Only a Node.js
+// compiled under MSYS2/MinGW reports otherwise and needs the jellyfin (MinGW) build.
 if (sysPlatform === 'win32' && getPlatformType() !== 'Windows_NT') {
   filename = filename.replace('.zip', '-jellyfin.zip');
 }

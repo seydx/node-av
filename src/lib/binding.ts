@@ -389,8 +389,12 @@ function loadBinding(): NativeBinding {
   }
 
   if (!loadLocal) {
-    // For Windows, detect MinGW vs MSVC environment
+    // For Windows, pick the binary matching the Node.js runtime's toolchain.
     if (platform === 'win32') {
+      // os.type() reports the OS, not the build toolchain: the official Node.js
+      // for Windows is MSVC-built and always returns 'Windows_NT'. It only differs
+      // (e.g. 'MINGW64_NT-*', 'MSYS_NT-*') when Node itself was compiled under
+      // MSYS2/MinGW, so MSVC is the primary path and MinGW the niche one.
       const useMingW = type() !== 'Windows_NT';
       if (useMingW) {
         try {
@@ -401,7 +405,7 @@ function loadBinding(): NativeBinding {
         }
       }
 
-      // Fallback to MSVC
+      // Default for standard (MSVC-built) Windows Node.js.
       try {
         const packageName = `@seydx/node-av-${platformArch}-msvc`;
         return require(`${packageName}/node-av.node`);
