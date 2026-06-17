@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { Open } from 'unzipper';
 
 import { ffmpegPath } from './index.js';
-import { getArchitecture, getPlatform, getPlatformType } from './utils.js';
+import { getArchitecture, getPlatform, useMingwToolchain } from './utils.js';
 import { FFMPEG_VERSION } from './version.js';
 
 import type { ARCH } from './utils.js';
@@ -55,10 +55,10 @@ if (!filename) {
   process.exit(0);
 }
 
-// os.type() reports the OS, not the build toolchain: standard (MSVC-built) Windows
-// Node.js always returns 'Windows_NT' and uses the default binary. Only a Node.js
-// compiled under MSYS2/MinGW reports otherwise and needs the jellyfin (MinGW) build.
-if (sysPlatform === 'win32' && getPlatformType() !== 'Windows_NT') {
+// Standard (MSVC-built) Windows Node.js uses the default binary; only a MinGW
+// runtime (or an explicit npm_config_libc=mingw when cross-compiling) needs the
+// jellyfin build. See useMingwToolchain() for the detection rationale.
+if (sysPlatform === 'win32' && useMingwToolchain()) {
   filename = filename.replace('.zip', '-jellyfin.zip');
 }
 

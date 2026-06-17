@@ -37,6 +37,29 @@ export function getPlatformType(): string {
 }
 
 /**
+ * Determine whether the MinGW (jellyfin) Windows build should be used.
+ *
+ * On a native install this reflects the running Node.js: the official Windows
+ * Node.js is MSVC-built and reports `Windows_NT`, while a Node.js compiled under
+ * MSYS2/MinGW reports e.g. `MINGW64_NT-*` and needs the MinGW build.
+ *
+ * When cross-compiling (`npm_config_os` is set) the host's `os.type()` is
+ * meaningless for the target, so this defaults to the standard MSVC build and
+ * only opts into MinGW when `npm_config_libc=mingw` is explicitly passed.
+ *
+ * @returns True if the MinGW (jellyfin) build should be used
+ *
+ * @internal
+ */
+export function useMingwToolchain(): boolean {
+  if (process.env.npm_config_os) {
+    return process.env.npm_config_libc === 'mingw';
+  }
+
+  return getPlatformType() !== 'Windows_NT';
+}
+
+/**
  * Get the current architecture.
  *
  * If the environment variable `npm_config_cpu` is set, its value will be used

@@ -42,6 +42,7 @@ Native Node.js bindings for FFmpeg with full TypeScript support - including type
 - [Electron](#electron)
 - [Examples](#examples)
 - [Prebuilt Binaries](#prebuilt-binaries)
+  - [Cross-Platform Packaging (CI/CD)](#cross-platform-packaging-cicd)
 - [Troubleshooting](#troubleshooting)
 - [License](#license)
 - [Contributing](#contributing)
@@ -533,6 +534,22 @@ Prebuilt binaries are available for multiple platforms:
 - **macOS**: x64, ARM64
 - **Linux**: x64, ARM64
 - **Windows**: x64, ARM64 (automatic MSVC/MinGW selection)
+
+### Cross-Platform Packaging (CI/CD)
+
+By default the install step fetches the native binding and FFmpeg binary for the
+host platform. When packaging for a different target (e.g. building a Windows
+Electron app from a Linux CI runner), pass npm's standard `--os` / `--cpu` flags:
+
+```bash
+# Install Windows x64 binaries while running on Linux
+npm install --os=win32 --cpu=x64
+```
+
+npm filters the platform-specific `optionalDependencies` by these flags, and the
+postinstall hook honors them for the bundled FFmpeg binary as well. Cross-compiled
+Windows installs default to the MSVC build; pass `--libc=mingw` to select the MinGW
+(jellyfin) build instead.
 
 ## Troubleshooting
 
