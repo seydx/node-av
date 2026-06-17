@@ -22,7 +22,7 @@ public:
 private:
   friend class FormatContext;
 
-  static Napi::FunctionReference constructor;
+  static thread_local Napi::FunctionReference constructor;
 
   const AVOutputFormat* format_ = nullptr;
   

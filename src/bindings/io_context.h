@@ -58,7 +58,7 @@ public:
   Napi::Value GetWriteFlag(const Napi::CallbackInfo& info);
   
   // Static members  
-  static Napi::FunctionReference constructor;
+  static thread_local Napi::FunctionReference constructor;
 
 private:
   friend class AVOptionWrapper;

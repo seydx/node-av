@@ -19,7 +19,7 @@ extern "C" {
 
 namespace ffmpeg {
 
-Napi::FunctionReference AVOptionWrapper::constructor;
+thread_local Napi::FunctionReference AVOptionWrapper::constructor;
 
 Napi::Object AVOptionWrapper::Init(Napi::Env env, Napi::Object exports) {
   Napi::Function func = DefineClass(env, "AVOptionWrapper", {

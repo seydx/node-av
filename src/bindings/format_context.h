@@ -122,7 +122,7 @@ private:
   friend class FCFlushWorker;
   friend class FCSendRTSPPacketWorker;
 
-  static Napi::FunctionReference constructor;
+  static thread_local Napi::FunctionReference constructor;
 
   AVFormatContext* ctx_ = nullptr;
   bool is_output_ = false;

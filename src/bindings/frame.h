@@ -26,7 +26,7 @@ public:
 private:
   friend class HwframeTransferDataWorker;
 
-  static Napi::FunctionReference constructor;
+  static thread_local Napi::FunctionReference constructor;
 
   AVFrame* frame_ = nullptr;
 

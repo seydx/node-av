@@ -24,7 +24,7 @@ public:
 private:
   friend class Stream;
 
-  static Napi::FunctionReference constructor;
+  static thread_local Napi::FunctionReference constructor;
 
   AVCodecParserContext* parser_ctx_ = nullptr;
   bool owns_parser_ = true;  // Whether we own the parser context

@@ -55,7 +55,7 @@ public:
   static Napi::Value Show(const Napi::CallbackInfo& info);
 
 private:
-  static Napi::FunctionReference constructor;
+  static thread_local Napi::FunctionReference constructor;
   const ::AVOption* option_;
   
   // Helper to extract void* from Native objects

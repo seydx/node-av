@@ -4,7 +4,7 @@
 
 namespace ffmpeg {
 
-Napi::FunctionReference FilterGraphSegment::constructor;
+thread_local Napi::FunctionReference FilterGraphSegment::constructor;
 
 Napi::Object FilterGraphSegment::Init(Napi::Env env, Napi::Object exports) {
   Napi::Function func = DefineClass(env, "FilterGraphSegment", {

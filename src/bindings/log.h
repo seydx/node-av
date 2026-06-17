@@ -20,7 +20,7 @@ public:
   ~Log();
   
 private:
-  static Napi::FunctionReference constructor;
+  static thread_local Napi::FunctionReference constructor;
   static Napi::ThreadSafeFunction tsfn;
   static std::atomic<bool> callback_active;
   static std::atomic<int> callback_max_level;

@@ -29,7 +29,7 @@ public:
 private:
   friend class FilterGraph;
 
-  static Napi::FunctionReference constructor;
+  static thread_local Napi::FunctionReference constructor;
 
   AVFilterGraphSegment* segment_ = nullptr;
 

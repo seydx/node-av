@@ -17,7 +17,7 @@ namespace ffmpeg {
 class FrameUtils : public Napi::ObjectWrap<FrameUtils> {
 public:
   static Napi::Object Init(Napi::Env env, Napi::Object exports);
-  static Napi::FunctionReference constructor;
+  static thread_local Napi::FunctionReference constructor;
 
   explicit FrameUtils(const Napi::CallbackInfo& info);
   ~FrameUtils();

@@ -12,7 +12,7 @@
 
 namespace ffmpeg {
 
-Napi::FunctionReference FormatContext::constructor;
+thread_local Napi::FunctionReference FormatContext::constructor;
 
 Napi::Object FormatContext::Init(Napi::Env env, Napi::Object exports) {
   Napi::Function func = DefineClass(env, "FormatContext", {

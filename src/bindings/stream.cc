@@ -7,7 +7,7 @@
 
 namespace ffmpeg {
 
-Napi::FunctionReference Stream::constructor;
+thread_local Napi::FunctionReference Stream::constructor;
 
 Napi::Object Stream::Init(Napi::Env env, Napi::Object exports) {
   Napi::Function func = DefineClass(env, "Stream", {

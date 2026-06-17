@@ -2,7 +2,7 @@
 
 namespace ffmpeg {
 
-Napi::FunctionReference OutputFormat::constructor;
+thread_local Napi::FunctionReference OutputFormat::constructor;
 
 Napi::Object OutputFormat::Init(Napi::Env env, Napi::Object exports) {
   Napi::Function func = DefineClass(env, "OutputFormat", {

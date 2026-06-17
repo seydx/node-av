@@ -5,7 +5,7 @@
 
 namespace ffmpeg {
 
-Napi::FunctionReference SoftwareResampleContext::constructor;
+thread_local Napi::FunctionReference SoftwareResampleContext::constructor;
 
 Napi::Object SoftwareResampleContext::Init(Napi::Env env, Napi::Object exports) {
   Napi::Function func = DefineClass(env, "SoftwareResampleContext", {

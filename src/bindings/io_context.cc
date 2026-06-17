@@ -7,7 +7,7 @@
 
 namespace ffmpeg {
 
-Napi::FunctionReference IOContext::constructor;
+thread_local Napi::FunctionReference IOContext::constructor;
 
 Napi::Object IOContext::Init(Napi::Env env, Napi::Object exports) {
   Napi::Function func = DefineClass(env, "IOContext", {

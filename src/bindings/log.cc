@@ -6,7 +6,7 @@
 namespace ffmpeg {
 
 // Static member definitions
-Napi::FunctionReference Log::constructor;
+thread_local Napi::FunctionReference Log::constructor;
 Napi::ThreadSafeFunction Log::tsfn = nullptr;
 std::atomic<bool> Log::callback_active(false);
 std::atomic<int> Log::callback_max_level(AV_LOG_INFO);

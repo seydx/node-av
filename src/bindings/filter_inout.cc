@@ -8,7 +8,7 @@ extern "C" {
 
 namespace ffmpeg {
 
-Napi::FunctionReference FilterInOut::constructor;
+thread_local Napi::FunctionReference FilterInOut::constructor;
 
 Napi::Object FilterInOut::Init(Napi::Env env, Napi::Object exports) {
   Napi::Function func = DefineClass(env, "FilterInOut", {

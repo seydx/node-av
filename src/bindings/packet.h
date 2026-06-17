@@ -24,7 +24,7 @@ private:
   friend class Stream;
   friend class SyncQueue;
 
-  static Napi::FunctionReference constructor;
+  static thread_local Napi::FunctionReference constructor;
 
   AVPacket* packet_ = nullptr;
 

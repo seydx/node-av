@@ -8,7 +8,7 @@ extern "C" {
 
 namespace ffmpeg {
 
-Napi::FunctionReference Fifo::constructor;
+thread_local Napi::FunctionReference Fifo::constructor;
 
 Napi::Object Fifo::Init(Napi::Env env, Napi::Object exports) {
   Napi::Function func = DefineClass(env, "Fifo", {

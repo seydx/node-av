@@ -92,7 +92,7 @@ public:
   Device(const Napi::CallbackInfo& info);
   ~Device();
 
-  static Napi::FunctionReference constructor;
+  static thread_local Napi::FunctionReference constructor;
 
 private:
   static Napi::Value ListDevices(const Napi::CallbackInfo& info);

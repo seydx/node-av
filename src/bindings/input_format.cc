@@ -3,7 +3,7 @@
 
 namespace ffmpeg {
 
-Napi::FunctionReference InputFormat::constructor;
+thread_local Napi::FunctionReference InputFormat::constructor;
 
 Napi::Object InputFormat::Init(Napi::Env env, Napi::Object exports) {
   Napi::Function func = DefineClass(env, "InputFormat", {

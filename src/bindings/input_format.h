@@ -25,7 +25,7 @@ public:
   friend class FormatContext;
   friend class InputFormatProbeBufferWorker;
 
-  static Napi::FunctionReference constructor;
+  static thread_local Napi::FunctionReference constructor;
 
 private:
   const AVInputFormat* format_ = nullptr;

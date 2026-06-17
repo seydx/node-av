@@ -10,7 +10,7 @@
 
 namespace ffmpeg {
 
-Napi::FunctionReference Frame::constructor;
+thread_local Napi::FunctionReference Frame::constructor;
 
 Napi::Object Frame::Init(Napi::Env env, Napi::Object exports) {
   Napi::Function func = DefineClass(env, "Frame", {

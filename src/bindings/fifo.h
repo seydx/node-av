@@ -19,7 +19,7 @@ public:
   AVFifo* Get() { return fifo_; }
 
 private:
-  static Napi::FunctionReference constructor;
+  static thread_local Napi::FunctionReference constructor;
 
   AVFifo* fifo_ = nullptr;
 

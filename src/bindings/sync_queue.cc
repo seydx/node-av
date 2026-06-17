@@ -9,7 +9,7 @@ extern "C" {
 
 namespace ffmpeg {
 
-Napi::FunctionReference SyncQueue::constructor;
+thread_local Napi::FunctionReference SyncQueue::constructor;
 
 Napi::Object SyncQueue::Init(Napi::Env env, Napi::Object exports) {
     Napi::Function func = DefineClass(env, "SyncQueue", {

@@ -5,7 +5,7 @@
 
 namespace ffmpeg {
 
-Napi::FunctionReference SoftwareScaleContext::constructor;
+thread_local Napi::FunctionReference SoftwareScaleContext::constructor;
 
 Napi::Object SoftwareScaleContext::Init(Napi::Env env, Napi::Object exports) {
   Napi::Function func = DefineClass(env, "SoftwareScaleContext", {

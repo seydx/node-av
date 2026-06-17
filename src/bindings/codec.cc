@@ -7,7 +7,7 @@ extern "C" {
 
 namespace ffmpeg {
 
-Napi::FunctionReference Codec::constructor;
+thread_local Napi::FunctionReference Codec::constructor;
 
 Napi::Object Codec::Init(Napi::Env env, Napi::Object exports) {
   Napi::Function func = DefineClass(env, "Codec", {

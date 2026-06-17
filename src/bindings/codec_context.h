@@ -28,7 +28,7 @@ private:
   friend class CCSendFrameWorker;
   friend class CCReceivePacketWorker;
 
-  static Napi::FunctionReference constructor;
+  static thread_local Napi::FunctionReference constructor;
 
   AVCodecContext* context_ = nullptr;
   bool is_open_ = false;

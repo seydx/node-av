@@ -6,7 +6,7 @@
 
 namespace ffmpeg {
 
-Napi::FunctionReference HardwareDeviceContext::constructor;
+thread_local Napi::FunctionReference HardwareDeviceContext::constructor;
 
 Napi::Object HardwareDeviceContext::Init(Napi::Env env, Napi::Object exports) {
   Napi::Function func = DefineClass(env, "HardwareDeviceContext", {

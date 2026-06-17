@@ -23,7 +23,7 @@ private:
   friend class AVOptionWrapper;
   friend class SwsScaleFrameWorker;
 
-  static Napi::FunctionReference constructor;
+  static thread_local Napi::FunctionReference constructor;
 
   SwsContext* ctx_ = nullptr;
 

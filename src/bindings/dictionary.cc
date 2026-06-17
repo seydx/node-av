@@ -3,7 +3,7 @@
 
 namespace ffmpeg {
 
-Napi::FunctionReference Dictionary::constructor;
+thread_local Napi::FunctionReference Dictionary::constructor;
 
 Napi::Object Dictionary::Init(Napi::Env env, Napi::Object exports) {
   Napi::Function func = DefineClass(env, "Dictionary", {

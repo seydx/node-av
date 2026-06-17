@@ -47,7 +47,7 @@ public:
 private:
   friend class FilterGraph;
 
-  static Napi::FunctionReference constructor;
+  static thread_local Napi::FunctionReference constructor;
 
   AVFilterInOut* inout_ = nullptr;
   bool is_owned_ = true;

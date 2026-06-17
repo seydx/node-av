@@ -40,7 +40,7 @@ private:
   friend class CodecContext;
   friend class FilterContext;
 
-  static Napi::FunctionReference constructor;
+  static thread_local Napi::FunctionReference constructor;
   
   // Resources
   AVBufferRef* device_ref_ = nullptr;

@@ -24,7 +24,7 @@ private:
   friend class BSFSendPacketWorker;
   friend class BSFReceivePacketWorker;
 
-  static Napi::FunctionReference constructor;
+  static thread_local Napi::FunctionReference constructor;
 
   AVBSFContext* context_ = nullptr;
   bool is_initialized_ = false;

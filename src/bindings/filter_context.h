@@ -46,7 +46,7 @@ private:
   friend class FCBuffersinkGetFrameWorker;
   friend class AVOptionWrapper;
 
-  static Napi::FunctionReference constructor;
+  static thread_local Napi::FunctionReference constructor;
 
   AVFilterContext* ctx_ = nullptr;
   AVFilterContext* unowned_ctx_ = nullptr;

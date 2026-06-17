@@ -23,7 +23,7 @@ private:
   friend class FilterGraph;
   friend class FilterInOut;
 
-  static Napi::FunctionReference constructor;
+  static thread_local Napi::FunctionReference constructor;
 
   const AVFilter* filter_ = nullptr; // NOT owned - filters are static definitions
 

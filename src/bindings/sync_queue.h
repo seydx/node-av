@@ -18,7 +18,7 @@ public:
     ::SyncQueue* Get() { return queue_; }
 
 private:
-    static Napi::FunctionReference constructor;
+    static thread_local Napi::FunctionReference constructor;
     ::SyncQueue* queue_;
     unsigned int nb_streams_;
 

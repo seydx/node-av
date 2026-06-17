@@ -42,7 +42,7 @@ private:
   friend class FGConfigWorker;
   friend class FGRequestOldestWorker;
 
-  static Napi::FunctionReference constructor;
+  static thread_local Napi::FunctionReference constructor;
 
   AVFilterGraph* graph_ = nullptr;
   AVFilterGraph* unowned_graph_ = nullptr;

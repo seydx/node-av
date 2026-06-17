@@ -44,7 +44,7 @@ private:
   friend class CodecContext;
   friend class Frame;
 
-  static Napi::FunctionReference constructor;
+  static thread_local Napi::FunctionReference constructor;
 
   AVBufferRef* frames_ref_ = nullptr;
   AVBufferRef* unowned_ref_ = nullptr;

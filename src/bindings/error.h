@@ -19,7 +19,7 @@ public:
   void Set(int code) { code_ = code; }
 
 private:
-  static Napi::FunctionReference constructor;
+  static thread_local Napi::FunctionReference constructor;
 
   int code_ = 0;
 

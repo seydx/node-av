@@ -22,7 +22,7 @@ extern "C" {
 
 namespace ffmpeg {
 
-Napi::FunctionReference CodecParameters::constructor;
+thread_local Napi::FunctionReference CodecParameters::constructor;
 
 Napi::Object CodecParameters::Init(Napi::Env env, Napi::Object exports) {
   Napi::Function func = DefineClass(env, "CodecParameters", {

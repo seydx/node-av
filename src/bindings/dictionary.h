@@ -31,7 +31,7 @@ private:
   friend class Stream;
   friend class Frame;
 
-  static Napi::FunctionReference constructor;
+  static thread_local Napi::FunctionReference constructor;
 
   AVDictionary* dict_ = nullptr;
 

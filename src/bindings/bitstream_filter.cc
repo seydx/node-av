@@ -2,7 +2,7 @@
 
 namespace ffmpeg {
 
-Napi::FunctionReference BitStreamFilter::constructor;
+thread_local Napi::FunctionReference BitStreamFilter::constructor;
 
 Napi::Object BitStreamFilter::Init(Napi::Env env, Napi::Object exports) {
   Napi::Function func = DefineClass(env, "BitStreamFilter", {

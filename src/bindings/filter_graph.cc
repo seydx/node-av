@@ -12,7 +12,7 @@ extern "C" {
 
 namespace ffmpeg {
 
-Napi::FunctionReference FilterGraph::constructor;
+thread_local Napi::FunctionReference FilterGraph::constructor;
 
 Napi::Object FilterGraph::Init(Napi::Env env, Napi::Object exports) {
   Napi::Function func = DefineClass(env, "FilterGraph", {

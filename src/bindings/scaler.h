@@ -15,7 +15,7 @@ namespace ffmpeg {
 class Scaler : public Napi::ObjectWrap<Scaler> {
 public:
   static Napi::Object Init(Napi::Env env, Napi::Object exports);
-  static Napi::FunctionReference constructor;
+  static thread_local Napi::FunctionReference constructor;
 
   explicit Scaler(const Napi::CallbackInfo& info);
   ~Scaler();

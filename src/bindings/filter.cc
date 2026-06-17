@@ -2,7 +2,7 @@
 
 namespace ffmpeg {
 
-Napi::FunctionReference Filter::constructor;
+thread_local Napi::FunctionReference Filter::constructor;
 
 Napi::Object Filter::Init(Napi::Env env, Napi::Object exports) {
   Napi::Function func = DefineClass(env, "Filter", {

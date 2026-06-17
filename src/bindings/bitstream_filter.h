@@ -23,7 +23,7 @@ public:
   static Napi::Object NewInstance(Napi::Env env, const AVBitStreamFilter* bsf);
 
 private:
-  static Napi::FunctionReference constructor;
+  static thread_local Napi::FunctionReference constructor;
 
   const AVBitStreamFilter* bsf_; // AVBitStreamFilter is const, we don't own it
 

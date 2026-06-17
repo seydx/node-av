@@ -24,7 +24,7 @@ private:
   friend class AVOptionWrapper;
   friend class SwrConvertWorker;
 
-  static Napi::FunctionReference constructor;
+  static thread_local Napi::FunctionReference constructor;
 
   SwrContext* ctx_ = nullptr;
 

@@ -3,7 +3,7 @@
 
 namespace ffmpeg {
 
-Napi::FunctionReference Scaler::constructor;
+thread_local Napi::FunctionReference Scaler::constructor;
 
 Napi::Object Scaler::Init(Napi::Env env, Napi::Object exports) {
   Napi::HandleScope scope(env);

@@ -19,7 +19,7 @@ public:
   AVAudioFifo* Get() { return fifo_; }
 
 private:
-  static Napi::FunctionReference constructor;
+  static thread_local Napi::FunctionReference constructor;
 
   AVAudioFifo* fifo_ = nullptr;
 

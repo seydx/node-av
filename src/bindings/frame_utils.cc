@@ -4,7 +4,7 @@
 
 namespace ffmpeg {
 
-Napi::FunctionReference FrameUtils::constructor;
+thread_local Napi::FunctionReference FrameUtils::constructor;
 
 Napi::Object FrameUtils::Init(Napi::Env env, Napi::Object exports) {
   Napi::HandleScope scope(env);

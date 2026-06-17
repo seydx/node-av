@@ -6,7 +6,7 @@
 
 namespace ffmpeg {
 
-Napi::FunctionReference CodecParser::constructor;
+thread_local Napi::FunctionReference CodecParser::constructor;
 
 Napi::Object CodecParser::Init(Napi::Env env, Napi::Object exports) {
   Napi::Function func = DefineClass(env, "CodecParser", {

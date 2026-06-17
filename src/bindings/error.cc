@@ -3,7 +3,7 @@
 
 namespace ffmpeg {
 
-Napi::FunctionReference FFmpegError::constructor;
+thread_local Napi::FunctionReference FFmpegError::constructor;
 
 Napi::Object FFmpegError::Init(Napi::Env env, Napi::Object exports) {
   Napi::Function func = DefineClass(env, "FFmpegError", {

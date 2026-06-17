@@ -2,7 +2,7 @@
 
 namespace ffmpeg {
 
-Napi::FunctionReference Device::constructor;
+thread_local Napi::FunctionReference Device::constructor;
 
 Napi::Object Device::Init(Napi::Env env, Napi::Object exports) {
   Napi::Function func = DefineClass(env, "Device", {

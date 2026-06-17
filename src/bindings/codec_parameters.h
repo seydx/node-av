@@ -33,7 +33,7 @@ private:
   friend class Stream;
   friend class BitStreamFilterContext;
 
-  static Napi::FunctionReference constructor;
+  static thread_local Napi::FunctionReference constructor;
 
   AVCodecParameters* params_ = nullptr;
   bool is_owned_ = true;

@@ -22,7 +22,7 @@ public:
   static Napi::Object NewInstance(Napi::Env env, AVCodec* codec);
 
 private:
-  static Napi::FunctionReference constructor;
+  static thread_local Napi::FunctionReference constructor;
 
   const AVCodec* codec_; // AVCodec is const, we don't own it
 

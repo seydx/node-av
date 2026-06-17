@@ -17,7 +17,7 @@ extern "C" {
 
 namespace ffmpeg {
 
-Napi::FunctionReference FilterContext::constructor;
+thread_local Napi::FunctionReference FilterContext::constructor;
 
 Napi::Object FilterContext::Init(Napi::Env env, Napi::Object exports) {
   Napi::Function func = DefineClass(env, "FilterContext", {
