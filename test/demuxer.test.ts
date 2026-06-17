@@ -1,12 +1,13 @@
 import assert from 'node:assert';
 import { createReadStream, readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
+import { Readable } from 'node:stream';
 import { after, describe, it } from 'node:test';
 
 import { Demuxer } from '../src/api/index.js';
 import { IOStream } from '../src/api/io-stream.js';
 import { StreamingUtils } from '../src/api/utilities/streaming.js';
-import { AV_CODEC_ID_H264, AV_CODEC_ID_OPUS } from '../src/constants/constants.js';
+import { AV_CODEC_ID_AAC, AV_CODEC_ID_H264, AV_CODEC_ID_OPUS } from '../src/constants/constants.js';
 import { AVMEDIA_TYPE_AUDIO, AVMEDIA_TYPE_VIDEO, AVSEEK_CUR, AVSEEK_END, AVSEEK_SET, AVSEEK_SIZE } from '../src/index.js';
 import { getInputFile, prepareTestEnvironment } from './index.js';
 
@@ -402,6 +403,35 @@ describe('Demuxer', () => {
       assert.throws(() => Demuxer.openSync(readable), /Format must be specified for Readable stream input/);
 
       readable.destroy();
+    });
+
+    it('probes a slow realtime Readable promptly (partial reads, not full-buffer blocking)', { timeout: 7000 }, async () => {
+      const data = readFileSync(getInputFile('audio.aac'));
+
+      const trickle = (): Readable => {
+        let off = 0;
+        const CHUNK = 190;
+        const INTERVAL = 70;
+        return new Readable({
+          read() {
+            if (off >= data.length) {
+              this.push(null);
+              return;
+            }
+            const end = Math.min(off + CHUNK, data.length);
+            const slice = data.subarray(off, end);
+            off = end;
+            setTimeout(() => this.push(slice), INTERVAL);
+          },
+        });
+      };
+
+      const media = await Demuxer.open(trickle(), { format: 'aac', options: { probesize: '8192' } });
+      const cp = media.streams[0].codecpar;
+      assert.equal(cp.codecId, AV_CODEC_ID_AAC, 'Should probe AAC codec');
+      assert.ok(cp.sampleRate > 0, 'Should probe sample rate');
+      assert.ok(cp.channels > 0, 'Should probe channel count');
+      await media.close();
     });
   });
 

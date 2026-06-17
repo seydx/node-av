@@ -387,8 +387,12 @@ export class IOStream {
       bufferSize,
       0, // read mode
       async (size: number): Promise<Buffer | null> => {
-        // Pull-based: read from stream on demand
-        while (totalBuffered < size && !streamEnded && !streamError && !stream.destroyed) {
+        // Pull-based: read from stream on demand. Return as soon as *any* data is
+        // available rather than waiting for the full `size` — FFmpeg's AVIO handles
+        // short reads and calls back for more. Blocking until the whole AVIO buffer
+        // (often 64 KiB) is filled would stall probing on realtime sources that
+        // deliver data slowly, where only the first few KiB are needed up front.
+        while (totalBuffered === 0 && !streamEnded && !streamError && !stream.destroyed) {
           // Try to read available data first
           let chunk: Buffer | null;
           while ((chunk = stream.read() as Buffer | null) !== null) {
@@ -396,13 +400,13 @@ export class IOStream {
             totalBuffered += chunk.length;
           }
 
-          // If we have enough data, stop waiting
-          if (totalBuffered >= size) break;
+          // Got something — return it without waiting for more.
+          if (totalBuffered > 0) break;
 
           // If stream is done, stop waiting
           if (streamEnded || streamError || stream.destroyed) break;
 
-          // Wait for more data
+          // Nothing buffered yet — wait for more data
           await new Promise<void>((resolve) => {
             pendingResolve = resolve;
           });
