@@ -1,4 +1,4 @@
-import { AVERROR_BSF_NOT_FOUND, AVERROR_EAGAIN, AVERROR_EOF } from '../constants/constants.js';
+import { AV_PKT_DATA_NEW_EXTRADATA, AVERROR_BSF_NOT_FOUND, AVERROR_EAGAIN, AVERROR_EOF } from '../constants/constants.js';
 import { BitStreamFilterContext } from '../lib/bitstream-filter-context.js';
 import { BitStreamFilter } from '../lib/bitstream-filter.js';
 import { FFmpegError } from '../lib/error.js';
@@ -893,6 +893,10 @@ export class BitStreamFilterAPI implements Disposable {
     const recvRet = await this.ctx.receivePacket(this.packet);
 
     if (recvRet === 0) {
+      // Filters like aac_adtstoasc deliver new global headers via packet side
+      // data rather than par_out; fold it into the output parameters so callers
+      // (and Muxer's bsf integration) can read it from outputCodecParameters.
+      this.foldNewExtradata(this.packet);
       // Got a packet, clone it for the user
       const cloned = this.packet.clone();
       if (!cloned) {
@@ -962,6 +966,8 @@ export class BitStreamFilterAPI implements Disposable {
     const recvRet = this.ctx.receivePacketSync(this.packet);
 
     if (recvRet === 0) {
+      // See receive(): fold side-data extradata into the output parameters.
+      this.foldNewExtradata(this.packet);
       // Got a packet, clone it for the user
       const cloned = this.packet.clone();
       if (!cloned) {
@@ -1358,5 +1364,28 @@ export class BitStreamFilterAPI implements Disposable {
       // Close output queue when done (if not already closed with error)
       this.outputQueue?.close();
     }
+  }
+
+  /**
+   * Fold a filtered packet's new-extradata side data into the output parameters.
+   *
+   * Bitstream filters that adapt a stream's container framing — `aac_adtstoasc`,
+   * `extract_extradata`, `dump_extra`, `*_mp4toannexb` — emit the resulting global
+   * headers as {@link AV_PKT_DATA_NEW_EXTRADATA} side data on their output packets
+   * rather than on `par_out`, matching FFmpeg's mid-stream extradata model. Without
+   * this, {@link outputCodecParameters} would never reflect that extradata, so a
+   * stream copy that relies on it (including {@link Muxer}'s `bsf` option) emits a
+   * header with no codec configuration. Lifting it onto `par_out` keeps
+   * `outputCodecParameters` current while leaving the side data on the packet too.
+   *
+   * @param packet - A freshly received filtered packet.
+   *
+   * @internal
+   */
+  private foldNewExtradata(packet: Packet): void {
+    const extradata = packet.getSideData(AV_PKT_DATA_NEW_EXTRADATA);
+    if (!extradata) return;
+    const params = this.ctx.outputCodecParameters;
+    if (params) params.extradata = extradata;
   }
 }

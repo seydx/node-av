@@ -2,7 +2,7 @@ import assert from 'node:assert';
 import { existsSync, unlinkSync } from 'node:fs';
 import { describe, it } from 'node:test';
 
-import { AV_CODEC_ID_H264, BitStreamFilterAPI, Decoder, Demuxer, Encoder, FF_ENCODER_LIBX264, Muxer, Packet, pipeline } from '../src/index.js';
+import { AV_CODEC_ID_AAC, AV_CODEC_ID_H264, BitStreamFilterAPI, Decoder, Demuxer, Encoder, FF_ENCODER_LIBX264, Muxer, Packet, pipeline } from '../src/index.js';
 import { getInputFile, getOutputFile, prepareTestEnvironment } from './index.js';
 
 prepareTestEnvironment();
@@ -404,6 +404,64 @@ describe('BitStreamFilterAPI', () => {
       }
 
       assert.ok(packetsProcessed > 0, 'Should have processed at least one packet');
+    });
+  });
+
+  describe('AAC ADTS-to-ASC Filtering', () => {
+    const aacFile = getInputFile('audio.aac');
+
+    it('should surface new-extradata side data via outputCodecParameters (async)', async function (t) {
+      await using media = await Demuxer.open(aacFile);
+      const stream = media.audio();
+
+      if (stream?.codecpar.codecId !== AV_CODEC_ID_AAC || stream.codecpar.extradataSize > 0) {
+        // Only meaningful for raw ADTS AAC, which carries no global extradata.
+        t.skip();
+        return;
+      }
+
+      using bsf = BitStreamFilterAPI.create('aac_adtstoasc', stream);
+
+      // aac_adtstoasc emits the AudioSpecificConfig as NEW_EXTRADATA side data on
+      // its first output packet, not on par_out. The high-level API folds it into
+      // outputCodecParameters so a stream copy can read it back.
+      assert.strictEqual(bsf.outputCodecParameters?.extradataSize, 0, 'Should have no extradata before the first packet');
+
+      for await (using packet of media.packets()) {
+        if (packet?.streamIndex !== stream.index) {
+          continue;
+        }
+        const filtered = await bsf.filterAll(packet);
+        for (const outPacket of filtered) outPacket.free();
+        break;
+      }
+
+      const extradata = bsf.outputCodecParameters?.extradata;
+      assert.ok(extradata && extradata.length >= 2, 'outputCodecParameters should carry the synthesized ASC after filtering');
+    });
+
+    it('should surface new-extradata side data via outputCodecParameters (sync)', function (t) {
+      using media = Demuxer.openSync(aacFile);
+      const stream = media.audio();
+
+      if (stream?.codecpar.codecId !== AV_CODEC_ID_AAC || stream.codecpar.extradataSize > 0) {
+        t.skip();
+        return;
+      }
+
+      using bsf = BitStreamFilterAPI.create('aac_adtstoasc', stream);
+
+      for (using packet of media.packetsSync()) {
+        if (packet?.streamIndex !== stream.index) {
+          continue;
+        }
+        const filtered = bsf.filterAllSync(packet);
+        for (const outPacket of filtered) outPacket.free();
+        break;
+      }
+
+      const extradata = bsf.outputCodecParameters?.extradata;
+      assert.ok(extradata && extradata.length >= 2, 'outputCodecParameters should carry the synthesized ASC after filtering');
     });
   });
 
