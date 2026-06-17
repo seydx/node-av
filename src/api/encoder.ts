@@ -2272,12 +2272,24 @@ export class Encoder implements Disposable {
     const needsResample = targetRate !== inRate || targetFmt !== inFmt || targetLayout.nbChannels !== inLayout.nbChannels;
 
     if (needsResample && !this.autoResample) {
-      const rates = this.codec.supportedSamplerates;
+      const mismatches: string[] = [];
+      if (targetRate !== inRate) {
+        const rates = this.codec.supportedSamplerates;
+        mismatches.push(`sample rate ${inRate} Hz` + (rates && rates.length > 0 ? ` (supported: ${rates.join(', ')})` : ''));
+      }
+      if (targetFmt !== inFmt) {
+        const fmts = this.codec.sampleFormats;
+        const supported = fmts && fmts.length > 0 ? ` (supported: ${fmts.map((f) => avGetSampleFmtName(f) ?? f).join(', ')})` : '';
+        mismatches.push(`sample format ${avGetSampleFmtName(inFmt) ?? inFmt}${supported}`);
+      }
+      if (targetLayout.nbChannels !== inLayout.nbChannels) {
+        mismatches.push(`channel count ${inLayout.nbChannels}ch`);
+      }
       throw new Error(
-        `Encoder '${this.codec.name}' does not support the input audio format ` +
-          `(${inRate} Hz, ${avGetSampleFmtName(inFmt) ?? inFmt}, ${inLayout.nbChannels}ch)` +
-          (rates && rates.length > 0 ? `. Supported sample rates: ${rates.join(', ')}` : '') +
-          '. Set { autoResample: true } on the encoder, or convert the input with an aresample/aformat filter first.',
+        `Encoder '${this.codec.name}' cannot encode the input audio ` +
+          `(${inRate} Hz, ${avGetSampleFmtName(inFmt) ?? inFmt}, ${inLayout.nbChannels}ch): ` +
+          `incompatible ${mismatches.join('; ')}. ` +
+          'Set { autoResample: true } on the encoder, or convert the input with an aresample/aformat filter first.',
       );
     }
 
