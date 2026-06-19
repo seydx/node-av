@@ -83,7 +83,7 @@ jobs:
             mingw-w64-${{ matrix.os.msystem == 'CLANG64' && 'clang-x86_64' || 'clang-aarch64' }}-nodejs
             mingw-w64-${{ matrix.os.msystem == 'CLANG64' && 'clang-x86_64' || 'clang-aarch64' }}-gcc
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: true
 
@@ -396,7 +396,7 @@ jobs:
       SDK_VER: 10.0.22621.0
       FFMPEG_MSVC_PREBUILT_URL: "https://api.github.com/repos/seydx/ffmpeg-msvc-prebuilt/releases/latest"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: true
 
@@ -565,7 +565,7 @@ jobs:
             target: arm64
             runner: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: true
 
@@ -838,7 +838,7 @@ jobs:
       matrix:
         arch: [x64, arm64]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: true
 
