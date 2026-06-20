@@ -4,9 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Bitstream filter extradata is now reflected in the output parameters.** Filters that adapt container framing (`aac_adtstoasc`, `extract_extradata`, `dump_extra`, `*_mp4toannexb`) emit the resulting global headers as packet side data rather than on `par_out`. `BitStreamFilterAPI.outputCodecParameters` now folds that side data in, so a stream copy that relies on it (including `Muxer`'s `bsf` option) writes a header with the correct codec configuration.
+
 ### Fixed
 
 - **Demuxer dropped packets under backpressure in multi-stream pipelines** ([#263](https://github.com/seydx/node-av/issues/263)). When a single demuxer fed two consumers draining at different rates (e.g. a slow video chain alongside a fast audio chain), the demux thread discarded packets for whichever stream's queue was momentarily full instead of waiting for it to drain. This lost video reference frames and corrupted decoding (`missing reference picture`, `mmco: unref short failure`, `co located POCs unavailable`). The read loop now applies per-stream backpressure and is paced by the slowest consumer, so no packet is dropped.
+- **worker_threads safety.** Native class constructor references are now `thread_local`, so node-av objects can be created and used across multiple worker threads without crashing.
+- **Cross-compiled Windows installs selected the wrong toolchain** ([#260](https://github.com/seydx/node-av/issues/260)). A cross install (`npm install --os=win32 --cpu=x64`) incorrectly picked the MinGW FFmpeg build; it now defaults to the standard MSVC build (pass `--libc=mingw` to override). See the new Cross-Platform Packaging section in the README.
 
 ## [6.0.0] - 2026-06-04
 
