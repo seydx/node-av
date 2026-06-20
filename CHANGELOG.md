@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [6.0.1-beta.6] - 2026-06-20
+
 ### Added
 
 - **Bitstream filter extradata is now reflected in the output parameters.** Filters that adapt container framing (`aac_adtstoasc`, `extract_extradata`, `dump_extra`, `*_mp4toannexb`) emit the resulting global headers as packet side data rather than on `par_out`. `BitStreamFilterAPI.outputCodecParameters` now folds that side data in, so a stream copy that relies on it (including `Muxer`'s `bsf` option) writes a header with the correct codec configuration.
