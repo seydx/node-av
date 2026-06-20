@@ -2020,20 +2020,6 @@ export class Demuxer implements AsyncDisposable, Disposable {
       packet.alloc();
 
       while (this.demuxThreadActive && !this.isClosed) {
-        // Check if all queues are full - if so, wait a bit
-        let allQueuesFull = true;
-        for (const queue of this.packetQueues.values()) {
-          if (queue.length < MAX_INPUT_QUEUE_SIZE) {
-            allQueuesFull = false;
-            break;
-          }
-        }
-
-        if (allQueuesFull) {
-          await new Promise(setImmediate);
-          continue;
-        }
-
         // Read next packet
         const ret = await this.formatContext.readFrame(packet);
 
@@ -2070,25 +2056,53 @@ export class Demuxer implements AsyncDisposable, Disposable {
           this.dtsPredict(packet, stream);
         }
 
-        // Find which queues need this packet
+        // Find which queues need this packet. Select by existence, not by
+        // fullness: each consumer registers a queue for its stream and needs
+        // EVERY packet of that stream. Only streams with no registered consumer
+        // (e.g. a subtitle track absent from the pipeline) are skipped here.
         const allQueue = this.packetQueues.get('all');
         const streamQueue = this.packetQueues.get(packet.streamIndex);
 
         const targetQueues: { queue: Packet[]; event: string }[] = [];
 
-        if (allQueue && allQueue.length < MAX_INPUT_QUEUE_SIZE) {
+        if (allQueue) {
           targetQueues.push({ queue: allQueue, event: 'packet-all' });
         }
 
         // Only add stream queue if it's different from 'all' queue
-        if (streamQueue && streamQueue !== allQueue && streamQueue.length < MAX_INPUT_QUEUE_SIZE) {
+        if (streamQueue && streamQueue !== allQueue) {
           targetQueues.push({ queue: streamQueue, event: `packet-${packet.streamIndex}` });
         }
 
         if (targetQueues.length === 0) {
-          // No queue needs this packet, skip it
+          // No consumer for this stream, skip it
           packet.unref();
           continue;
+        }
+
+        // Backpressure: if a target queue is full, wait until the consumer drains
+        // it instead of dropping the packet. Dropping loses reference frames and
+        // corrupts decoding (e.g. H.264 "missing reference picture") - the bug
+        // that surfaced with multi-stream pipelines where one stream (video)
+        // decodes slower than the other (audio). The read loop is paced by the
+        // slowest consumer; faster consumers simply idle on an empty queue.
+        while (this.demuxThreadActive && !this.isClosed) {
+          let queueFull = false;
+          for (const target of targetQueues) {
+            if (target.queue.length >= MAX_INPUT_QUEUE_SIZE) {
+              queueFull = true;
+              break;
+            }
+          }
+          if (!queueFull) {
+            break;
+          }
+          await new Promise(setImmediate);
+        }
+
+        if (!this.demuxThreadActive || this.isClosed) {
+          packet.unref();
+          break;
         }
 
         // Clone once, then share reference for additional queues

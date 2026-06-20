@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Demuxer dropped packets under backpressure in multi-stream pipelines** ([#263](https://github.com/seydx/node-av/issues/263)). When a single demuxer fed two consumers draining at different rates (e.g. a slow video chain alongside a fast audio chain), the demux thread discarded packets for whichever stream's queue was momentarily full instead of waiting for it to drain. This lost video reference frames and corrupted decoding (`missing reference picture`, `mmco: unref short failure`, `co located POCs unavailable`). The read loop now applies per-stream backpressure and is paced by the slowest consumer, so no packet is dropped.
+
 ## [6.0.0] - 2026-06-04
 
 ### Breaking Changes

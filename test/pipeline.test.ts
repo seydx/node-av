@@ -44,6 +44,23 @@ function cleanupTestFile(filepath: string): void {
   }
 }
 
+// Count the demuxed packets of the first video stream in a file.
+async function countVideoPackets(filepath: string): Promise<number> {
+  await using media = await Demuxer.open(filepath);
+  const videoStream = media.video();
+  if (!videoStream) {
+    return 0;
+  }
+
+  let count = 0;
+  for await (using packet of media.packets(videoStream.index)) {
+    if (packet) {
+      count++;
+    }
+  }
+  return count;
+}
+
 describe('Pipeline - Comprehensive Tests', () => {
   // Cleanup all test files after all tests
   after(() => {
@@ -520,6 +537,61 @@ describe('Pipeline - Comprehensive Tests', () => {
         await using verifyInput = await Demuxer.open(outputFile);
         assert.ok(verifyInput.video(), 'Output should have video stream');
         assert.ok(verifyInput.audio(), 'Output should have audio stream');
+      } finally {
+        cleanupTestFile(outputFile);
+      }
+    });
+
+    // Regression for #263: with a shared input feeding a slow video chain and a
+    // fast audio chain, the demux thread dropped video packets once the video
+    // queue filled while audio still had room - corrupting decode (H.264
+    // "missing reference picture") and losing frames. Needs more video packets
+    // than MAX_INPUT_QUEUE_SIZE (100) to fill the queue, so demux.mp4 (~60) is
+    // too short; video.mp4 has 120.
+    it('should not drop video packets under backpressure with shared input', async () => {
+      const backpressureInput = getInputFile('video.mp4');
+      const outputFile = getTestOutputPath('named-backpressure.mp4');
+
+      try {
+        const sourceVideoPackets = await countVideoPackets(backpressureInput);
+        assert.ok(sourceVideoPackets > 100, 'Test input must exceed the queue size to exercise backpressure');
+
+        await using input = await Demuxer.open(backpressureInput);
+        const output = await Muxer.open(outputFile);
+
+        const videoStream = input.video();
+        const audioStream = input.audio();
+
+        if (!videoStream || !audioStream) {
+          assert.fail('Missing video or audio stream');
+        }
+
+        using videoDecoder = await Decoder.create(videoStream);
+        using videoEncoder = await Encoder.create(FF_ENCODER_LIBX264, {
+          decoder: videoDecoder,
+          bitrate: '1M',
+        });
+
+        using audioDecoder = await Decoder.create(audioStream);
+        using audioEncoder = await Encoder.create(FF_ENCODER_AAC, {
+          decoder: audioDecoder,
+          bitrate: '128k',
+        });
+
+        const control = pipeline(
+          input,
+          {
+            video: [videoDecoder, videoEncoder],
+            audio: [audioDecoder, audioEncoder],
+          },
+          output,
+        );
+
+        await control.completion;
+        await output.close();
+
+        const outputVideoPackets = await countVideoPackets(outputFile);
+        assert.strictEqual(outputVideoPackets, sourceVideoPackets, 'All video packets must survive the pipeline (no backpressure drops)');
       } finally {
         cleanupTestFile(outputFile);
       }
