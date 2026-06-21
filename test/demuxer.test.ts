@@ -52,6 +52,21 @@ describe('Demuxer', () => {
       await media.close();
     });
 
+    it('should run the configure hook with the open input context (async)', async () => {
+      let streamCount = -1;
+      const media = await Demuxer.open(inputFile, {
+        configure: (fmt) => {
+          // Runs after find_stream_info, so streams are available.
+          streamCount = fmt.streams.length;
+        },
+      });
+
+      assert.ok(streamCount > 0, 'configure should be invoked with the open context after stream info');
+      assert.equal(streamCount, media.streams.length, 'configure should see the same streams');
+
+      await media.close();
+    });
+
     it('should open from file path (sync)', () => {
       const media = Demuxer.openSync(inputFile);
 

@@ -237,6 +237,27 @@ export interface DemuxerOptions<F extends DemuxerFormat | (string & {}) = Demuxe
   options?: DemuxerOptionsFor<F>;
 
   /**
+   * Configure the underlying format context just after the input is opened.
+   *
+   * Called with the input {@link FormatContext} after `avformat_open_input` and
+   * `avformat_find_stream_info` (so the streams are available) and before any
+   * packets are read. Use it to inspect or tweak the open input context or its
+   * streams directly. Most input-side tuning (probesize, analyzeduration,
+   * protocol options, …) is better passed via {@link DemuxerOptions.options},
+   * which is applied at open time.
+   *
+   * @example
+   * ```typescript
+   * await Demuxer.open('input.mp4', {
+   *   configure: (fmt) => {
+   *     console.log(`Opened ${fmt.streams.length} streams`);
+   *   },
+   * });
+   * ```
+   */
+  configure?: (context: FormatContext) => void;
+
+  /**
    * AbortSignal for cancellation.
    *
    * When aborted, async generators stop yielding and async methods throw AbortError.
@@ -324,7 +345,7 @@ export class Demuxer implements AsyncDisposable, Disposable {
   private _streams: Stream[] = [];
   private ioContext?: IOContext;
   private isClosed = false;
-  private options: Required<Omit<DemuxerOptions, 'signal'>>;
+  private options: Required<Omit<DemuxerOptions, 'signal' | 'configure'>>;
 
   // Timestamp processing state (per-stream)
   private streamStates = new Map<number, StreamState>();
@@ -352,7 +373,7 @@ export class Demuxer implements AsyncDisposable, Disposable {
    *
    * @internal
    */
-  private constructor(formatContext: FormatContext, options: Required<Omit<DemuxerOptions, 'signal'>>, ioContext?: IOContext) {
+  private constructor(formatContext: FormatContext, options: Required<Omit<DemuxerOptions, 'signal' | 'configure'>>, ioContext?: IOContext) {
     this.formatContext = formatContext;
     this.ioContext = ioContext;
     this._streams = formatContext.streams ?? [];
@@ -764,6 +785,8 @@ export class Demuxer implements AsyncDisposable, Disposable {
         }
       }
 
+      options.configure?.(formatContext);
+
       // Determine buffer size
       let bufferSize = options.bufferSize ?? IO_BUFFER_SIZE;
       if (!ioContext && formatContext.iformat && formatContext.pb) {
@@ -775,7 +798,7 @@ export class Demuxer implements AsyncDisposable, Disposable {
       }
 
       // Apply defaults to options
-      const fullOptions: Required<Omit<DemuxerOptions, 'signal'>> = {
+      const fullOptions: Required<Omit<DemuxerOptions, 'signal' | 'configure'>> = {
         bufferSize,
         format: options.format ?? '',
         skipStreamInfo: options.skipStreamInfo ?? false,
@@ -1014,6 +1037,8 @@ export class Demuxer implements AsyncDisposable, Disposable {
         FFmpegError.throwIfError(ret, 'Failed to find stream info');
       }
 
+      options.configure?.(formatContext);
+
       // Determine buffer size
       let bufferSize = options.bufferSize ?? IO_BUFFER_SIZE;
       if (!ioContext && formatContext.iformat && formatContext.pb) {
@@ -1025,7 +1050,7 @@ export class Demuxer implements AsyncDisposable, Disposable {
       }
 
       // Apply defaults to options
-      const fullOptions: Required<Omit<DemuxerOptions, 'signal'>> = {
+      const fullOptions: Required<Omit<DemuxerOptions, 'signal' | 'configure'>> = {
         bufferSize,
         format: options.format ?? '',
         skipStreamInfo: options.skipStreamInfo ?? false,
