@@ -7,6 +7,9 @@ export { ChannelLayoutUtils } from './channel-layout.js';
 // Codec-format negotiation
 export { pickSupportedLayout, pickSupportedPixelFormat, pickSupportedRate, pickSupportedSampleFormat } from './codec-format.js';
 
+// Context option bags
+export type { ContextOptions } from './context-options.js';
+
 // Image
 export { ImageUtils, type ImageAllocation } from './image.js';
 
