@@ -58,7 +58,7 @@ type BitrateValue = number | bigint | string;
  * The writable codec-context fields (derived from the class), with the
  * rate-control fields widened to also accept a unit-suffixed string like `'5M'`.
  */
-export type CodecContextOptions = Omit<ContextOptions<CodecContext>, 'bitRate' | 'rcMinRate' | 'rcMaxRate' | 'rcBufferSize'> & {
+export type EncoderContextOptions = Omit<ContextOptions<CodecContext>, 'bitRate' | 'rcMinRate' | 'rcMaxRate' | 'rcBufferSize'> & {
   bitRate?: BitrateValue;
   rcMinRate?: BitrateValue;
   rcMaxRate?: BitrateValue;
@@ -178,7 +178,7 @@ export interface EncoderOptions<C = unknown> {
    * });
    * ```
    */
-  context?: CodecContextOptions;
+  context?: EncoderContextOptions;
 
   /**
    * Configure the underlying codec context just before it is opened.

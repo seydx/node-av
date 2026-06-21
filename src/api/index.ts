@@ -11,7 +11,7 @@ export { Muxer, type MuxerOptions } from './muxer.js';
 export { Decoder, type DecoderOptions } from './decoder.js';
 
 // Encoder
-export { Encoder, type EncoderOptions } from './encoder.js';
+export { Encoder, type EncoderContextOptions, type EncoderOptions } from './encoder.js';
 
 // EncoderPool
 export { EncoderPool, type EncoderPoolOptions } from './encoder-pool.js';

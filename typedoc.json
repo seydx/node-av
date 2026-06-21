@@ -44,6 +44,7 @@
     "notDocumented": false,
     "unusedMergeModuleWith": true
   },
+  "intentionallyNotExported": ["BitrateValue", "WritableKeys"],
   "externalSymbolLinkMappings": {
     "global": {
       "SymbolConstructor.dispose": "https://tc39.es/proposal-explicit-resource-management/#sec-disposable-interface",
