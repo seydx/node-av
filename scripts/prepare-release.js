@@ -48,6 +48,36 @@ let newVersion;
 // Check if we're currently on a prerelease version
 const isPrerelease = currentPreType !== undefined;
 
+// Determine the most recent stable (non-prerelease) release from git tags. Used
+// to re-base a beta to the correct target: a `beta-minor` run while on a patch
+// beta should jump to the next minor, not just bump the beta counter.
+function getLastStableVersion() {
+  try {
+    const out = execSync("git tag -l 'v*'", { cwd: rootDir, encoding: 'utf8' });
+    const stable = out
+      .split('\n')
+      .map((t) => t.trim().replace(/^v/, ''))
+      .filter((t) => /^\d+\.\d+\.\d+$/.test(t))
+      .map((t) => t.split('.').map(Number));
+    stable.sort((a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2]);
+    return stable.length ? stable[stable.length - 1] : null;
+  } catch {
+    return null;
+  }
+}
+
+// Apply a release level to a stable [major, minor, patch] triple.
+function bumpStable([maj, min, pat], level) {
+  if (level === 'major') return [maj + 1, 0, 0];
+  if (level === 'minor') return [maj, min + 1, 0];
+  return [maj, min, pat + 1]; // patch
+}
+
+// Compare two [major, minor, patch] triples.
+function cmpVersion(a, b) {
+  return a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
+}
+
 switch (versionType) {
   case 'major':
     // If on prerelease, promote to stable; otherwise bump major
@@ -74,29 +104,31 @@ switch (versionType) {
     }
     break;
   case 'beta-patch':
-    // If already on beta, increment beta number; otherwise create new beta
-    if (isPrerelease && currentPreType === 'beta') {
-      newVersion = `${major}.${minor}.${patch}-beta.${Number(currentPreNum) + 1}`;
-    } else {
-      newVersion = `${major}.${minor}.${patch + 1}-beta.1`;
-    }
-    break;
   case 'beta-minor':
-    // If already on beta, increment beta number; otherwise create new beta
+  case 'beta-major': {
+    const level = versionType.slice('beta-'.length); // 'patch' | 'minor' | 'major'
+    const currentBase = [major, minor, patch];
+
     if (isPrerelease && currentPreType === 'beta') {
-      newVersion = `${major}.${minor}.${patch}-beta.${Number(currentPreNum) + 1}`;
+      // Already on a beta: re-base to the level's target (computed from the last
+      // stable release) when it is higher than the current base, otherwise just
+      // bump the beta counter. This lets e.g. `beta-minor` on a patch beta jump
+      // to the next minor instead of being stuck on the patch line.
+      const lastStable = getLastStableVersion();
+      const target = lastStable ? bumpStable(lastStable, level) : null;
+      if (target && cmpVersion(target, currentBase) > 0) {
+        newVersion = `${target[0]}.${target[1]}.${target[2]}-beta.1`;
+      } else {
+        newVersion = `${major}.${minor}.${patch}-beta.${Number(currentPreNum) + 1}`;
+      }
     } else {
-      newVersion = `${major}.${minor + 1}.0-beta.1`;
+      // Starting a beta from a stable (or non-beta prerelease) version: bump the
+      // requested level.
+      const target = bumpStable(currentBase, level);
+      newVersion = `${target[0]}.${target[1]}.${target[2]}-beta.1`;
     }
     break;
-  case 'beta-major':
-    // If already on beta, increment beta number; otherwise create new beta
-    if (isPrerelease && currentPreType === 'beta') {
-      newVersion = `${major}.${minor}.${patch}-beta.${Number(currentPreNum) + 1}`;
-    } else {
-      newVersion = `${major + 1}.0.0-beta.1`;
-    }
-    break;
+  }
 }
 
 console.log(`Bumping version from ${currentVersion} to ${newVersion}`);
