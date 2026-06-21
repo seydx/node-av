@@ -130,6 +130,30 @@ describe('High-Level Filter API', () => {
       filter.close();
     });
 
+    it('should run the configure hook before configuring the graph', async () => {
+      let receivedGraph = false;
+      const filter = FilterAPI.create('null', {
+        configure: (graph) => {
+          // Graph is configured lazily on the first frame; the hook runs before config().
+          receivedGraph = typeof graph.nbThreads === 'number';
+        },
+      });
+
+      using frame = new Frame();
+      frame.alloc();
+      frame.width = 320;
+      frame.height = 240;
+      frame.format = AV_PIX_FMT_YUV420P;
+      frame.pts = 0n;
+      frame.timeBase = new Rational(1, 30);
+      frame.getBuffer();
+
+      await filter.process(frame);
+      assert.ok(receivedGraph, 'configure should be invoked with the filter graph before config');
+
+      filter.close();
+    });
+
     it('should create filter with framerate option', () => {
       const filter = FilterAPI.create('fps=30', {
         framerate: { num: 60, den: 1 },

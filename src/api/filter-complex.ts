@@ -14,12 +14,13 @@ import { Filter } from '../lib/filter.js';
 import { Frame } from '../lib/frame.js';
 import { Rational } from '../lib/rational.js';
 import { avGetSampleFmtName, avInvQ, avRescaleQ } from '../lib/utilities.js';
+import { applyContextOptions } from './utilities/context-options.js';
 
 import type { AVBufferSrcFlag, AVMediaType, AVSampleFormat, EOFSignal } from '../constants/index.js';
 import type { FilterContext } from '../lib/filter-context.js';
 import type { IRational } from '../lib/types.js';
-import type { FilterOptions } from './filter.js';
 import type { FilterComplexGraph } from './filter-presets.js';
+import type { FilterOptions } from './filter.js';
 
 /**
  * Frame properties for change detection.
@@ -1375,6 +1376,9 @@ export class FilterComplexAPI implements Disposable {
     // Step 3: Parse filter description and create buffersink filters
     this.parseFilterDescription();
 
+    applyContextOptions(this.graph, this.options.graph);
+    this.options.configure?.(this.graph);
+
     // Step 4: Configure the graph
     const ret = await this.graph.config();
     FFmpegError.throwIfError(ret, 'Failed to configure filter complex graph');
@@ -1457,6 +1461,9 @@ export class FilterComplexAPI implements Disposable {
 
     // Step 3: Parse filter description and create buffersink filters
     this.parseFilterDescription();
+
+    applyContextOptions(this.graph, this.options.graph);
+    this.options.configure?.(this.graph);
 
     // Step 4: Configure the graph
     const ret = this.graph.configSync();

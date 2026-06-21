@@ -17,6 +17,7 @@ import { Rational } from '../lib/rational.js';
 import { avGetSampleFmtName, avInvQ, avRescaleQ } from '../lib/utilities.js';
 import { FRAME_THREAD_QUEUE_SIZE } from './constants.js';
 import { AsyncQueue } from './utilities/async-queue.js';
+import { applyContextOptions } from './utilities/context-options.js';
 import { Scheduler } from './utilities/scheduler.js';
 
 import type { AVBufferSrcFlag, AVColorRange, AVColorSpace, AVFilterCmdFlag, AVPixelFormat, AVSampleFormat, EOFSignal } from '../constants/index.js';
@@ -24,6 +25,7 @@ import type { FilterContext } from '../lib/filter-context.js';
 import type { ChannelLayout, IDimension, IRational } from '../lib/types.js';
 import type { Encoder } from './encoder.js';
 import type { HardwareContext } from './hardware.js';
+import type { ContextOptions } from './utilities/context-options.js';
 import type { SchedulableComponent } from './utilities/scheduler.js';
 
 /**
@@ -37,6 +39,8 @@ export interface FilterOptions {
    * Set to 0 to auto-detect based on CPU cores.
    *
    * @default 0 (auto-detect)
+   *
+   * @deprecated Use the {@link FilterOptions.graph} option instead, e.g. `graph: { nbThreads: 4 }`.
    */
   threads?: number;
 
@@ -45,6 +49,8 @@ export interface FilterOptions {
    *
    * Options passed to libswscale when scaling video within filters.
    * Maps to AVFilterGraph->scale_sws_opts.
+   *
+   * @deprecated Use the {@link FilterOptions.graph} option instead, e.g. `graph: { scaleSwsOpts: 'flags=bicubic' }`.
    */
   scaleSwsOpts?: string;
 
@@ -53,6 +59,8 @@ export interface FilterOptions {
    *
    * Options passed to libswresample when resampling audio within filters.
    * Maps to AVFilterGraph->aresample_swr_opts.
+   *
+   * @deprecated Use the {@link FilterOptions.graph} option instead, e.g. `graph: { aresampleSwrOpts: 'cutoff=0.8' }`.
    */
   audioResampleOpts?: string;
 
@@ -120,6 +128,46 @@ export interface FilterOptions {
    * @default true
    */
   allowReinit?: boolean;
+
+  /**
+   * Fields to set on the underlying filter graph.
+   *
+   * A typed, declarative bag for any writable {@link FilterGraph} field that has
+   * no dedicated option — e.g. `nbThreads`, `scaleSwsOpts`, `aresampleSwrOpts`.
+   * Applied after the buffer source/sink and filter description are set up and
+   * immediately before `avfilter_graph_config` (and again on every filtergraph
+   * reinitialization). The allowed keys are derived from the class, so every
+   * writable field is available and correctly typed.
+   *
+   * @example
+   * ```typescript
+   * FilterAPI.create('scale=1280:720', {
+   *   graph: {
+   *     nbThreads: 4,
+   *   },
+   * });
+   * ```
+   */
+  graph?: ContextOptions<FilterGraph>;
+
+  /**
+   * Configure the underlying filter graph just before it is configured.
+   *
+   * The imperative escape hatch for cases the {@link FilterOptions.graph} bag
+   * cannot express: methods or conditional logic. Called with the
+   * {@link FilterGraph} after `graph` is applied and immediately before
+   * `avfilter_graph_config`. Runs again on every filtergraph reinitialization.
+   *
+   * @example
+   * ```typescript
+   * FilterAPI.create('scale=1280:720', {
+   *   configure: (graph) => {
+   *     graph.nbThreads = 4;
+   *   },
+   * });
+   * ```
+   */
+  configure?: (graph: FilterGraph) => void;
 
   /**
    * AbortSignal for cancellation.
@@ -1772,6 +1820,9 @@ export class FilterAPI implements Disposable {
     // Parse filter description
     this.parseFilterDescription(frame);
 
+    applyContextOptions(this.graph, this.options.graph);
+    this.options.configure?.(this.graph);
+
     // Configure the graph
     const ret = await this.graph.config();
     FFmpegError.throwIfError(ret, 'Failed to configure filter graph');
@@ -1825,6 +1876,9 @@ export class FilterAPI implements Disposable {
 
     // Parse filter description
     this.parseFilterDescription(frame);
+
+    applyContextOptions(this.graph, this.options.graph);
+    this.options.configure?.(this.graph);
 
     // Configure the graph
     const ret = this.graph.configSync();
