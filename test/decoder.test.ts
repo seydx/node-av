@@ -51,6 +51,25 @@ describe('Decoder', () => {
       media.closeSync();
     });
 
+    it('should run the configure hook before opening the context (async)', async () => {
+      const media = await Demuxer.open(inputFile);
+      const videoStream = media.video();
+      assert.ok(videoStream, 'Should find video stream');
+
+      let receivedContext = false;
+      const decoder = await Decoder.create(videoStream, {
+        configure: (ctx) => {
+          // Decoder opens eagerly in create(), so the hook runs before open2.
+          receivedContext = typeof ctx.threadCount === 'number';
+        },
+      });
+      assert.ok(receivedContext, 'configure should be invoked with the codec context before open');
+      assert.equal(decoder.isDecoderOpen, true);
+
+      decoder.close();
+      await media.close();
+    });
+
     it('should create decoder for audio stream (sync)', () => {
       const media = Demuxer.openSync(inputFile);
 

@@ -28,6 +28,7 @@ import { SoftwareScaleContext } from '../lib/software-scale-context.js';
 import { avChannelLayoutDefault, avGcd, avInvQ, avMulQ, avRescaleDelta, avRescaleQ, avRescaleQRnd } from '../lib/utilities.js';
 import { FRAME_THREAD_QUEUE_SIZE, PACKET_THREAD_QUEUE_SIZE } from './constants.js';
 import { AsyncQueue } from './utilities/async-queue.js';
+import { applyContextOptions } from './utilities/context-options.js';
 import { Scheduler } from './utilities/scheduler.js';
 
 import type { AVCodecID, AVPixelFormat, AVSampleFormat, AVThreadType, DecoderOptionsFor, EOFSignal, FFDecoderCodec } from '../constants/index.js';
@@ -36,6 +37,7 @@ import type { ChannelLayout, IRational } from '../lib/types.js';
 import type { Encoder } from './encoder.js';
 import type { FilterAPI } from './filter.js';
 import type { HardwareContext } from './hardware.js';
+import type { ContextOptions } from './utilities/context-options.js';
 import type { SchedulableComponent } from './utilities/scheduler.js';
 
 /**
@@ -155,6 +157,8 @@ export interface DecoderOptions<C = unknown> {
    * Set to 0 to auto-detect based on CPU cores.
    *
    * @default 1
+   *
+   * @deprecated Use the {@link DecoderOptions.context} option instead, e.g. `context: { threadCount: 0 }`.
    */
   threadCount?: number;
 
@@ -169,6 +173,8 @@ export interface DecoderOptions<C = unknown> {
    *   No additional latency, suitable for real-time/live streaming.
    *
    * @default FFmpeg default (both methods, codec chooses best)
+   *
+   * @deprecated Use the {@link DecoderOptions.context} option instead, e.g. `context: { threadType: FF_THREAD_SLICE }`.
    */
   threadType?: AVThreadType;
 
@@ -181,6 +187,46 @@ export interface DecoderOptions<C = unknown> {
    * otherwise any string/number/boolean values are accepted.
    */
   options?: DecoderOptionsFor<C>;
+
+  /**
+   * Fields to set on the underlying codec context.
+   *
+   * A typed, declarative bag for any writable {@link CodecContext} field that has
+   * no dedicated option — e.g. `skipLoopFilter`, `skipFrame`, `flags2`,
+   * `exportSideData`. Applied after node-av's stream parameters, hardware, and
+   * threading settings and immediately before `avcodec_open2`. The allowed keys
+   * are derived from the class, so every writable field is available and
+   * correctly typed.
+   *
+   * @example
+   * ```typescript
+   * await Decoder.create(stream, {
+   *   context: {
+   *     skipLoopFilter: AVDISCARD_ALL,
+   *   },
+   * });
+   * ```
+   */
+  context?: ContextOptions<CodecContext>;
+
+  /**
+   * Configure the underlying codec context just before it is opened.
+   *
+   * The imperative escape hatch for cases the {@link DecoderOptions.context} bag
+   * cannot express: additive flags via `setFlags`, other methods, or conditional
+   * logic. Called with the decoder's {@link CodecContext} after `context` is
+   * applied and immediately before `avcodec_open2`.
+   *
+   * @example
+   * ```typescript
+   * await Decoder.create(stream, {
+   *   configure: (ctx) => {
+   *     ctx.setFlags(AV_CODEC_FLAG_LOW_DELAY);
+   *   },
+   * });
+   * ```
+   */
+  configure?: (context: CodecContext) => void;
 
   /**
    * AbortSignal for cancellation.
@@ -460,6 +506,9 @@ export class Decoder implements Disposable {
 
     const opts = options.options ? Dictionary.fromObject(options.options) : undefined;
 
+    applyContextOptions(codecContext, options.context);
+    options.configure?.(codecContext);
+
     // Open codec
     const openRet = await codecContext.open2(codec, opts);
     if (openRet < 0) {
@@ -650,6 +699,11 @@ export class Decoder implements Disposable {
     }
 
     const opts = options.options ? Dictionary.fromObject(options.options) : undefined;
+
+    // User-supplied context fields, then the imperative hook: final say over the
+    // codec context before it is opened.
+    applyContextOptions(codecContext, options.context);
+    options.configure?.(codecContext);
 
     // Open codec synchronously
     const openRet = codecContext.open2Sync(codec, opts);
