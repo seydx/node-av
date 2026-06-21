@@ -14,6 +14,7 @@ import {
   FF_ENCODER_AAC,
   FF_ENCODER_LIBMP3LAME,
   FF_ENCODER_LIBX264,
+  FF_ENCODER_LIBX265,
   FF_ENCODER_MJPEG,
   HardwareContext,
 } from '../src/index.js';
@@ -622,6 +623,69 @@ describe('Encoder', () => {
       } finally {
         encoder.close();
       }
+    });
+  });
+
+  describe('configure', () => {
+    const makeYuvFrame = (pts: bigint): Frame => {
+      const frame = new Frame();
+      frame.alloc();
+      frame.width = 320;
+      frame.height = 240;
+      frame.format = AV_PIX_FMT_YUV420P;
+      frame.pts = pts;
+      frame.timeBase = new Rational(1, 25);
+      assert.equal(frame.getBuffer(), 0, 'Should allocate frame buffer');
+      return frame;
+    };
+
+    it('applies the context option bag before open (async)', async () => {
+      using encoder = await Encoder.create(FF_ENCODER_LIBX265, { context: { bitRate: '500k', gopSize: 42, maxBFrames: 0 } });
+      using frame = makeYuvFrame(0n);
+      await encoder.encode(frame);
+      const ctx = encoder.getCodecContext();
+      assert.equal(ctx?.gopSize, 42, 'context.gopSize should be applied');
+      assert.equal(ctx?.maxBFrames, 0, 'context.maxBFrames should be applied');
+    });
+
+    it('parses rate-control strings in the context bag (async)', async () => {
+      using encoder = await Encoder.create(FF_ENCODER_LIBX265, { context: { bitRate: '5M', rcBufferSize: '2M', rcMaxRate: 8_000_000 } });
+      using frame = makeYuvFrame(0n);
+      await encoder.encode(frame);
+      const ctx = encoder.getCodecContext();
+      assert.equal(ctx?.bitRate, 5_000_000n, "context.bitRate '5M' should parse to bits/s");
+      assert.equal(ctx?.rcBufferSize, 2_000_000, "context.rcBufferSize '2M' should parse to a number");
+      assert.equal(ctx?.rcMaxRate, 8_000_000n, 'context.rcMaxRate number should coerce to bigint');
+    });
+
+    it('runs the configure hook to set context fields before open (async)', async () => {
+      let called = false;
+      using encoder = await Encoder.create(FF_ENCODER_LIBX265, {
+        bitrate: '500k',
+        configure: (ctx) => {
+          called = true;
+          ctx.codecTag = 'hvc1';
+        },
+      });
+      using frame = makeYuvFrame(0n);
+      await encoder.encode(frame);
+      assert.ok(called, 'configure should be invoked');
+      assert.equal(encoder.getCodecContext()?.codecTagString, 'hvc1', 'configure mutations should take effect before open');
+    });
+
+    it('runs the configure hook to set context fields before open (sync)', () => {
+      let called = false;
+      using encoder = Encoder.createSync(FF_ENCODER_LIBX265, {
+        bitrate: '500k',
+        configure: (ctx) => {
+          called = true;
+          ctx.codecTag = 'hvc1';
+        },
+      });
+      using frame = makeYuvFrame(0n);
+      encoder.encodeSync(frame);
+      assert.ok(called, 'configure should be invoked');
+      assert.equal(encoder.getCodecContext()?.codecTagString, 'hvc1', 'configure mutations should take effect before open');
     });
   });
 

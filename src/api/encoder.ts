@@ -33,6 +33,7 @@ import { AudioFrameBuffer } from './audio-frame-buffer.js';
 import { FRAME_THREAD_QUEUE_SIZE, PACKET_THREAD_QUEUE_SIZE } from './constants.js';
 import { AsyncQueue } from './utilities/async-queue.js';
 import { pickSupportedLayout, pickSupportedPixelFormat, pickSupportedRate, pickSupportedSampleFormat } from './utilities/codec-format.js';
+import { applyContextOptions } from './utilities/context-options.js';
 import { SchedulerControl } from './utilities/scheduler.js';
 import { parseBitrate } from './utils.js';
 
@@ -42,7 +43,47 @@ import type { Decoder } from './decoder.js';
 import type { FilterComplexAPI } from './filter-complex.js';
 import type { FilterAPI } from './filter.js';
 import type { Muxer } from './muxer.js';
+import type { ContextOptions } from './utilities/context-options.js';
 import type { SchedulableComponent } from './utilities/scheduler.js';
+
+/**
+ * A bitrate-style value: a number/bigint of bits per second, or a string with a
+ * unit suffix such as `'5M'` or `'128k'`.
+ */
+type BitrateValue = number | bigint | string;
+
+/**
+ * Fields to set on the encoder's {@link CodecContext}.
+ *
+ * The writable codec-context fields (derived from the class), with the
+ * rate-control fields widened to also accept a unit-suffixed string like `'5M'`.
+ */
+export type CodecContextOptions = Omit<ContextOptions<CodecContext>, 'bitRate' | 'rcMinRate' | 'rcMaxRate' | 'rcBufferSize'> & {
+  bitRate?: BitrateValue;
+  rcMinRate?: BitrateValue;
+  rcMaxRate?: BitrateValue;
+  rcBufferSize?: BitrateValue;
+};
+
+/**
+ * Rate-control fields that accept a unit-suffixed string and need normalizing.
+ *
+ * @internal
+ */
+const BITRATE_FIELDS = ['bitRate', 'rcMinRate', 'rcMaxRate', 'rcBufferSize'] as const;
+
+/**
+ * Normalize a {@link BitrateValue} to a bigint of bits per second.
+ *
+ * @param value - The number/bigint/`'5M'`-style value
+ *
+ * @returns The value in bits per second
+ *
+ * @internal
+ */
+function normalizeBitrate(value: BitrateValue): bigint {
+  return typeof value === 'string' ? parseBitrate(value) : BigInt(value);
+}
 
 /**
  * Options for encoder creation.
@@ -55,6 +96,8 @@ export interface EncoderOptions<C = unknown> {
    * Used for rate control in video and audio encoding.
    *
    * @default 128k for audio, 1M for video
+   *
+   * @deprecated Use the {@link EncoderOptions.context} option instead, e.g. `context: { bitRate: '5M' }`.
    */
   bitrate?: number | bigint | string;
 
@@ -63,6 +106,8 @@ export interface EncoderOptions<C = unknown> {
    *
    * Can be specified as number, bigint, or string with suffix (e.g., '5M', '128k').
    * Used with variable bitrate encoding to enforce quality floor.
+   *
+   * @deprecated Use the {@link EncoderOptions.context} option instead, e.g. `context: { rcMinRate: '1M' }`.
    */
   minRate?: number | bigint | string;
 
@@ -71,6 +116,8 @@ export interface EncoderOptions<C = unknown> {
    *
    * Can be specified as number, bigint, or string with suffix (e.g., '5M', '128k').
    * Used with variable bitrate encoding to enforce bitrate ceiling.
+   *
+   * @deprecated Use the {@link EncoderOptions.context} option instead, e.g. `context: { rcMaxRate: '8M' }`.
    */
   maxRate?: number | bigint | string;
 
@@ -79,6 +126,8 @@ export interface EncoderOptions<C = unknown> {
    *
    * Can be specified as number, bigint, or string with suffix (e.g., '5M', '128k').
    * Determines the decoder buffer model size for rate control.
+   *
+   * @deprecated Use the {@link EncoderOptions.context} option instead, e.g. `context: { rcBufferSize: '2M' }`.
    */
   bufSize?: number | bigint | string;
 
@@ -87,6 +136,8 @@ export interface EncoderOptions<C = unknown> {
    *
    * Number of frames between keyframes.
    * Larger GOP improves compression but reduces seekability.
+   *
+   * @deprecated Use the {@link EncoderOptions.context} option instead, e.g. `context: { gopSize: 60 }`.
    */
   gopSize?: number;
 
@@ -95,8 +146,60 @@ export interface EncoderOptions<C = unknown> {
    *
    * B-frames improve compression but increase encoding complexity.
    * Maximum B-frames allowed between I or P frames.
+   *
+   * @deprecated Use the {@link EncoderOptions.context} option instead, e.g. `context: { maxBFrames: 0 }`.
    */
   maxBFrames?: number;
+
+  /**
+   * Fields to set on the underlying codec context.
+   *
+   * The home for all raw {@link CodecContext} settings: rate control
+   * (`bitRate`, `rcMinRate`, `rcMaxRate`, `rcBufferSize` — each accepting a
+   * unit-suffixed string like `'5M'`), `gopSize`, `maxBFrames`, threading, color
+   * /HDR metadata, profile, level, aspect ratio, etc. The allowed keys are
+   * derived from the class, so every writable field is available and correctly
+   * typed. Applied after node-av's derived settings (resolution, pixel/sample
+   * format, color, timebase) and immediately before `avcodec_open2`, so values
+   * here override the derived defaults.
+   *
+   * For the codec tag use a numeric FourCC here, or the string form (e.g.
+   * `'hvc1'`) via {@link EncoderOptions.configure}.
+   *
+   * @example
+   * ```typescript
+   * await Encoder.create(FF_ENCODER_LIBX265, {
+   *   decoder,
+   *   context: {
+   *     bitRate: '5M',
+   *     gopSize: 60,
+   *     colorPrimaries: AVCOL_PRI_BT2020,
+   *   },
+   * });
+   * ```
+   */
+  context?: CodecContextOptions;
+
+  /**
+   * Configure the underlying codec context just before it is opened.
+   *
+   * The imperative escape hatch for cases the {@link EncoderOptions.context} bag
+   * cannot express: additive flags via `setFlags`, other methods, conditional
+   * logic, or setter-only input forms (e.g. a `'hvc1'` FourCC string). Called
+   * with the encoder's {@link CodecContext} after `context` is applied and
+   * immediately before `avcodec_open2`.
+   *
+   * @example
+   * ```typescript
+   * await Encoder.create(FF_ENCODER_LIBX265, {
+   *   decoder,
+   *   configure: (ctx) => {
+   *     ctx.codecTag = 'hvc1';
+   *   },
+   * });
+   * ```
+   */
+  configure?: (context: CodecContext) => void;
 
   /**
    * Optional decoder reference for metadata extraction.
@@ -120,6 +223,8 @@ export interface EncoderOptions<C = unknown> {
    * Set to 0 to auto-detect based on CPU cores.
    *
    * @default 1
+   *
+   * @deprecated Use the {@link EncoderOptions.context} option instead, e.g. `context: { threadCount: 0 }`.
    */
   threadCount?: number;
 
@@ -133,6 +238,8 @@ export interface EncoderOptions<C = unknown> {
    *   Lower latency, suitable for real-time encoding.
    *
    * @default FFmpeg default (both methods, codec chooses best)
+   *
+   * @deprecated Use the {@link EncoderOptions.context} option instead, e.g. `context: { threadType: FF_THREAD_SLICE }`.
    */
   threadType?: AVThreadType;
 
@@ -1953,6 +2060,32 @@ export class Encoder implements Disposable {
   }
 
   /**
+   * Apply the user-supplied {@link EncoderOptions.context} bag to the codec context.
+   *
+   * Normalizes the rate-control fields (which accept `'5M'`-style strings) before
+   * assigning every provided field via its setter.
+   *
+   * @internal
+   */
+  private applyContextBag(): void {
+    const context = this.options.context;
+    if (!context) {
+      return;
+    }
+
+    const resolved: Record<string, unknown> = { ...context };
+    for (const field of BITRATE_FIELDS) {
+      const value = resolved[field];
+      if (value !== undefined) {
+        // rcBufferSize is a number; bitRate/rcMinRate/rcMaxRate are bigint.
+        resolved[field] = field === 'rcBufferSize' ? Number(normalizeBitrate(value as BitrateValue)) : normalizeBitrate(value as BitrateValue);
+      }
+    }
+
+    applyContextOptions(this.codecContext, resolved as ContextOptions<CodecContext>);
+  }
+
+  /**
    * Initialize encoder from first frame.
    *
    * Sets codec context parameters from frame properties.
@@ -2031,6 +2164,9 @@ export class Encoder implements Disposable {
 
     // AV_CODEC_FLAG_FRAME_DURATION: Signal that frame duration matters for timestamps
     this.codecContext.setFlags(AV_CODEC_FLAG_FRAME_DURATION);
+
+    this.applyContextBag();
+    this.options.configure?.(this.codecContext);
 
     // Open codec
     const openRet = await this.codecContext.open2(this.codec, this.opts);
@@ -2137,6 +2273,9 @@ export class Encoder implements Disposable {
 
     // AV_CODEC_FLAG_FRAME_DURATION: Signal that frame duration matters for timestamps
     this.codecContext.setFlags(AV_CODEC_FLAG_FRAME_DURATION);
+
+    this.applyContextBag();
+    this.options.configure?.(this.codecContext);
 
     // Open codec
     const openRet = this.codecContext.open2Sync(this.codec, this.opts);
