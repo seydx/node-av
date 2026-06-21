@@ -16,6 +16,7 @@ Some examples expect input/output paths or a stream URL as arguments — check t
 | `electron-forge` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/electron/forge) |
 | `api-abort-signal` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-abort-signal.ts) |
 | `api-bitstream-filter` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-bitstream-filter.ts) |
+| `api-context-options` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-context-options.ts) |
 | `api-dash` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-dash.ts) |
 | `api-decoder-resample` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-decoder-resample.ts) |
 | `api-device-capture` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-device-capture.ts) |
