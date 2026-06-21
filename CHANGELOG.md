@@ -8,10 +8,24 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Typed `context` / `graph` field bags and a `configure` hook on `Encoder`, `Decoder`, `FilterAPI`, `FilterComplexAPI`, `Muxer` and `Demuxer`.** `context` (encoder/decoder/muxer) and `graph` (filters) are typed bags of the writable fields on the underlying native object (e.g. `context: { bitRate: '5M', gopSize: 60, colorPrimaries: AVCOL_PRI_BT2020 }`); rate-control fields still accept `'5M'`-style strings. `configure(ctx | graph | fmt)` is a callback for what the bag cannot express — flags via `setFlags`, methods, or setter-only forms such as a `'hvc1'` FourCC string for `-tag:v hvc1`. Both run right before the object is opened/finalized (`avcodec_open2`, `avfilter_graph_config`, `avformat_write_header`), the bag first; for the muxer after the source metadata/disposition are copied, so values set there take precedence. The `Demuxer` exposes only `configure(fmt)`, called after `avformat_open_input` / `avformat_find_stream_info`.
+
+  ```typescript
+  const encoder = await Encoder.create(FF_ENCODER_LIBX265, {
+    decoder,
+    context: { bitRate: '5M', gopSize: 60 },        // typed, declarative field bag
+    configure: (ctx) => { ctx.codecTag = 'hvc1'; }, // imperative escape (-tag:v hvc1)
+  });
+  ```
 - **Bitstream filter extradata is now reflected in the output parameters.** Filters that adapt container framing (`aac_adtstoasc`, `extract_extradata`, `dump_extra`, `*_mp4toannexb`) emit the resulting global headers as packet side data rather than on `par_out`. `BitStreamFilterAPI.outputCodecParameters` now folds that side data in, so a stream copy that relies on it (including `Muxer`'s `bsf` option) writes a header with the correct codec configuration.
+
+### Deprecated
+
+- **Raw codec/graph field options moved to the `context` / `graph` bag.** `Encoder`'s `bitrate` / `minRate` / `maxRate` / `bufSize` (→ `context: { bitRate, rcMinRate, rcMaxRate, rcBufferSize }`, still accepting `'5M'`-style strings), `gopSize`, `maxBFrames`, `threadCount`, `threadType`; `Decoder`'s `threadCount` / `threadType`; and `FilterAPI` / `FilterComplexAPI`'s `threads` (→ `graph: { nbThreads }`), `scaleSwsOpts`, `audioResampleOpts`. They still work — set them via the bag instead.
 
 ### Fixed
 
+- **Rotation / HDR side data was lost when transcoding.** The muxer copied a stream's `coded_side_data` (display matrix / rotation, HDR mastering display & content light level) only on stream copy, not when re-encoding — so a portrait phone video would play sideways and HDR metadata would vanish after a transcode. The encoder output path now copies it too, matching the stream-copy behaviour.
 - **Demuxer dropped packets under backpressure in multi-stream pipelines** ([#263](https://github.com/seydx/node-av/issues/263)). When a single demuxer fed two consumers draining at different rates (e.g. a slow video chain alongside a fast audio chain), the demux thread discarded packets for whichever stream's queue was momentarily full instead of waiting for it to drain. This lost video reference frames and corrupted decoding (`missing reference picture`, `mmco: unref short failure`, `co located POCs unavailable`). The read loop now applies per-stream backpressure and is paced by the slowest consumer, so no packet is dropped.
 - **worker_threads safety.** Native class constructor references are now `thread_local`, so node-av objects can be created and used across multiple worker threads without crashing.
 - **Cross-compiled Windows installs selected the wrong toolchain** ([#260](https://github.com/seydx/node-av/issues/260)). A cross install (`npm install --os=win32 --cpu=x64`) incorrectly picked the MinGW FFmpeg build; it now defaults to the standard MSVC build (pass `--libc=mingw` to override). See the new Cross-Platform Packaging section in the README.
