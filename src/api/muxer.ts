@@ -31,12 +31,14 @@ import { MAX_MUXING_QUEUE_SIZE, MUXING_QUEUE_DATA_THRESHOLD, SYNC_BUFFER_DURATIO
 import { Encoder } from './encoder.js';
 import { IOStream } from './io-stream.js';
 import { AsyncQueue } from './utilities/async-queue.js';
+import { applyContextOptions } from './utilities/context-options.js';
 
 import type { MuxerFormat, MuxerOptionsFor } from '../constants/index.js';
 import type { IRational, OutputFormat, Stream } from '../lib/index.js';
 import type { BitStreamFilterAPI } from './bitstream-filter.js';
 import type { Demuxer, RTPDemuxer } from './demuxer.js';
 import type { IOOutputCallbacks } from './io-stream.js';
+import type { ContextOptions } from './utilities/context-options.js';
 
 /**
  * Per-stream muxing state: output stream, encoder/bitstream filter, and the
@@ -255,6 +257,51 @@ export interface MuxerOptions<F extends MuxerFormat | (string & {}) = MuxerForma
    * remain allowed so protocol/other options still pass.
    */
   options?: MuxerOptionsFor<F>;
+
+  /**
+   * Configure the underlying format context just before the header is written.
+   *
+   * Called with the output {@link FormatContext} once, after all streams have
+   * been initialized (their parameters, metadata, and disposition copied from
+   * the source) and immediately before `avformat_write_header`. Use it to set
+   * any container- or stream-level field with full type safety — for example
+   * per-stream metadata (language/title) or disposition that should not be
+   * overwritten by the source. Settings applied here take precedence because
+   * they run after the source values are copied.
+   *
+   * @example
+   * ```typescript
+   * import { Dictionary } from 'node-av';
+   *
+   * await Muxer.open('out.mp4', {
+   *   configure: (fmt) => {
+   *     fmt.streams[1].metadata = Dictionary.fromObject({ language: 'eng' });
+   *   },
+   * });
+   * ```
+   */
+  configure?: (context: FormatContext) => void;
+
+  /**
+   * Fields to set on the underlying format context.
+   *
+   * A typed, declarative bag for any writable {@link FormatContext} field. Applied
+   * once, after all streams are initialized (their parameters, metadata and
+   * disposition copied from the source) and immediately before
+   * `avformat_write_header`, so values here take precedence. The allowed keys are
+   * derived from the class, so every writable field is available and correctly
+   * typed. For per-stream or computed changes use {@link MuxerOptions.configure}.
+   *
+   * @example
+   * ```typescript
+   * await Muxer.open('out.mp4', {
+   *   context: {
+   *     startTime: 0n,
+   *   },
+   * });
+   * ```
+   */
+  context?: ContextOptions<FormatContext>;
 
   /**
    * AbortSignal for cancellation.
@@ -1240,6 +1287,16 @@ export class Muxer implements AsyncDisposable, Disposable {
           // 5. Copy disposition from input stream
           streamInfo.outputStream.disposition = streamInfo.inputStream.disposition;
 
+          // 5b. Copy coded_side_data from input stream (display matrix / rotation,
+          // HDR mastering display & content light level). The encoder path only
+          // copied codec parameters, so without this these are lost on transcode
+          // (e.g. a portrait phone video would play sideways). Mirrors the stream
+          // copy path.
+          const inputSideData = streamInfo.inputStream.codecpar.getAllCodedSideData();
+          for (const sd of inputSideData) {
+            streamInfo.outputStream.codecpar.addCodedSideData(sd.type, sd.data);
+          }
+
           // 6. Copy duration hint from input stream
           if (streamInfo.inputStream.duration > 0n) {
             const inputTb = streamInfo.inputStream.timeBase;
@@ -1378,6 +1435,8 @@ export class Muxer implements AsyncDisposable, Disposable {
         this.setupSyncQueues();
         this.updateDefaultDisposition();
         this.copyContainerMetadata();
+
+        this.options.configure?.(this.formatContext);
 
         const ret = await this.formatContext.writeHeader();
         FFmpegError.throwIfError(ret, 'Failed to write header');
@@ -1581,6 +1640,16 @@ export class Muxer implements AsyncDisposable, Disposable {
           // 5. Copy disposition from input stream
           streamInfo.outputStream.disposition = streamInfo.inputStream.disposition;
 
+          // 5b. Copy coded_side_data from input stream (display matrix / rotation,
+          // HDR mastering display & content light level). The encoder path only
+          // copied codec parameters, so without this these are lost on transcode
+          // (e.g. a portrait phone video would play sideways). Mirrors the stream
+          // copy path.
+          const inputSideData = streamInfo.inputStream.codecpar.getAllCodedSideData();
+          for (const sd of inputSideData) {
+            streamInfo.outputStream.codecpar.addCodedSideData(sd.type, sd.data);
+          }
+
           // 6. Copy duration hint from input stream
           if (streamInfo.inputStream.duration > 0n) {
             const inputTb = streamInfo.inputStream.timeBase;
@@ -1718,6 +1787,9 @@ export class Muxer implements AsyncDisposable, Disposable {
       this.setupSyncQueues();
       this.updateDefaultDisposition();
       this.copyContainerMetadata();
+
+      applyContextOptions(this.formatContext, this.options.context);
+      this.options.configure?.(this.formatContext);
 
       const ret = this.formatContext.writeHeaderSync();
       FFmpegError.throwIfError(ret, 'Failed to write header');

@@ -3,7 +3,22 @@ import { createWriteStream } from 'node:fs';
 import { readFile, stat, unlink } from 'node:fs/promises';
 import { describe, it } from 'node:test';
 
-import { AVSEEK_CUR, AVSEEK_END, AVSEEK_SET, AVSEEK_SIZE, Decoder, Demuxer, Encoder, FF_ENCODER_AAC, FF_ENCODER_LIBX264, Muxer, Packet } from '../src/index.js';
+import {
+  AV_PKT_DATA_DISPLAYMATRIX,
+  AVSEEK_CUR,
+  AVSEEK_END,
+  AVSEEK_SET,
+  AVSEEK_SIZE,
+  Decoder,
+  Demuxer,
+  Dictionary,
+  Encoder,
+  FF_ENCODER_AAC,
+  FF_ENCODER_LIBX264,
+  Muxer,
+  Packet,
+  pipeline,
+} from '../src/index.js';
 import { decodePacket, decodePacketSync, encodeFrame, encodeFrameSync, getInputFile, getOutputFile, prepareTestEnvironment } from './index.js';
 
 import type { AVSeekWhence, IOOutputCallbacks } from '../src/index.js';
@@ -1518,6 +1533,71 @@ describe('Muxer', () => {
       await assert.rejects(() => output.writePacket(packet, 0), { name: 'AbortError' });
       packet?.free();
       await output.close();
+      await cleanup();
+    });
+  });
+
+  describe('coded side data', () => {
+    it('preserves input coded side data across a transcode (async)', async () => {
+      const outputFile = getTempFile('mp4');
+      await using input = await Demuxer.open(inputFile);
+      const videoStream = input.video();
+      assert(videoStream);
+
+      // Inject a display matrix (rotation) on the input video stream, as a
+      // phone-recorded portrait video would carry (9 int32 = 36 bytes).
+      const displayMatrix = Buffer.alloc(36);
+      assert.equal(videoStream.codecpar.addCodedSideData(AV_PKT_DATA_DISPLAYMATRIX, displayMatrix), 0, 'should add side data to input');
+
+      using decoder = await Decoder.create(videoStream);
+      using encoder = await Encoder.create(FF_ENCODER_LIBX264, { decoder, options: { preset: 'ultrafast' } });
+      const output = await Muxer.open(outputFile);
+
+      const control = pipeline(input, decoder, encoder, output);
+      await control.completion;
+      await output.close();
+
+      await using verify = await Demuxer.open(outputFile);
+      const outVideo = verify.video();
+      assert(outVideo);
+      const sideData = outVideo.codecpar.getCodedSideData(AV_PKT_DATA_DISPLAYMATRIX);
+      assert.ok(sideData, 'transcoded output should retain the display matrix side data');
+      assert.equal(sideData.length, 36);
+      await cleanup();
+    });
+  });
+
+  describe('configure', () => {
+    it('runs the configure hook to set stream metadata before the header (async)', async () => {
+      const outputFile = getTempFile('mkv');
+      await using input = await Demuxer.open(inputFile);
+      const videoStream = input.video();
+      assert(videoStream);
+
+      using decoder = await Decoder.create(videoStream);
+      using encoder = await Encoder.create(FF_ENCODER_LIBX264, { decoder, options: { preset: 'ultrafast' } });
+
+      let called = false;
+      const output = await Muxer.open(outputFile, {
+        format: 'matroska',
+        configure: (fmt) => {
+          called = true;
+          const stream = fmt.streams[0];
+          if (stream) {
+            stream.metadata = Dictionary.fromObject({ language: 'eng', title: 'configured' });
+          }
+        },
+      });
+
+      const control = pipeline(input, decoder, encoder, output);
+      await control.completion;
+      await output.close();
+      assert.ok(called, 'configure should be invoked');
+
+      await using verify = await Demuxer.open(outputFile);
+      const outVideo = verify.video();
+      assert(outVideo);
+      assert.equal(outVideo.metadata?.get('title'), 'configured', 'stream metadata set in configure should be written');
       await cleanup();
     });
   });
