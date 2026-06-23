@@ -42,6 +42,7 @@ Some examples expect input/output paths or a stream URL as arguments — check t
 | `api-rtp` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-rtp.ts) |
 | `api-rtsp-backchannel` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-rtsp-backchannel.ts) |
 | `api-scaler` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-scaler.ts) |
+| `api-scaler-hw` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-scaler-hw.ts) |
 | `api-sdp-custom` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-sdp-custom.ts) |
 | `api-sdp-input` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-sdp-input.ts) |
 | `api-snapshot` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-snapshot.ts) |
