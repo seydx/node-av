@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-## [6.1.0-beta.1] - 2026-06-21
+## [6.1.0-beta.2] - 2026-06-23
 
 ### Added
 
@@ -18,6 +18,20 @@ All notable changes to this project will be documented in this file.
   });
   ```
 - **Bitstream filter extradata is now reflected in the output parameters.** Filters that adapt container framing (`aac_adtstoasc`, `extract_extradata`, `dump_extra`, `*_mp4toannexb`) emit the resulting global headers as packet side data rather than on `par_out`. `BitStreamFilterAPI.outputCodecParameters` now folds that side data in, so a stream copy that relies on it (including `Muxer`'s `bsf` option) writes a header with the correct codec configuration.
+
+### Changed
+
+- Synced FFmpeg with the latest master (~380 upstream commits) — numerous bug fixes, stability and performance improvements. Highlights relevant to node-av users:
+  - **Security hardening** — ~29 overflow / bounds fixes across decoders, demuxers and filters
+  - **swscale PAL8** — palette video handled by the new ops scaler engine
+  - **AMF** — zero-copy host memory mapping, HDR/colour metadata propagation, `high_quality` encoder preset
+  - **NVENC** — AV1 hierarchical B-frame reference mode
+  - **D3D11VA** — native P016 (10/16-bit YUV 4:2:0) hardware decoding on Windows
+  - **ONNX Runtime DNN backend** — GPU inference for ML-driven filters (super-resolution, denoise, …)
+  - **Dolby Vision** — RPU detection across all NALs (better DoVi interop)
+  - Fragmented-MP4 / DASH / HLS correctness fixes
+  - Faster decode/encode on x86 (H.264 AVX2 intra-prediction, me_cmp SSSE3), AArch64 NEON and RISC-V RVV
+- Regenerated constants, encoders, and decoders from updated FFmpeg headers
 
 ### Deprecated
 
