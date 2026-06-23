@@ -117,7 +117,7 @@ jobs:
 
       - name: Restore FFmpeg cache
         id: cache-ffmpeg
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             C:\ffmpeg-cache-${{ matrix.os.arch }}
@@ -216,7 +216,7 @@ jobs:
           fi
       - name: Save FFmpeg cache
         if: steps.cache-ffmpeg.outputs.cache-hit != 'true' && steps.build-ffmpeg.outcome == 'success'
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           path: |
             C:\ffmpeg-cache-${{ matrix.os.arch }}
@@ -355,7 +355,7 @@ jobs:
       # Hugging Face on every build (parallel jobs sharing the runner IP pool
       # get rate-limited with HTTP 429).
       - name: Cache Whisper Models
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: models
           key: whisper-models-v1
@@ -525,7 +525,7 @@ jobs:
       # Hugging Face on every build (parallel jobs sharing the runner IP pool
       # get rate-limited with HTTP 429).
       - name: Cache Whisper Models
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: models
           key: whisper-models-v1
@@ -597,7 +597,7 @@ jobs:
 
       - name: Restore FFmpeg cache
         id: cache-ffmpeg
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             /opt/ffbuild/prefix
@@ -697,7 +697,7 @@ jobs:
 
       - name: Save FFmpeg cache
         if: steps.cache-ffmpeg.outputs.cache-hit != 'true' && steps.build-ffmpeg.outcome == 'success'
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           path: |
             /opt/ffbuild/prefix
@@ -804,7 +804,7 @@ jobs:
       # Hugging Face on every build (parallel jobs sharing the runner IP pool
       # get rate-limited with HTTP 429).
       - name: Cache Whisper Models
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: models
           key: whisper-models-v1
@@ -873,7 +873,7 @@ jobs:
 
       - name: Restore FFmpeg cache
         id: cache-ffmpeg
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             /opt/ffbuild/prefix
@@ -931,7 +931,7 @@ jobs:
 
       - name: Save FFmpeg cache
         if: steps.cache-ffmpeg.outputs.cache-hit != 'true' && steps.build-ffmpeg.outcome == 'success'
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           path: |
             /opt/ffbuild/prefix
@@ -1010,7 +1010,7 @@ jobs:
       # rate limits from Hugging Face when runners share an IP pool).
       - name: Cache Whisper Models
         if: matrix.arch == 'arm64'
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: models
           key: whisper-models-v1
