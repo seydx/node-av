@@ -250,7 +250,9 @@ export interface CodecContextOptions {
     | 'bt709'
     | 'unknown'
     | 'gamma22'
+    | 'bt470m'
     | 'gamma28'
+    | 'bt470bg'
     | 'smpte170m'
     | 'smpte240m'
     | 'linear'
@@ -694,7 +696,7 @@ export interface EncoderOptionsMap {
     /** Enable weighted prediction */
     weighted_pred?: boolean;
     /** Use B frames as references */
-    b_ref_mode?: 'disabled' | 'each' | 'middle';
+    b_ref_mode?: 'disabled' | 'each' | 'middle' | 'hierarchical';
     /** Specifies the DPB size used for encoding (0 means automatic) */
     dpb_size?: number;
     /** Low delay key frame scale; Specifies the Scene Change frame size increase allowed in case of single frame VBV and CBR */
@@ -1202,9 +1204,9 @@ export interface EncoderOptionsMap {
     /** enables low latency mode */
     latency?: boolean;
     /** Set the encoding quality preset */
-    quality?: 'balanced' | 'speed' | 'quality';
+    quality?: 'balanced' | 'speed' | 'quality' | 'high_quality';
     /** Set the encoding quality preset */
-    preset?: 'balanced' | 'speed' | 'quality';
+    preset?: 'balanced' | 'speed' | 'quality' | 'high_quality';
     /** Rate Control Method */
     rc?: 'cqp' | 'cbr' | 'vbr_peak' | 'vbr_latency' | 'qvbr' | 'hqvbr' | 'hqcbr';
     /** Sets the QVBR quality level */
@@ -1321,6 +1323,8 @@ export interface EncoderOptionsMap {
     deblock?: boolean;
     /** Entropy coder type */
     coder?: number;
+    /** Constrained intra prediction (constrained_intra_pred_flag) */
+    constrained_intra_pred?: boolean;
   };
   /**
    * NVIDIA NVENC H.264 encoder
@@ -1723,9 +1727,9 @@ export interface EncoderOptionsMap {
     /** Set the encoding level (default auto) */
     level?: 'auto' | '1.0' | '2.0' | '2.1' | '3.0' | '3.1' | '4.0' | '4.1' | '5.0' | '5.1' | '5.2' | '6.0' | '6.1' | '6.2';
     /** Set the encoding quality preset */
-    quality?: 'quality' | 'balanced' | 'speed';
+    quality?: 'quality' | 'balanced' | 'speed' | 'high_quality';
     /** Set the encoding quality preset */
-    preset?: 'quality' | 'balanced' | 'speed';
+    preset?: 'quality' | 'balanced' | 'speed' | 'high_quality';
     /** enables low latency mode */
     latency?: boolean;
     /** Set the rate control mode */
@@ -1834,6 +1838,8 @@ export interface EncoderOptionsMap {
     tier?: number;
     /** Set level (general_level_idc) */
     level?: number;
+    /** Constrained intra prediction (constrained_intra_pred_flag) */
+    constrained_intra_pred?: boolean;
   };
   /**
    * NVIDIA NVENC hevc encoder
@@ -3792,6 +3798,8 @@ export interface DecoderOptionsMap {
     dual_mono_mode?: 'auto' | 'main' | 'sub' | 'both';
     /** Order in which the channels are to be exported */
     channel_order?: 'default' | 'coded';
+    /** Target output loudness in dBFS for xHE-AAC normalization (0 = disabled) */
+    target_level?: number;
   };
   /**
    * AAC (Advanced Audio Coding)
@@ -3802,6 +3810,8 @@ export interface DecoderOptionsMap {
     dual_mono_mode?: 'auto' | 'main' | 'sub' | 'both';
     /** Order in which the channels are to be exported */
     channel_order?: 'default' | 'coded';
+    /** Target output loudness in dBFS for xHE-AAC normalization (0 = disabled) */
+    target_level?: number;
   };
   /**
    * ATSC A/52A (AC-3)
