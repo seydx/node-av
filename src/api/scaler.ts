@@ -530,10 +530,20 @@ export class Scaler implements Disposable {
    * @internal
    */
   private async toFrame(frame: Frame, crop: ScalerCrop | undefined, resize: ScalerResize | undefined, format: ScaledImageFormat): Promise<Frame> {
-    const entry = this.resolveGraph(frame, crop, resize, format);
+    const { entry, key } = this.resolveGraph(frame, crop, resize, format);
     await entry.filter.process(frame);
-    const out = await entry.filter.receive();
-    if (out == null) {
+    let out = await entry.filter.receive();
+    if (!(out instanceof Frame)) {
+      // Some hardware scalers (notably QSV's vpp_qsv) buffer internally and don't
+      // emit a frame synchronously after a single input - the buffersink returns
+      // EAGAIN. Flush to force the pending frame out, then evict the now-EOF'd
+      // graph so the next call rebuilds it. Zero-latency scalers (scale_vaapi,
+      // scale_vt) deliver on the first receive and never hit this path.
+      await entry.filter.flush();
+      out = await entry.filter.receive();
+      this.evictGraph(key);
+    }
+    if (!(out instanceof Frame)) {
       throw new Error('Scaler: filter produced no frame');
     }
     return out;
@@ -555,10 +565,17 @@ export class Scaler implements Disposable {
    * @internal
    */
   private toFrameSync(frame: Frame, crop: ScalerCrop | undefined, resize: ScalerResize | undefined, format: ScaledImageFormat): Frame {
-    const entry = this.resolveGraph(frame, crop, resize, format);
+    const { entry, key } = this.resolveGraph(frame, crop, resize, format);
     entry.filter.processSync(frame);
-    const out = entry.filter.receiveSync();
-    if (out == null) {
+    let out = entry.filter.receiveSync();
+    if (!(out instanceof Frame)) {
+      // See toFrame: QSV's vpp_qsv buffers a frame; flush to drain it and evict
+      // the now-EOF'd graph so the next call rebuilds.
+      entry.filter.flushSync();
+      out = entry.filter.receiveSync();
+      this.evictGraph(key);
+    }
+    if (!(out instanceof Frame)) {
       throw new Error('Scaler: filter produced no frame');
     }
     return out;
@@ -577,13 +594,13 @@ export class Scaler implements Disposable {
    *
    * @param format - Output pixel format
    *
-   * @returns The cached graph entry, ready to process the frame
+   * @returns The cached graph entry (ready to process the frame) and its cache key
    *
    * @throws {Error} If the crop is out of bounds
    *
    * @internal
    */
-  private resolveGraph(frame: Frame, crop: ScalerCrop | undefined, resize: ScalerResize | undefined, format: ScaledImageFormat): HwGraphEntry {
+  private resolveGraph(frame: Frame, crop: ScalerCrop | undefined, resize: ScalerResize | undefined, format: ScaledImageFormat): { entry: HwGraphEntry; key: string } {
     const isHw = frame.isHwFrame();
     if (isHw && !this.hardware) {
       throw new Error('Scaler received a hardware frame but was created without a HardwareContext');
@@ -640,7 +657,25 @@ export class Scaler implements Disposable {
       }
     }
 
-    return entry;
+    return { entry, key };
+  }
+
+  /**
+   * Dispose a cached graph and remove it from the cache.
+   *
+   * Used after a graph has been flushed (and is therefore at EOF and can no
+   * longer accept frames) so the next operation rebuilds it.
+   *
+   * @param key - Cache key of the graph to evict
+   *
+   * @internal
+   */
+  private evictGraph(key: string): void {
+    const entry = this.graphs.get(key);
+    if (entry) {
+      entry.filter[Symbol.dispose]();
+      this.graphs.delete(key);
+    }
   }
 
   /**
