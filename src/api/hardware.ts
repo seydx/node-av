@@ -90,6 +90,21 @@ export interface HardwareOptions {
    * Device initialization options.
    */
   options?: Record<string, string>;
+
+  /**
+   * Preferred hardware type(s) for {@link HardwareContext.auto}, in priority order.
+   *
+   * The given types are tested first (and only kept if actually available),
+   * before falling back to the platform default order. Use it to prioritise one
+   * backend over another - e.g. `prefer: AV_HWDEVICE_TYPE_VAAPI` to pick VAAPI
+   * ahead of QSV on Intel. Ignored by {@link HardwareContext.create}.
+   *
+   * @example
+   * ```typescript
+   * const hw = HardwareContext.auto({ prefer: AV_HWDEVICE_TYPE_VAAPI });
+   * ```
+   */
+  prefer?: AVHWDeviceType | AVHWDeviceType[];
 }
 
 /**
@@ -179,11 +194,18 @@ export class HardwareContext implements Disposable {
    * });
    * ```
    *
+   * @example
+   * ```typescript
+   * // Prioritise VAAPI over the platform default (e.g. ahead of QSV on Intel)
+   * const hw = HardwareContext.auto({ prefer: AV_HWDEVICE_TYPE_VAAPI });
+   * ```
+   *
    * @see {@link create} For specific hardware type
    * @see {@link listAvailable} To check available types
    */
   static auto(options: HardwareOptions = {}): HardwareContext | null {
-    const hasOptions = options.device ?? options.options;
+    const prefer = options.prefer === undefined ? undefined : Array.isArray(options.prefer) ? options.prefer : [options.prefer];
+    const hasOptions = options.device ?? options.options ?? prefer;
 
     // Use cached device type if no custom options and already tested
     if (!hasOptions && this._autoTested) {
@@ -195,8 +217,8 @@ export class HardwareContext implements Disposable {
       return this.create(this._autoCachedType, options.device, options.options);
     }
 
-    // Platform-specific preference order
-    const preferenceOrder = this.getPreferenceOrder();
+    // Platform-specific preference order, with any user preference first
+    const preferenceOrder = this.getPreferenceOrder(prefer);
 
     for (const deviceType of preferenceOrder) {
       try {
@@ -1279,14 +1301,18 @@ export class HardwareContext implements Disposable {
   /**
    * Get platform-specific preference order for hardware types.
    *
-   * Returns available hardware types sorted by platform preference.
-   * Ensures optimal hardware selection for each platform.
+   * Returns available hardware types sorted by platform preference. Any
+   * caller-supplied preferred types are placed first (in the given order),
+   * followed by the platform default order and finally any remaining available
+   * types. Unavailable types are dropped.
+   *
+   * @param prefer - Hardware types to try first, in priority order
    *
    * @returns Array of AVHWDeviceType values in preference order
    *
    * @internal
    */
-  private static getPreferenceOrder(): AVHWDeviceType[] {
+  private static getPreferenceOrder(prefer?: AVHWDeviceType[]): AVHWDeviceType[] {
     // Get all available hardware types on this system
     const available = HardwareDeviceContext.iterateTypes();
     if (available.length === 0) {
@@ -1319,16 +1345,22 @@ export class HardwareContext implements Disposable {
       }
     }
 
-    // Filter preference order to only include available types
+    // Build the final order: user preference first, then the platform default,
+    // then any remaining available types. Keep only available types, no dupes.
     const availableSet = new Set(available);
-    const sortedAvailable = preferenceOrder.filter((type) => availableSet.has(type));
+    const seen = new Set<AVHWDeviceType>();
+    const sortedAvailable: AVHWDeviceType[] = [];
 
-    // Add any available types not in our preference list at the end
-    for (const type of available) {
-      if (!preferenceOrder.includes(type)) {
+    const push = (type: AVHWDeviceType): void => {
+      if (availableSet.has(type) && !seen.has(type)) {
+        seen.add(type);
         sortedAvailable.push(type);
       }
-    }
+    };
+
+    prefer?.forEach(push);
+    preferenceOrder.forEach(push);
+    available.forEach(push);
 
     return sortedAvailable;
   }

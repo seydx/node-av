@@ -17,6 +17,7 @@ All notable changes to this project will be documented in this file.
     configure: (ctx) => { ctx.codecTag = 'hvc1'; }, // imperative escape (-tag:v hvc1)
   });
   ```
+- **`HardwareContext.auto()` accepts a `prefer` option** to prioritise specific hardware type(s) over the platform default order, e.g. `auto({ prefer: AV_HWDEVICE_TYPE_VAAPI })` to pick VAAPI ahead of QSV on Intel. Preferred types are tested first (and kept only if available), then the usual platform fallback applies.
 - **Bitstream filter extradata is now reflected in the output parameters.** Filters that adapt container framing (`aac_adtstoasc`, `extract_extradata`, `dump_extra`, `*_mp4toannexb`) emit the resulting global headers as packet side data rather than on `par_out`. `BitStreamFilterAPI.outputCodecParameters` now folds that side data in, so a stream copy that relies on it (including `Muxer`'s `bsf` option) writes a header with the correct codec configuration.
 
 ### Changed
