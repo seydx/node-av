@@ -1411,6 +1411,25 @@ export class FormatContext extends OptionMember<NativeFormatContext> implements 
   }
 
   /**
+   * Interrupt any in-progress blocking I/O operation.
+   *
+   * Signals the interrupt callback so a blocking call (e.g. av_read_frame() on a
+   * quiet RTSP socket) returns immediately instead of waiting for data. The
+   * context is not freed and remains valid - this only aborts the pending
+   * operation, so a reader can drain and shut down before closing the input.
+   *
+   * @example
+   * ```typescript
+   * ctx.interrupt(); // unblock a stalled readFrame()
+   * ```
+   *
+   * @see {@link closeInput} To close and free the input
+   */
+  interrupt(): void {
+    this.native.interrupt();
+  }
+
+  /**
    * Send RTP packet to RTSP stream (supports both TCP and UDP)
    *
    * Automatically handles transport-specific packet formatting:

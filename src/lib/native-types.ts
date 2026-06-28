@@ -587,6 +587,7 @@ export interface NativeFormatContext extends AsyncDisposable {
   getRTSPStreamInfo(): RTSPStreamInfo[] | null;
   sendRTSPPacket(streamIndex: number, rtpData: Buffer): Promise<number>;
   sendRTSPPacketSync(streamIndex: number, rtpData: Buffer): number;
+  interrupt(): void;
 
   [Symbol.dispose](): void;
 }

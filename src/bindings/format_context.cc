@@ -50,6 +50,7 @@ Napi::Object FormatContext::Init(Napi::Env env, Napi::Object exports) {
     InstanceMethod<&FormatContext::GetRTSPStreamInfo>("getRTSPStreamInfo"),
     InstanceMethod<&FormatContext::SendRTSPPacketAsync>("sendRTSPPacket"),
     InstanceMethod<&FormatContext::SendRTSPPacketSync>("sendRTSPPacketSync"),
+    InstanceMethod<&FormatContext::Interrupt>("interrupt"),
     InstanceMethod(Napi::Symbol::WellKnown(env, "asyncDispose"), &FormatContext::DisposeAsync),
 
     InstanceAccessor<&FormatContext::GetStreams, nullptr>("streams"),
@@ -988,6 +989,11 @@ int FormatContext::InterruptCallback(void* opaque) {
 
   // Return 1 to interrupt FFmpeg operations, 0 to continue
   return self->interrupt_requested_.load() ? 1 : 0;
+}
+
+Napi::Value FormatContext::Interrupt(const Napi::CallbackInfo& info) {
+  RequestInterrupt();
+  return info.Env().Undefined();
 }
 
 void FormatContext::RequestInterrupt() {

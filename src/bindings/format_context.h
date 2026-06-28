@@ -163,6 +163,7 @@ private:
   Napi::Value GetRTSPStreamInfo(const Napi::CallbackInfo& info);
   Napi::Value SendRTSPPacketAsync(const Napi::CallbackInfo& info);
   Napi::Value SendRTSPPacketSync(const Napi::CallbackInfo& info);
+  Napi::Value Interrupt(const Napi::CallbackInfo& info);
   Napi::Value DisposeAsync(const Napi::CallbackInfo& info);
 
   Napi::Value GetUrl(const Napi::CallbackInfo& info);
