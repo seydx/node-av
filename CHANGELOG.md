@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **`Demuxer.interrupt()`** aborts an in-progress blocking read (e.g. `av_read_frame` on a quiet RTSP/network source) without freeing the demuxer, so an active pipeline can drain and shut down before `close()`. `PipelineControl.stop()` now calls it on the source demuxer(s) automatically.
+
+### Fixed
+
+- **`RTPStream` / `FMP4Stream` / `pipeline().stop()` could hang on teardown of a live source.** `stop()` awaited the pipeline's completion before closing the input, but a blocking read on a quiet RTSP/network source only unblocks when the input is interrupted — so completion waited for the read while the read waited to be unblocked (deadlock). `PipelineControl.stop()` now interrupts the source demuxer's read (via the new `Demuxer.interrupt()`), so the pipeline drains and completion resolves before close. A related teardown deadlock in the per-stream backpressure loop (a full queue whose consumer had already stopped starved the other streams) is fixed too.
+- **Aborting a `Demuxer`'s `signal` now cancels an in-progress blocking read.** The abort handler previously only flagged the read loop to stop, leaving the demux thread parked in `av_read_frame()` until data happened to arrive; it now interrupts the read so cancellation takes effect immediately.
+
 ## [6.1.0] - 2026-06-27
 
 ### Added
