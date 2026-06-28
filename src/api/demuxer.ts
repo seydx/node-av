@@ -358,6 +358,7 @@ export class Demuxer implements AsyncDisposable, Disposable {
   private activeGenerators = 0;
   private demuxThread: Promise<void> | null = null;
   private packetQueues = new Map<number | 'all', Packet[]>(); // streamIndex or 'all' -> queue
+  private packetQueueConsumers = new Map<number | 'all', number>(); // active consumer count per queue key
   private queueResolvers = new Map<number | 'all', () => void>(); // Promise resolvers for waiting consumers
   private demuxThreadActive = false;
   private demuxEof = false;
@@ -1730,10 +1731,11 @@ export class Demuxer implements AsyncDisposable, Disposable {
     this.activeGenerators++;
     const queueKey = index ?? 'all';
 
-    // Initialize queue for this generator
+    // Initialize queue for this generator and count it as a consumer of the key.
     if (!this.packetQueues.has(queueKey)) {
       this.packetQueues.set(queueKey, []);
     }
+    this.packetQueueConsumers.set(queueKey, (this.packetQueueConsumers.get(queueKey) ?? 0) + 1);
 
     // Always start demux thread (handles single and multiple generators)
     this.startDemuxThread();
@@ -1804,6 +1806,25 @@ export class Demuxer implements AsyncDisposable, Disposable {
     } finally {
       // Unregister this generator
       this.activeGenerators--;
+
+      // Drop this consumer from its queue key. When the last consumer of a key
+      // leaves, remove the queue so the demux thread stops treating it as a
+      // backpressure target - otherwise a full queue whose consumer has already
+      // stopped would block the read loop forever and starve the other streams
+      // (teardown deadlock with multi-stream pipelines). Free any buffered packets.
+      const remaining = (this.packetQueueConsumers.get(queueKey) ?? 1) - 1;
+      if (remaining <= 0) {
+        this.packetQueueConsumers.delete(queueKey);
+        const abandoned = this.packetQueues.get(queueKey);
+        this.packetQueues.delete(queueKey);
+        if (abandoned) {
+          for (const p of abandoned) {
+            p.free();
+          }
+        }
+      } else {
+        this.packetQueueConsumers.set(queueKey, remaining);
+      }
 
       // Stop demux thread if no more generators
       if (this.activeGenerators === 0) {
@@ -2016,6 +2037,42 @@ export class Demuxer implements AsyncDisposable, Disposable {
   }
 
   /**
+   * Interrupt a blocking read without closing the demuxer.
+   *
+   * Aborts any in-progress `av_read_frame()` (e.g. on a quiet RTSP/network source
+   * that is waiting for data) and signals end-of-stream to packet consumers, so
+   * an active pipeline can drain and finish. The demuxer is not freed and its
+   * streams stay valid - call {@link close} afterwards to release resources.
+   *
+   * Mainly used by pipeline teardown: a blocking read only unblocks on close, but
+   * closing while the pipeline is still draining would free the context too early,
+   * so the read is interrupted first and the input closed once processing settles.
+   *
+   * @example
+   * ```typescript
+   * control.stop();
+   * input.interrupt();        // unblock a stalled read so completion can resolve
+   * await control.completion;
+   * await input.close();
+   * ```
+   *
+   * @see {@link close} To close and free the demuxer
+   */
+  interrupt(): void {
+    if (this.isClosed) {
+      return;
+    }
+    // Abort the native blocking read so readFrame() returns immediately.
+    this.formatContext.interrupt();
+    // Signal EOF to consumers and wake any generator parked on an empty queue.
+    this.demuxEof = true;
+    for (const resolve of this.queueResolvers.values()) {
+      resolve();
+    }
+    this.queueResolvers.clear();
+  }
+
+  /**
    * Start the internal demux thread for handling multiple parallel packet generators.
    * This thread reads packets from the format context and distributes them to queues.
    *
@@ -2031,10 +2088,10 @@ export class Demuxer implements AsyncDisposable, Disposable {
     if (this.signal && !this.signalCleanup) {
       const handler = () => {
         this.demuxThreadActive = false;
-        for (const resolve of this.queueResolvers.values()) {
-          resolve();
-        }
-        this.queueResolvers.clear();
+        // Abort the native blocking read too - setting the flag alone leaves the
+        // demux thread parked in av_read_frame() until data happens to arrive.
+        // interrupt() also signals EOF and wakes the resolvers below.
+        this.interrupt();
       };
       this.signal.addEventListener('abort', handler, { once: true });
       this.signalCleanup = () => this.signal?.removeEventListener('abort', handler);
@@ -2088,15 +2145,15 @@ export class Demuxer implements AsyncDisposable, Disposable {
         const allQueue = this.packetQueues.get('all');
         const streamQueue = this.packetQueues.get(packet.streamIndex);
 
-        const targetQueues: { queue: Packet[]; event: string }[] = [];
+        const targetQueues: { queue: Packet[]; key: number | 'all'; event: string }[] = [];
 
         if (allQueue) {
-          targetQueues.push({ queue: allQueue, event: 'packet-all' });
+          targetQueues.push({ queue: allQueue, key: 'all', event: 'packet-all' });
         }
 
         // Only add stream queue if it's different from 'all' queue
         if (streamQueue && streamQueue !== allQueue) {
-          targetQueues.push({ queue: streamQueue, event: `packet-${packet.streamIndex}` });
+          targetQueues.push({ queue: streamQueue, key: packet.streamIndex, event: `packet-${packet.streamIndex}` });
         }
 
         if (targetQueues.length === 0) {
@@ -2111,13 +2168,29 @@ export class Demuxer implements AsyncDisposable, Disposable {
         // that surfaced with multi-stream pipelines where one stream (video)
         // decodes slower than the other (audio). The read loop is paced by the
         // slowest consumer; faster consumers simply idle on an empty queue.
+        //
+        // Only wait on queues whose consumer is still live: when a generator stops
+        // it removes its queue from packetQueues, so `get(key) !== target.queue`
+        // means that consumer is gone - skip it instead of blocking forever, which
+        // would starve the other streams and deadlock teardown.
+        let abandoned = false;
         while (this.demuxThreadActive && !this.isClosed) {
           let queueFull = false;
+          let anyLive = false;
           for (const target of targetQueues) {
+            if (this.packetQueues.get(target.key) !== target.queue) {
+              continue; // consumer gone - do not block on its queue
+            }
+            anyLive = true;
             if (target.queue.length >= MAX_INPUT_QUEUE_SIZE) {
               queueFull = true;
               break;
             }
+          }
+          if (!anyLive) {
+            // Every target's consumer has stopped - drop this packet.
+            abandoned = true;
+            break;
           }
           if (!queueFull) {
             break;
@@ -2125,38 +2198,31 @@ export class Demuxer implements AsyncDisposable, Disposable {
           await new Promise(setImmediate);
         }
 
-        if (!this.demuxThreadActive || this.isClosed) {
+        if (abandoned || !this.demuxThreadActive || this.isClosed) {
           packet.unref();
+          if (abandoned) {
+            continue;
+          }
           break;
         }
 
-        // Clone once, then share reference for additional queues
-        const firstClone = packet.clone();
-        if (!firstClone) {
-          throw new Error('Failed to clone packet in demux thread (out of memory)');
-        }
-
-        // Add to first queue and resolve waiting promise
-        const firstKey = targetQueues[0].event.replace('packet-', '') === 'all' ? 'all' : packet.streamIndex;
-        targetQueues[0].queue.push(firstClone);
-        const firstResolver = this.queueResolvers.get(firstKey);
-        if (firstResolver) {
-          firstResolver();
-          this.queueResolvers.delete(firstKey);
-        }
-
-        // Additional queues get clones (shares data buffer via reference counting)
-        for (let i = 1; i < targetQueues.length; i++) {
-          const additionalClone = firstClone.clone();
-          if (!additionalClone) {
-            throw new Error('Failed to clone packet for additional queue (out of memory)');
+        // Distribute to every live target queue. Each gets its own clone, which
+        // shares the data buffer via reference counting. Skip any consumer that
+        // vanished during the backpressure wait so its clone is not leaked into
+        // an orphaned queue.
+        for (const target of targetQueues) {
+          if (this.packetQueues.get(target.key) !== target.queue) {
+            continue; // consumer gone
           }
-          const queueKey = targetQueues[i].event.replace('packet-', '') === 'all' ? 'all' : packet.streamIndex;
-          targetQueues[i].queue.push(additionalClone);
-          const resolver = this.queueResolvers.get(queueKey);
+          const clone = packet.clone();
+          if (!clone) {
+            throw new Error('Failed to clone packet in demux thread (out of memory)');
+          }
+          target.queue.push(clone);
+          const resolver = this.queueResolvers.get(target.key);
           if (resolver) {
             resolver();
-            this.queueResolvers.delete(queueKey);
+            this.queueResolvers.delete(target.key);
           }
         }
 
@@ -2544,6 +2610,7 @@ export class Demuxer implements AsyncDisposable, Disposable {
       queue.length = 0;
     }
     this.packetQueues.clear();
+    this.packetQueueConsumers.clear();
 
     // NOW we can safely free the IOContext
     if (this.ioContext) {
