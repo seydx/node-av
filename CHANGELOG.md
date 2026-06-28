@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [6.1.1-beta.1] - 2026-06-28
+
 ### Added
 
 - **`Demuxer.interrupt()`** aborts an in-progress blocking read (e.g. `av_read_frame` on a quiet RTSP/network source) without freeing the demuxer, so an active pipeline can drain and shut down before `close()`. `PipelineControl.stop()` now calls it on the source demuxer(s) automatically.
