@@ -958,6 +958,7 @@ class PipelineControlImpl implements PipelineControl {
   private _completion: Promise<void>;
   private signalCleanup?: () => void;
   private tracker?: ProgressTracker;
+  private sources: Demuxer[];
 
   /**
    * @param executionPromise - Promise that resolves when pipeline completes
@@ -966,10 +967,13 @@ class PipelineControlImpl implements PipelineControl {
    *
    * @param tracker - Optional progress tracker shared with the runner
    *
+   * @param sources - Demuxer sources to interrupt on stop (unblocks a stalled read)
+   *
    * @internal
    */
-  constructor(executionPromise: Promise<void>, signal?: AbortSignal, tracker?: ProgressTracker) {
+  constructor(executionPromise: Promise<void>, signal?: AbortSignal, tracker?: ProgressTracker, sources: Demuxer[] = []) {
     this.tracker = tracker;
+    this.sources = sources;
     // Don't resolve immediately on stop, wait for the actual pipeline to finish.
     // Emit a final progress update once the pipeline settles.
     this._completion = tracker ? executionPromise.finally(() => tracker.finish()) : executionPromise;
@@ -996,6 +1000,13 @@ class PipelineControlImpl implements PipelineControl {
     this._stopped = true;
     this.signalCleanup?.();
     this.signalCleanup = undefined;
+
+    // Interrupt the source demuxer(s) so a blocking read (e.g. a quiet RTSP
+    // source) returns immediately. Without this, completion would wait for the
+    // read loop while the read waits to be unblocked - a teardown deadlock.
+    for (const source of this.sources) {
+      source.interrupt();
+    }
   }
 
   /**
@@ -1055,6 +1066,7 @@ function runDemuxerPipeline(input: Demuxer, output: Muxer, options?: PipelineOpt
     runDemuxerPipelineAsync(input, output, () => control?.isStopped() ?? false, tracker),
     options?.signal,
     tracker,
+    [input],
   );
   return control;
 }
@@ -1224,6 +1236,7 @@ function runSimplePipeline(args: any[], options?: PipelineOptions): PipelineCont
       consumeSimplePipeline(generator, lastStage, metadata, () => control?.isStopped() ?? false, tracker),
       options?.signal,
       tracker,
+      isDemuxer(source) ? [source] : [],
     );
     return control;
   }
@@ -1467,12 +1480,16 @@ function runNamedPipeline<K extends StreamName>(
   options?: PipelineOptions,
 ): PipelineControl {
   const tracker = new ProgressTracker(options?.onProgress, options?.progressInterval);
+  // Collect the unique Demuxer sources so stop() can interrupt their reads.
+  const sources = [...new Set(Object.values(inputs as Record<string, Demuxer>).filter(isDemuxer))];
+
   let control: PipelineControl;
   // eslint-disable-next-line prefer-const
   control = new PipelineControlImpl(
     runNamedPipelineAsync(inputs, stages, output, () => control?.isStopped() ?? false, tracker),
     options?.signal,
     tracker,
+    sources,
   );
   return control;
 }
