@@ -10,6 +10,7 @@ import {
 } from '../constants/constants.js';
 import { FF_ENCODER_AAC, FF_ENCODER_LIBX264 } from '../constants/encoders.js';
 import { Codec } from '../lib/codec.js';
+import { Rational } from '../lib/rational.js';
 import { avGetCodecString } from '../lib/utilities.js';
 import { Decoder } from './decoder.js';
 import { Demuxer } from './demuxer.js';
@@ -18,13 +19,14 @@ import { FilterPreset } from './filter-presets.js';
 import { FilterAPI } from './filter.js';
 import { HardwareContext } from './hardware.js';
 import { Muxer } from './muxer.js';
-import { pipeline } from './pipeline.js';
+import { consumeStreamInParallel, pipeline, PipelineControlImpl } from './pipeline.js';
 
 import type { AVCodecID, AVHWDeviceType, FFHWDeviceType } from '../constants/index.js';
 import type { DemuxerOptions } from './demuxer.js';
 import type { EncoderOptions } from './encoder.js';
 import type { IOOutputCallbacks } from './io-stream.js';
 import type { PipelineControl } from './pipeline.js';
+import type { MediaFrameSource } from './types.js';
 
 export type MP4BoxType =
   // Top-level structure
@@ -270,6 +272,7 @@ export class FMP4Stream {
   private inputUrl: string | null;
   private inputOptions: DemuxerOptions;
   private input?: Demuxer;
+  private source?: MediaFrameSource;
   private output?: Muxer;
   private hardwareContext?: HardwareContext | null;
   private videoDecoder?: Decoder;
@@ -279,6 +282,7 @@ export class FMP4Stream {
   private audioFilter?: FilterAPI;
   private audioEncoder?: Encoder;
   private pipeline?: PipelineControl;
+  private startPromise?: Promise<void>;
   private signal?: AbortSignal;
   private supportedCodecs: Set<string>;
   private incompleteBoxBuffer: Buffer | null = null;
@@ -303,12 +307,15 @@ export class FMP4Stream {
    *
    * @internal
    */
-  private constructor(input: string | Demuxer, options: FMP4StreamOptions) {
+  private constructor(input: string | Demuxer | MediaFrameSource, options: FMP4StreamOptions) {
     if (typeof input === 'string') {
       this.inputUrl = input;
-    } else {
+    } else if (input instanceof Demuxer) {
       this.inputUrl = null;
       this.input = input;
+    } else {
+      this.inputUrl = null;
+      this.source = input;
     }
 
     const inputUrl = this.inputUrl ?? '';
@@ -388,7 +395,7 @@ export class FMP4Stream {
    * });
    * ```
    */
-  static create(input: string | Demuxer, options: FMP4StreamOptions = {}): FMP4Stream {
+  static create(input: string | Demuxer | MediaFrameSource, options: FMP4StreamOptions = {}): FMP4Stream {
     return new FMP4Stream(input, options);
   }
 
@@ -456,6 +463,19 @@ export class FMP4Stream {
    * ```
    */
   getCodecString(): string {
+    // Frame-source path: there is no input codec - frames are always encoded
+    // to the fMP4 target codecs.
+    if (this.source) {
+      const parts: string[] = [];
+      if (this.source.video) {
+        parts.push(FMP4_CODECS.H264);
+      }
+      if (this.source.audio) {
+        parts.push(FMP4_CODECS.AAC);
+      }
+      return parts.join(',');
+    }
+
     if (!this.input) {
       throw new Error('Input not opened. Call start() first to open the input.');
     }
@@ -547,12 +567,31 @@ export class FMP4Stream {
    * ```
    */
   async start(): Promise<void> {
+    this.startPromise ??= this.doStart().catch((error: unknown) => {
+      this.startPromise = undefined;
+      throw error;
+    });
+    await this.startPromise;
+  }
+
+  /**
+   * Perform the actual startup (see {@link start}).
+   *
+   * @internal
+   */
+  private async doStart(): Promise<void> {
     if (this.pipeline) {
       return;
     }
 
     this.signal?.throwIfAborted();
     this.signal?.addEventListener('abort', () => this.stop(), { once: true });
+
+    // Frame-source path: encode pre-composited frames directly (no demuxer/decoder).
+    if (this.source) {
+      await this.startFromFrames();
+      return;
+    }
 
     // Open input if not already open
     if (!this.input) {
@@ -654,6 +693,22 @@ export class FMP4Stream {
     }
 
     // Setup output with callback
+    this.output = await this.createOutput();
+
+    this.attachCompletion(this.runPipeline());
+  }
+
+  /**
+   * Create the fMP4 output muxer with the fragment-emitting write callback.
+   *
+   * Uses `this.input` when present (demuxer path) and no input for the
+   * frame-source path.
+   *
+   * @returns The configured muxer
+   *
+   * @internal
+   */
+  private async createOutput(): Promise<Muxer> {
     const cb: IOOutputCallbacks = {
       write: (buffer: Buffer) => {
         if (this.options.boxMode) {
@@ -669,7 +724,7 @@ export class FMP4Stream {
       },
     };
 
-    this.output = await Muxer.open(cb, {
+    return await Muxer.open(cb, {
       input: this.input,
       format: 'mp4',
       bufferSize: this.options.bufferSize,
@@ -679,8 +734,20 @@ export class FMP4Stream {
         frag_duration: this.options.fragDuration,
       },
     });
+  }
 
-    this.runPipeline()
+  /**
+   * Wire the pipeline completion to the fragment/close callbacks.
+   *
+   * On success ends the fragment iterator and invokes `onClose()`; on error
+   * stops the stream and invokes `onClose(error)`. Runs in the background.
+   *
+   * @param completion - The pipeline completion promise
+   *
+   * @internal
+   */
+  private attachCompletion(completion: Promise<void>): void {
+    completion
       .then(() => {
         this.endFragments();
         this.options.onClose?.();
@@ -690,6 +757,97 @@ export class FMP4Stream {
         await this.stop();
         this.options.onClose?.(error);
       });
+  }
+
+  /**
+   * Set up encoders and the fMP4 muxer for a pre-composited frame source and
+   * start encoding. No demuxer or decoder is involved - the provided frames are
+   * encoded straight into the fragmented container. Both streams share the ONE
+   * muxer, so neither may close it on its own: each source is encoded to packets
+   * and written concurrently (the muxer interleaves), and the muxer is closed
+   * once all streams have finished.
+   *
+   * @throws {Error} If the source has neither video nor audio frames
+   *
+   * @internal
+   */
+  private async startFromFrames(): Promise<void> {
+    const source = this.source!;
+    if (!source.video && !source.audio) {
+      throw new Error('Frame source must provide video and/or audio frames');
+    }
+
+    // Video encoder - the encoder adopts width/height/pixelFormat/timeBase from
+    // the first composited frame.
+    if (source.video) {
+      if (this.options.hardware === 'auto') {
+        this.hardwareContext = HardwareContext.auto();
+      } else if (this.options.hardware.deviceType !== AV_HWDEVICE_TYPE_NONE) {
+        this.hardwareContext = HardwareContext.create(this.options.hardware.deviceType, this.options.hardware.device, this.options.hardware.options);
+      }
+
+      const encoderCodec = this.hardwareContext?.getEncoderCodec('h264') ?? Codec.findEncoderByName(FF_ENCODER_LIBX264)!;
+
+      let encoderOptions: EncoderOptions['options'] = {};
+      if (encoderCodec.name === FF_ENCODER_LIBX264) {
+        encoderOptions.preset = 'ultrafast';
+        encoderOptions.tune = 'zerolatency';
+      }
+      encoderOptions = { ...encoderOptions, ...this.options.video.encoderOptions };
+
+      let fps = this.options.video.fps ?? 30;
+      if (!isFinite(fps) || fps <= 0 || isNaN(fps)) {
+        fps = 30;
+      }
+
+      // Set the framerate explicitly - without a decoder the encoder would infer
+      // it from the frame timebase and pick an absurd level. Bound the GOP so
+      // fragments get keyframes at a sensible cadence.
+      this.videoEncoder = await Encoder.create(encoderCodec, {
+        options: encoderOptions,
+        configure: (ctx) => {
+          ctx.framerate = new Rational(Math.round(fps), 1);
+          ctx.gopSize = Math.max(1, Math.round(fps * 2));
+        },
+      });
+    }
+
+    // Audio encoder (AAC), resampling via aformat like the demuxer path.
+    if (source.audio) {
+      const filterChain = FilterPreset.chain().aformat(AV_SAMPLE_FMT_FLTP, 44100, 'stereo').build();
+      this.audioFilter = FilterAPI.create(filterChain);
+
+      this.audioEncoder = await Encoder.create(FF_ENCODER_AAC, {
+        filter: this.audioFilter,
+        options: this.options.audio.encoderOptions,
+      });
+    }
+
+    this.output = await this.createOutput();
+
+    // eslint-disable-next-line prefer-const
+    let control: PipelineControl | undefined;
+    const shouldStop = (): boolean => control?.isStopped() ?? false;
+    const tasks: Promise<void>[] = [];
+
+    if (source.video && this.videoEncoder) {
+      const streamIndex = this.output.addStream(this.videoEncoder);
+      tasks.push(consumeStreamInParallel(this.videoEncoder.packets(source.video), this.output, streamIndex, shouldStop));
+    }
+
+    if (source.audio && this.audioFilter && this.audioEncoder) {
+      const streamIndex = this.output.addStream(this.audioEncoder);
+      tasks.push(consumeStreamInParallel(this.audioEncoder.packets(this.audioFilter.frames(source.audio)), this.output, streamIndex, shouldStop));
+    }
+
+    // Close the shared muxer only after ALL streams are done (flushes the trailer).
+    const run = Promise.all(tasks).then(async () => {
+      await this.output?.close();
+    });
+    control = new PipelineControlImpl(run, this.signal);
+    this.pipeline = control;
+
+    this.attachCompletion(this.pipeline.completion);
   }
 
   /**
@@ -713,10 +871,19 @@ export class FMP4Stream {
   async stop(): Promise<void> {
     this.endFragments();
 
-    // Stop pipeline if running and wait for completion
+    // Allow a fresh start() after stopping.
+    this.startPromise = undefined;
+
+    // Stop pipeline if running and wait for completion. Swallow a rejected
+    // completion - the error is already surfaced via the onClose(error) path;
+    // we just need cleanup to proceed.
     if (this.pipeline && !this.pipeline.isStopped()) {
       this.pipeline.stop();
-      await this.pipeline.completion;
+      try {
+        await this.pipeline.completion;
+      } catch {
+        // Pipeline errored - proceed with teardown regardless.
+      }
       this.pipeline = undefined;
     }
 

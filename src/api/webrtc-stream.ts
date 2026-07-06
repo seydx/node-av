@@ -10,11 +10,12 @@ import {
   AV_CODEC_ID_VP8,
   AV_CODEC_ID_VP9,
 } from '../constants/constants.js';
-import { RTPStream } from './rtp-stream.js';
+import { isMediaFrameSource, RTPStream } from './rtp-stream.js';
 
 import type { AVCodecID } from '../constants/index.js';
 import type { Demuxer } from './demuxer.js';
 import type { RTPStreamOptions } from './rtp-stream.js';
+import type { MediaFrameSource } from './types.js';
 
 /**
  * Codec information for WebRTC streaming.
@@ -128,6 +129,8 @@ export class WebRTCStream {
   private audioTrack: MediaStreamTrack | null = null;
   private options: WebRTCStreamOptions;
   private pendingIceCandidates: string[] = [];
+  private frameSource?: MediaFrameSource;
+  private stopping = false;
 
   /**
    * @param options - Session configuration options
@@ -176,8 +179,14 @@ export class WebRTCStream {
    * });
    * ```
    */
-  static create(input: string | Demuxer, options: WebRTCStreamOptions = {}): WebRTCStream {
+  static create(input: string | Demuxer | MediaFrameSource, options: WebRTCStreamOptions = {}): WebRTCStream {
     const session = new WebRTCStream(options);
+
+    // Remember a frame source so negotiation can advertise the encoder's target
+    // codecs (there's no input stream to read a codec from).
+    if (isMediaFrameSource(input)) {
+      session.frameSource = input;
+    }
 
     // Create stream with WebRTC-specific codec support
     session.stream = RTPStream.create(input, {
@@ -202,27 +211,29 @@ export class WebRTCStream {
   }
 
   /**
-   * Start streaming media to WebRTC peer connection.
+   * Start streaming media to the WebRTC peer connection.
    *
    * Begins the media processing pipeline, reading packets from input,
-   * transcoding if necessary, and sending RTP packets to media tracks.
-   * Note: The stream is automatically started by {@link setOffer}, so calling
-   * this method explicitly is optional. This method is provided for cases where
-   * you need explicit control over when streaming begins.
+   * transcoding if necessary, and sending RTP packets to the media tracks.
+   * {@link setOffer} calls this automatically after negotiating, so calling it
+   * explicitly is optional. It is idempotent - a useful pattern for demuxer
+   * inputs is calling `start()` *before* `setOffer()` so the input is open and
+   * its actual codecs are advertised in the answer.
    *
-   * @returns Promise that resolves when streaming completes
+   * @returns Promise that resolves once streaming has started (runs in the background)
    *
    * @throws {FFmpegError} If transcoding or muxing fails
    *
    * @example
    * ```typescript
-   * const session = await WebRTCStream.create('input.mp4');
-   * session.onIceCandidate = (c) => sendToRemote(c);
+   * const session = WebRTCStream.create('rtsp://camera.local/stream');
    *
+   * await session.start(); // open input so getCodecs() sees the real codecs
    * const answer = await session.setOffer(remoteOffer);
    * sendToRemote(answer);
-   * // Stream is already started by setOffer
    * ```
+   *
+   * @see {@link setOffer} Which starts the stream automatically after negotiation
    */
   async start(): Promise<void> {
     await this.stream.start();
@@ -245,12 +256,20 @@ export class WebRTCStream {
    * ```
    */
   async stop(): Promise<void> {
-    await this.stream.stop();
-    this.pc?.close();
-    this.videoTrack = null;
-    this.audioTrack = null;
-    this.pc = null;
-    this.pendingIceCandidates = [];
+    if (this.stopping) {
+      return;
+    }
+    this.stopping = true;
+    try {
+      await this.stream.stop();
+      this.pc?.close();
+      this.videoTrack = null;
+      this.audioTrack = null;
+      this.pc = null;
+      this.pendingIceCandidates = [];
+    } finally {
+      this.stopping = false;
+    }
   }
 
   /**
@@ -273,6 +292,16 @@ export class WebRTCStream {
    * ```
    */
   getCodecs(): WebRTCCodecInfo {
+    // Frame source: no input stream - advertise the encoder's target codecs
+    // (RTPStream's frame path encodes video to H264 and audio to OPUS), gated on
+    // which frame streams are present.
+    if (this.frameSource) {
+      return {
+        video: this.frameSource.video ? this.getVideoCodecConfig(AV_CODEC_ID_H264) : undefined,
+        audio: this.frameSource.audio ? this.getAudioCodecConfig(AV_CODEC_ID_OPUS) : undefined,
+      };
+    }
+
     const input = this.stream.getInput();
     if (!input) {
       return {
@@ -368,6 +397,15 @@ export class WebRTCStream {
       iceServers: this.options.iceServers,
     });
 
+    // Tear down when the peer goes away. werift verifies ICE consent (RFC 7675)
+    // and reports 'failed' once the browser disconnects (tab closed/reloaded) -
+    // without this, the pipeline would keep encoding into the void forever.
+    this.pc.connectionStateChange.subscribe((state) => {
+      if ((state === 'failed' || state === 'closed') && !this.stopping) {
+        void this.stop();
+      }
+    });
+
     // Setup ICE candidate handling
     this.pc.onIceCandidate.subscribe((candidate) => {
       if (candidate?.candidate && this.options.onIceCandidate) {
@@ -381,6 +419,12 @@ export class WebRTCStream {
         this.videoTrack = new MediaStreamTrack({ kind: 'video' });
         transceiver.sender.replaceTrack(this.videoTrack);
         transceiver.setDirection('sendonly');
+        // Answer PLI feedback with a fresh keyframe - a receiver that connected
+        // after the stream started (or lost packets) can't decode until the next
+        // IDR, and it asks for one via RTCP PLI.
+        transceiver.sender.onPictureLossIndication.subscribe(() => {
+          this.stream.requestVideoKeyframe();
+        });
       } else if (transceiver.kind === 'audio' && this.audioTrack === null) {
         this.audioTrack = new MediaStreamTrack({ kind: 'audio' });
         transceiver.sender.replaceTrack(this.audioTrack);
@@ -407,6 +451,23 @@ export class WebRTCStream {
 
     // Set remote description and create answer
     await this.pc.setRemoteDescription(new RTCSessionDescription(offerSdp, 'offer'));
+
+    // The sender transmits with the FIRST negotiated codec, and browsers offer
+    // several H264 variants (packetization-mode=1 and =0). FFmpeg's RTP payloader
+    // fragments large NALs (FU-A), which is invalid under packetization-mode=0 -
+    // if that entry happened to be first, the receiver would silently discard
+    // every fragmented (key)frame. Prefer a packetization-mode=1 H264 entry.
+    for (const transceiver of this.pc.getTransceivers()) {
+      if (transceiver.kind !== 'video') {
+        continue;
+      }
+      transceiver.codecs = [...transceiver.codecs].sort((a, b) => {
+        const score = (codec: RTCRtpCodecParameters): number =>
+          codec.mimeType.toLowerCase() === 'video/h264' && !(codec.parameters ?? '').includes('packetization-mode=1') ? 1 : 0;
+        return score(a) - score(b);
+      });
+    }
+
     const answer = await this.pc.createAnswer();
     this.pc.setLocalDescription(answer);
 
@@ -417,6 +478,11 @@ export class WebRTCStream {
       }
       this.pendingIceCandidates = [];
     }
+
+    // Start streaming - negotiation is done and the tracks exist, so the caller
+    // doesn't have to sequence start() themselves. Idempotent: calling start()
+    // before setOffer() (e.g. to have the input open for codec detection) is fine.
+    await this.start();
 
     return this.pc.localDescription?.sdp ?? '';
   }

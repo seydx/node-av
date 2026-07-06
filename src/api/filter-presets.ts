@@ -814,7 +814,9 @@ export class FilterPreset {
       // Special handling for RKMPP which uses RGA
       const filterName = this.hardware.deviceType === AV_HWDEVICE_TYPE_RKMPP ? 'overlay_rkrga' : `overlay_${this.hardware.deviceTypeName}`;
 
-      let filter = `${filterName}=${x}:${y}`;
+      // Use named options: some hardware overlays (overlay_videotoolbox) accept
+      // no positional shorthand, and x=/y= is valid for every overlay variant.
+      let filter = `${filterName}=x=${x}:y=${y}`;
 
       if (options) {
         for (const [key, value] of Object.entries(options)) {
@@ -824,7 +826,7 @@ export class FilterPreset {
 
       this.add(filter);
     } else {
-      let filter = `overlay=${x}:${y}`;
+      let filter = `overlay=x=${x}:y=${y}`;
       if (options) {
         for (const [key, value] of Object.entries(options)) {
           filter += `:${key}=${value}`;
@@ -1512,9 +1514,14 @@ export type FilterComplexLabels = string | string[];
  */
 export class FilterComplexGraph {
   private chains: string[] = [];
+  private hardware?: HardwareContext | null;
 
   /**
    * Create a new filter-complex graph builder.
+   *
+   * @param hardware - Optional hardware context. Each {@link chain} then builds
+   * with hardware-aware filter selection (e.g. `scale` → `scale_vaapi`,
+   * `overlay` → `overlay_vaapi`), like {@link FilterPreset.chain}.
    *
    * @returns A new builder instance
    *
@@ -1522,9 +1529,20 @@ export class FilterComplexGraph {
    * ```typescript
    * const graph = FilterComplexGraph.create();
    * ```
+   *
+   * @example
+   * ```typescript
+   * // Hardware-aware graph (scale_vaapi / overlay_vaapi etc.)
+   * const hw = HardwareContext.auto();
+   * const graph = FilterComplexGraph.create(hw)
+   *   .chain({ inputs: '1:v', outputs: 'pip' }, (c) => c.scale(320, 240))
+   *   .chain({ inputs: ['0:v', 'pip'], outputs: 'out' }, (c) => c.overlay(10, 10));
+   * ```
    */
-  static create(): FilterComplexGraph {
-    return new FilterComplexGraph();
+  static create(hardware?: HardwareContext | null): FilterComplexGraph {
+    const graph = new FilterComplexGraph();
+    graph.hardware = hardware;
+    return graph;
   }
 
   /**
@@ -1551,7 +1569,7 @@ export class FilterComplexGraph {
    * ```
    */
   chain(labels: { inputs?: FilterComplexLabels; outputs?: FilterComplexLabels }, build: (chain: FilterPreset) => FilterPreset): this {
-    const preset = FilterPreset.chain();
+    const preset = FilterPreset.chain(this.hardware);
     const filterString = build(preset).build();
     this.chains.push(`${this.renderLabels(labels.inputs)}${filterString}${this.renderLabels(labels.outputs)}`);
     return this;

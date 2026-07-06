@@ -25,6 +25,7 @@ Some examples expect input/output paths or a stream URL as arguments — check t
 | `api-filter-complex-grid` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-filter-complex-grid.ts) |
 | `api-filter-complex-typed` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-filter-complex-typed.ts) |
 | `api-fmp4` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-fmp4.ts) |
+| `api-fmp4-pip` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-fmp4-pip.ts) |
 | `api-frame-extract` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-frame-extract.ts) |
 | `api-hw-codecs` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-hw-codecs.ts) |
 | `api-hw-decode-sw-encode` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-hw-decode-sw-encode.ts) |
@@ -49,6 +50,7 @@ Some examples expect input/output paths or a stream URL as arguments — check t
 | `api-stream-input` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-stream-input.ts) |
 | `api-sw-decode-hw-encode` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-sw-decode-hw-encode.ts) |
 | `api-sw-transcode` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-sw-transcode.ts) |
+| `api-webrtc-pip` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-webrtc-pip.ts) |
 | `api-whisper-subtitles` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-whisper-subtitles.ts) |
 | `api-whisper-transcribe` | | | [✓](https://github.com/seydx/node-av/tree/main/examples/api-whisper-transcribe.ts) |
 | `frame-utils` | | [✓](https://github.com/seydx/node-av/tree/main/examples/frame-utils.ts) | |

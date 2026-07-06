@@ -66,6 +66,9 @@ export { FMP4_CODECS, FMP4Stream, type FMP4Data, type FMP4Fragment, type FMP4Str
 // Whisper Transcriber
 export { WhisperTranscriber, type WhisperSegment, type WhisperTranscriberOptions } from './whisper.js';
 
+// Shared types
+export type { MediaFrameSource } from './types.js';
+
 // Utilities
 export * from './utilities/index.js';
 export * from './utils.js';

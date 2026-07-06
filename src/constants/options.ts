@@ -343,15 +343,7 @@ export interface CodecContextOptions {
   discard_damaged_percentage?: number;
   /** Comma-separated list of side data types for which user-supplied (container) data is preferred over coded bytestream */
   side_data_prefer_packet?:
-    | 'replaygain'
-    | 'displaymatrix'
-    | 'spherical'
-    | 'stereo3d'
-    | 'audio_service_type'
-    | 'mastering_display_metadata'
-    | 'content_light_level'
-    | 'icc_profile'
-    | 'exif';
+    'replaygain' | 'displaymatrix' | 'spherical' | 'stereo3d' | 'audio_service_type' | 'mastering_display_metadata' | 'content_light_level' | 'icc_profile' | 'exif';
 }
 
 export interface EncoderOptionsMap {
@@ -1181,26 +1173,7 @@ export interface EncoderOptionsMap {
     profile?: 'main' | 'high' | 'constrained_baseline' | 'constrained_high';
     /** Profile Level */
     level?:
-      | 'auto'
-      | '1.0'
-      | '1.1'
-      | '1.2'
-      | '1.3'
-      | '2.0'
-      | '2.1'
-      | '2.2'
-      | '3.0'
-      | '3.1'
-      | '3.2'
-      | '4.0'
-      | '4.1'
-      | '4.2'
-      | '5.0'
-      | '5.1'
-      | '5.2'
-      | '6.0'
-      | '6.1'
-      | '6.2';
+      'auto' | '1.0' | '1.1' | '1.2' | '1.3' | '2.0' | '2.1' | '2.2' | '3.0' | '3.1' | '3.2' | '4.0' | '4.1' | '4.2' | '5.0' | '5.1' | '5.2' | '6.0' | '6.1' | '6.2';
     /** enables low latency mode */
     latency?: boolean;
     /** Set the encoding quality preset */
@@ -1333,25 +1306,7 @@ export interface EncoderOptionsMap {
   h264_nvenc: {
     /** Set the encoding preset */
     preset?:
-      | 'default'
-      | 'slow'
-      | 'medium'
-      | 'fast'
-      | 'hp'
-      | 'hq'
-      | 'bd'
-      | 'll'
-      | 'llhq'
-      | 'llhp'
-      | 'lossless'
-      | 'losslesshp'
-      | 'p1'
-      | 'p2'
-      | 'p3'
-      | 'p4'
-      | 'p5'
-      | 'p6'
-      | 'p7';
+      'default' | 'slow' | 'medium' | 'fast' | 'hp' | 'hq' | 'bd' | 'll' | 'llhq' | 'llhp' | 'lossless' | 'losslesshp' | 'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7';
     /** Set the encoding tuning info */
     tune?: 'hq' | 'll' | 'ull' | 'lossless';
     /** Set the encoding profile */
@@ -1848,25 +1803,7 @@ export interface EncoderOptionsMap {
   hevc_nvenc: {
     /** Set the encoding preset */
     preset?:
-      | 'default'
-      | 'slow'
-      | 'medium'
-      | 'fast'
-      | 'hp'
-      | 'hq'
-      | 'bd'
-      | 'll'
-      | 'llhq'
-      | 'llhp'
-      | 'lossless'
-      | 'losslesshp'
-      | 'p1'
-      | 'p2'
-      | 'p3'
-      | 'p4'
-      | 'p5'
-      | 'p6'
-      | 'p7';
+      'default' | 'slow' | 'medium' | 'fast' | 'hp' | 'hq' | 'bd' | 'll' | 'llhq' | 'llhp' | 'lossless' | 'losslesshp' | 'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7';
     /** Set the encoding tuning info */
     tune?: 'hq' | 'uhq' | 'll' | 'ull' | 'lossless';
     /** Set the encoding profile */

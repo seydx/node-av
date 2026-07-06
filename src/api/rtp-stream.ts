@@ -1,8 +1,9 @@
 import { isRtcp, RtpPacket } from 'werift';
 
-import { AV_HWDEVICE_TYPE_NONE } from '../constants/constants.js';
+import { AV_HWDEVICE_TYPE_NONE, AV_PICTURE_TYPE_I, AV_SAMPLE_FMT_FLTP } from '../constants/constants.js';
 import { FF_ENCODER_LIBOPUS, FF_ENCODER_LIBX264, FF_ENCODER_LIBX265 } from '../constants/encoders.js';
 import { Codec } from '../lib/codec.js';
+import { Rational } from '../lib/rational.js';
 import { avChannelLayoutDefault } from '../lib/utilities.js';
 import { MAX_PACKET_SIZE } from './constants.js';
 import { pickSupportedLayout, pickSupportedRate, pickSupportedSampleFormat } from './utilities/codec-format.js';
@@ -16,9 +17,11 @@ import { Muxer } from './muxer.js';
 import { pipeline } from './pipeline.js';
 
 import type { AVCodecID, AVHWDeviceType, AVSampleFormat, FFAudioEncoder, FFHWDeviceType, FFVideoEncoder } from '../constants/index.js';
+import type { Frame } from '../lib/frame.js';
 import type { DemuxerOptions } from './demuxer.js';
 import type { EncoderOptions } from './encoder.js';
-import type { PipelineControl } from './pipeline.js';
+import type { PipelineControl, PipelineProgress } from './pipeline.js';
+import type { MediaFrameSource } from './types.js';
 
 /**
  * Options for configuring RTP streaming.
@@ -112,6 +115,51 @@ export interface RTPStreamOptions {
 }
 
 /**
+ * Check whether a streaming-class input is a frame source (not a URL or Demuxer).
+ *
+ * @param input - The input passed to `create()`
+ *
+ * @returns True if `input` is a {@link MediaFrameSource}
+ *
+ * @internal
+ */
+export function isMediaFrameSource(input: string | Demuxer | MediaFrameSource): input is MediaFrameSource {
+  return typeof input !== 'string' && !(input instanceof Demuxer);
+}
+
+/**
+ * Combine one or two pipeline controls behind a single {@link PipelineControl}.
+ *
+ * The frame-source path runs separate video/audio pipelines; this presents them
+ * as one control so `stop()`/`completion` work uniformly.
+ *
+ * @internal
+ */
+class CombinedPipelineControl implements PipelineControl {
+  constructor(private readonly controls: PipelineControl[]) {}
+
+  stop(): void {
+    for (const control of this.controls) {
+      control.stop();
+    }
+  }
+
+  isStopped(): boolean {
+    return this.controls.every((control) => control.isStopped());
+  }
+
+  get completion(): Promise<void> {
+    return Promise.all(this.controls.map((control) => control.completion)).then(() => undefined);
+  }
+
+  get progress(): PipelineProgress {
+    // Delegate to the first control (video when present) - a merged view is not
+    // meaningful across independently-clocked streams.
+    return this.controls[0]?.progress ?? { frames: 0, bytes: 0, time: 0, fps: 0, bitrate: 0, speed: 0, elapsed: 0 };
+  }
+}
+
+/**
  * Generic RTP streaming with automatic codec detection and transcoding.
  *
  * Provides library-agnostic RTP streaming for various applications.
@@ -148,6 +196,7 @@ export class RTPStream {
   private inputUrl: string | null;
   private inputOptions: DemuxerOptions;
   private input?: Demuxer;
+  private source?: MediaFrameSource;
   private videoOutput?: Muxer;
   private audioOutput?: Muxer;
   private hardwareContext?: HardwareContext | null;
@@ -158,9 +207,11 @@ export class RTPStream {
   private audioFilter?: FilterAPI;
   private audioEncoder?: Encoder;
   private pipeline?: PipelineControl;
+  private startPromise?: Promise<void>;
   private signal?: AbortSignal;
   private supportedVideoCodecs: Set<AVCodecID | FFVideoEncoder>;
   private supportedAudioCodecs: Set<AVCodecID | FFAudioEncoder>;
+  private videoKeyframeRequested = false;
 
   /**
    * @param input - Media input URL or pre-opened Demuxer
@@ -171,12 +222,15 @@ export class RTPStream {
    *
    * @internal
    */
-  private constructor(input: string | Demuxer, options: RTPStreamOptions) {
+  private constructor(input: string | Demuxer | MediaFrameSource, options: RTPStreamOptions) {
     if (typeof input === 'string') {
       this.inputUrl = input;
-    } else {
+    } else if (input instanceof Demuxer) {
       this.inputUrl = null;
       this.input = input;
+    } else {
+      this.inputUrl = null;
+      this.source = input;
     }
 
     const inputUrl = this.inputUrl ?? '';
@@ -271,7 +325,7 @@ export class RTPStream {
    * });
    * ```
    */
-  static create(input: string | Demuxer, options: RTPStreamOptions = {}): RTPStream {
+  static create(input: string | Demuxer | MediaFrameSource, options: RTPStreamOptions = {}): RTPStream {
     return new RTPStream(input, options);
   }
 
@@ -307,6 +361,49 @@ export class RTPStream {
   }
 
   /**
+   * Request that the next encoded video frame is a keyframe.
+   *
+   * Used to answer receiver feedback (e.g. a WebRTC PLI) so a receiver that
+   * missed the stream start or lost packets can resync without waiting for the
+   * next scheduled GOP keyframe. Currently effective for frame-source inputs
+   * ({@link MediaFrameSource}); for demuxer inputs the encoder's regular GOP
+   * cadence applies.
+   *
+   * @example
+   * ```typescript
+   * transceiver.sender.onPictureLossIndication.subscribe(() => {
+   *   stream.requestVideoKeyframe();
+   * });
+   * ```
+   */
+  requestVideoKeyframe(): void {
+    this.videoKeyframeRequested = true;
+  }
+
+  /**
+   * Pass video frames through, forcing a keyframe when one was requested.
+   *
+   * Sets `pictType = I` on the next frame after {@link requestVideoKeyframe};
+   * combined with the encoder's `forced-idr` option this produces an IDR the
+   * receiver can resync on.
+   *
+   * @param src - The user-provided video frame source
+   *
+   * @yields {Frame | null} The unchanged frames (with pictType forced when requested)
+   *
+   * @internal
+   */
+  private async *wrapVideoSource(src: AsyncIterable<Frame | null>): AsyncGenerator<Frame | null> {
+    for await (const frame of src) {
+      if (frame && this.videoKeyframeRequested) {
+        this.videoKeyframeRequested = false;
+        frame.pictType = AV_PICTURE_TYPE_I;
+      }
+      yield frame;
+    }
+  }
+
+  /**
    * Start streaming media to RTP packets.
    *
    * Begins the media processing pipeline, reading packets from input,
@@ -334,12 +431,33 @@ export class RTPStream {
    * ```
    */
   async start(): Promise<void> {
+    // Idempotent: concurrent and repeated calls share a single startup (e.g.
+    // an explicit start() racing WebRTCStream.setOffer()'s automatic one).
+    this.startPromise ??= this.doStart().catch((error: unknown) => {
+      this.startPromise = undefined;
+      throw error;
+    });
+    await this.startPromise;
+  }
+
+  /**
+   * Perform the actual startup (see {@link start}).
+   *
+   * @internal
+   */
+  private async doStart(): Promise<void> {
     if (this.pipeline) {
       return;
     }
 
     this.signal?.throwIfAborted();
     this.signal?.addEventListener('abort', () => this.stop(), { once: true });
+
+    // Frame-source path: encode pre-composited frames directly (no demuxer/decoder).
+    if (this.source) {
+      await this.startFromFrames();
+      return;
+    }
 
     if (!this.input) {
       if (!this.inputUrl) {
@@ -432,66 +550,15 @@ export class RTPStream {
       });
     }
 
-    // Initialize RTP sequence numbers and timestamps
-    let videoSequenceNumber = Math.floor(Math.random() * 0xffff);
-    let videoTimestamp = Math.floor(Math.random() * 0xffffffff) >>> 0; // unsigned 32-bit
-    let audioSequenceNumber = Math.floor(Math.random() * 0xffff);
-
-    // Calculate video timestamp increment
+    // Calculate video timestamp increment from the input stream fps (or option override)
     const videoStreamFps = videoStream ? videoStream.avgFrameRate.num / videoStream.avgFrameRate.den : 20;
     let fps = this.options.video.fps ?? videoStreamFps;
     if (!isFinite(fps) || fps <= 0 || isNaN(fps)) {
       fps = 20; // Default to 20 FPS if invalid
     }
 
-    const videoTimestampIncrement = 90000 / fps;
-
-    // Build RTP muxer options for video
-    const videoMuxerOptions: Record<string, string | number> = {};
-    if (this.options.video.ssrc !== undefined) {
-      videoMuxerOptions.ssrc = this.options.video.ssrc;
-    }
-    if (this.options.video.payloadType !== undefined) {
-      videoMuxerOptions.payload_type = this.options.video.payloadType;
-    }
-
     // Setup video output
-    this.videoOutput = await Muxer.open(
-      {
-        write: (buffer: Buffer) => {
-          if (isRtcp(buffer)) {
-            // Ignore RTCP packets
-            return buffer.length;
-          }
-
-          const rtpPacket = RtpPacket.deSerialize(buffer);
-
-          // Fix sequence number - ensure continuous sequence
-          rtpPacket.header.sequenceNumber = videoSequenceNumber;
-          videoSequenceNumber = (videoSequenceNumber + 1) & 0xffff; // Wrap at 16-bit
-
-          // Fix timestamp - calculate based on FPS
-          // All packets in same frame have same timestamp (marker=false)
-          // Only increment timestamp when frame ends (marker=true)
-          rtpPacket.header.timestamp = videoTimestamp;
-
-          // Increment timestamp for next frame when current frame ends
-          if (rtpPacket.header.marker) {
-            videoTimestamp = (videoTimestamp + videoTimestampIncrement) >>> 0; // Unsigned 32-bit wrap
-          }
-
-          this.options.onVideoPacket(rtpPacket);
-          return buffer.length;
-        },
-      },
-      {
-        input: this.input,
-        copyInitialNonkeyframes: true,
-        format: 'rtp',
-        maxPacketSize: this.options.video.mtu,
-        options: videoMuxerOptions,
-      },
-    );
+    this.videoOutput = await this.createVideoOutput(fps);
 
     // Setup audio if available and needs transcoding
     if (audioStream && !this.isAudioCodecSupported(audioStream.codecpar.codecId)) {
@@ -552,45 +619,25 @@ export class RTPStream {
 
     // Setup audio output if available
     if (audioStream) {
-      // Build RTP muxer options for audio
-      const audioMuxerOptions: Record<string, string | number> = {};
-      if (this.options.audio.ssrc !== undefined) {
-        audioMuxerOptions.ssrc = this.options.audio.ssrc;
-      }
-      if (this.options.audio.payloadType !== undefined) {
-        audioMuxerOptions.payload_type = this.options.audio.payloadType;
-      }
-
-      this.audioOutput = await Muxer.open(
-        {
-          write: (buffer: Buffer) => {
-            if (isRtcp(buffer)) {
-              // Ignore RTCP packets
-              return buffer.length;
-            }
-
-            const rtpPacket = RtpPacket.deSerialize(buffer);
-
-            // Fix sequence number - ensure continuous sequence
-            rtpPacket.header.sequenceNumber = audioSequenceNumber;
-            audioSequenceNumber = (audioSequenceNumber + 1) & 0xffff; // Wrap at 16-bit
-
-            this.options.onAudioPacket(rtpPacket);
-            return buffer.length;
-          },
-        },
-        {
-          input: this.input,
-          copyInitialNonkeyframes: true,
-          format: 'rtp',
-          maxPacketSize: this.options.audio.mtu,
-          options: audioMuxerOptions,
-        },
-      );
+      this.audioOutput = await this.createAudioOutput();
     }
 
     // Start pipeline in background (don't await)
-    this.runPipeline()
+    this.attachCompletion(this.runPipeline());
+  }
+
+  /**
+   * Wire the pipeline completion to the onClose/error callbacks.
+   *
+   * On success invokes `onClose()`; on error stops the stream and invokes
+   * `onClose(error)`. Runs in the background (not awaited).
+   *
+   * @param completion - The pipeline completion promise
+   *
+   * @internal
+   */
+  private attachCompletion(completion: Promise<void>): void {
+    completion
       .then(() => {
         // Pipeline completed successfully
         this.options.onClose?.();
@@ -600,6 +647,235 @@ export class RTPStream {
         await this.stop();
         this.options.onClose?.(error);
       });
+  }
+
+  /**
+   * Set up encoders and RTP outputs for a pre-composited frame source and start
+   * encoding. No demuxer or decoder is involved - the provided frames are encoded
+   * straight to RTP. Video and audio (whichever are present) run as separate
+   * pipelines combined behind a single control.
+   *
+   * @throws {Error} If the source has neither video nor audio frames
+   *
+   * @internal
+   */
+  private async startFromFrames(): Promise<void> {
+    const source = this.source!;
+    if (!source.video && !source.audio) {
+      throw new Error('Frame source must provide video and/or audio frames');
+    }
+
+    const controls: PipelineControl[] = [];
+    const opts = this.signal ? { signal: this.signal } : undefined;
+
+    // Video
+    if (source.video) {
+      if (this.options.hardware === 'auto') {
+        this.hardwareContext = HardwareContext.auto();
+      } else if (this.options.hardware.deviceType !== AV_HWDEVICE_TYPE_NONE) {
+        this.hardwareContext = HardwareContext.create(this.options.hardware.deviceType, this.options.hardware.device, this.options.hardware.options);
+      }
+
+      const targetCodecId = this.options.supportedVideoCodecs[0] ?? FF_ENCODER_LIBX264;
+      let encoderCodec: Codec | null = null;
+      if (typeof targetCodecId === 'string') {
+        encoderCodec = Codec.findEncoderByName(targetCodecId);
+      } else {
+        encoderCodec = this.hardwareContext?.getEncoderCodec(targetCodecId) ?? Codec.findEncoder(targetCodecId);
+      }
+      if (!encoderCodec) {
+        throw new Error(`No encoder found for video codec ${String(targetCodecId)}`);
+      }
+
+      let encoderOptions: EncoderOptions['options'] = {};
+      if (encoderCodec.name === FF_ENCODER_LIBX264 || encoderCodec.name === FF_ENCODER_LIBX265) {
+        encoderOptions.preset = 'ultrafast';
+        encoderOptions.tune = 'zerolatency';
+        // Make a requested keyframe (frame.pictType = I) an actual IDR, so a
+        // receiver that missed the stream start can resync (PLI handling).
+        encoderOptions['forced-idr'] = true;
+      }
+      encoderOptions = { ...encoderOptions, ...this.options.video.encoderOptions };
+
+      let fps = this.options.video.fps ?? 20;
+      if (!isFinite(fps) || fps <= 0 || isNaN(fps)) {
+        fps = 20;
+      }
+
+      // No decoder/filter: the encoder adopts width/height/pixelFormat/timeBase
+      // from the first composited frame. Set the framerate explicitly, otherwise
+      // the encoder infers it from the frame timebase (often a fine-grained tick
+      // like 1/12800), which makes x264 pick an absurd level (huge MB rate) that
+      // browsers can't decode over WebRTC. Bound the GOP to ~2s: live receivers
+      // that join (or lose) mid-stream must get a keyframe quickly - the x264
+      // default of 250 frames leaves them waiting for many seconds.
+      this.videoEncoder = await Encoder.create(encoderCodec, {
+        maxBFrames: 0,
+        options: encoderOptions,
+        configure: (ctx) => {
+          ctx.framerate = new Rational(Math.round(fps), 1);
+          ctx.gopSize = Math.max(1, Math.round(fps * 2));
+        },
+      });
+
+      this.videoOutput = await this.createVideoOutput(fps);
+      controls.push(pipeline(this.wrapVideoSource(source.video), this.videoEncoder, this.videoOutput, opts));
+    }
+
+    // Audio
+    if (source.audio) {
+      const targetCodecId = this.options.supportedAudioCodecs[0] ?? FF_ENCODER_LIBOPUS;
+      let encoderCodec: Codec | null = null;
+      if (typeof targetCodecId === 'string') {
+        encoderCodec = Codec.findEncoderByName(targetCodecId);
+      } else {
+        encoderCodec = Codec.findEncoder(targetCodecId);
+      }
+      if (!encoderCodec) {
+        throw new Error(`No encoder found for audio codec ${String(targetCodecId)}`);
+      }
+
+      // There is no input stream to derive formats from - resample to the desired
+      // (or codec-preferred) sample format/rate/layout via an aformat filter.
+      const desiredSampleFormat = this.options.audio?.sampleFormat ?? AV_SAMPLE_FMT_FLTP;
+      const desiredSampleRate = this.options.audio?.sampleRate ?? 48000;
+      const desiredChannels = this.options.audio?.channels ?? 2;
+      const targetSampleFormat = this.selectSampleFormat(encoderCodec, desiredSampleFormat);
+      const targetSampleRate = this.selectSampleRate(encoderCodec, desiredSampleRate);
+      const channelLayoutStr = this.selectChannelLayout(encoderCodec, desiredChannels);
+
+      this.audioFilter = FilterAPI.create(FilterPreset.chain().aformat(targetSampleFormat, targetSampleRate, channelLayoutStr).build());
+
+      let encoderOptions: EncoderOptions['options'] = {};
+      if (encoderCodec.name === FF_ENCODER_LIBOPUS) {
+        encoderOptions.application = 'lowdelay';
+        encoderOptions.frame_duration = 20;
+      }
+      encoderOptions = { ...encoderOptions, ...this.options.audio.encoderOptions };
+
+      this.audioEncoder = await Encoder.create(encoderCodec, {
+        filter: this.audioFilter,
+        options: encoderOptions,
+      });
+
+      this.audioOutput = await this.createAudioOutput();
+      controls.push(pipeline(source.audio, this.audioFilter, this.audioEncoder, this.audioOutput, opts));
+    }
+
+    this.pipeline = new CombinedPipelineControl(controls);
+    this.attachCompletion(this.pipeline.completion);
+  }
+
+  /**
+   * Create the RTP video output muxer.
+   *
+   * Rewrites RTP sequence numbers (continuous) and timestamps (90 kHz, advanced
+   * per frame at `fps`) in the write callback, then forwards each packet to
+   * `onVideoPacket`. Uses `this.input` when present (demuxer path) and no input
+   * for the frame-source path.
+   *
+   * @param fps - Frame rate used for the RTP timestamp increment
+   *
+   * @returns The configured video muxer
+   *
+   * @internal
+   */
+  private async createVideoOutput(fps: number): Promise<Muxer> {
+    let videoSequenceNumber = Math.floor(Math.random() * 0xffff);
+    let videoTimestamp = Math.floor(Math.random() * 0xffffffff) >>> 0; // unsigned 32-bit
+    const videoTimestampIncrement = 90000 / fps;
+
+    const videoMuxerOptions: Record<string, string | number> = {};
+    if (this.options.video.ssrc !== undefined) {
+      videoMuxerOptions.ssrc = this.options.video.ssrc;
+    }
+    if (this.options.video.payloadType !== undefined) {
+      videoMuxerOptions.payload_type = this.options.video.payloadType;
+    }
+
+    return await Muxer.open(
+      {
+        write: (buffer: Buffer) => {
+          if (isRtcp(buffer)) {
+            // Ignore RTCP packets
+            return buffer.length;
+          }
+
+          const rtpPacket = RtpPacket.deSerialize(buffer);
+
+          // Fix sequence number - ensure continuous sequence
+          rtpPacket.header.sequenceNumber = videoSequenceNumber;
+          videoSequenceNumber = (videoSequenceNumber + 1) & 0xffff; // Wrap at 16-bit
+
+          // Fix timestamp - calculate based on FPS. All packets in the same frame
+          // share a timestamp (marker=false); advance only when the frame ends.
+          rtpPacket.header.timestamp = videoTimestamp;
+          if (rtpPacket.header.marker) {
+            videoTimestamp = (videoTimestamp + videoTimestampIncrement) >>> 0; // Unsigned 32-bit wrap
+          }
+
+          this.options.onVideoPacket(rtpPacket);
+          return buffer.length;
+        },
+      },
+      {
+        input: this.input,
+        copyInitialNonkeyframes: true,
+        format: 'rtp',
+        maxPacketSize: this.options.video.mtu,
+        options: videoMuxerOptions,
+      },
+    );
+  }
+
+  /**
+   * Create the RTP audio output muxer.
+   *
+   * Rewrites RTP sequence numbers (continuous) in the write callback and forwards
+   * each packet to `onAudioPacket`. Uses `this.input` when present (demuxer path)
+   * and no input for the frame-source path.
+   *
+   * @returns The configured audio muxer
+   *
+   * @internal
+   */
+  private async createAudioOutput(): Promise<Muxer> {
+    let audioSequenceNumber = Math.floor(Math.random() * 0xffff);
+
+    const audioMuxerOptions: Record<string, string | number> = {};
+    if (this.options.audio.ssrc !== undefined) {
+      audioMuxerOptions.ssrc = this.options.audio.ssrc;
+    }
+    if (this.options.audio.payloadType !== undefined) {
+      audioMuxerOptions.payload_type = this.options.audio.payloadType;
+    }
+
+    return await Muxer.open(
+      {
+        write: (buffer: Buffer) => {
+          if (isRtcp(buffer)) {
+            // Ignore RTCP packets
+            return buffer.length;
+          }
+
+          const rtpPacket = RtpPacket.deSerialize(buffer);
+
+          // Fix sequence number - ensure continuous sequence
+          rtpPacket.header.sequenceNumber = audioSequenceNumber;
+          audioSequenceNumber = (audioSequenceNumber + 1) & 0xffff; // Wrap at 16-bit
+
+          this.options.onAudioPacket(rtpPacket);
+          return buffer.length;
+        },
+      },
+      {
+        input: this.input,
+        copyInitialNonkeyframes: true,
+        format: 'rtp',
+        maxPacketSize: this.options.audio.mtu,
+        options: audioMuxerOptions,
+      },
+    );
   }
 
   /**
@@ -674,10 +950,20 @@ export class RTPStream {
    * ```
    */
   async stop(): Promise<void> {
-    // Stop pipeline if running and wait for completion
+    // Allow a fresh start() after stopping.
+    this.startPromise = undefined;
+
+    // Stop pipeline if running and wait for completion. pipeline.stop() interrupts
+    // the source demuxer's read (frame-source pipelines unwind via iterator.return
+    // instead). Swallow a rejected completion here - the error is already surfaced
+    // to the caller via the onClose(error) path; we just need cleanup to proceed.
     if (this.pipeline && !this.pipeline.isStopped()) {
       this.pipeline.stop();
-      await this.pipeline.completion;
+      try {
+        await this.pipeline.completion;
+      } catch {
+        // Pipeline errored - proceed with teardown regardless.
+      }
       this.pipeline = undefined;
     }
 

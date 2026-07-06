@@ -953,7 +953,7 @@ const EMPTY_PROGRESS: PipelineProgress = { frames: 0, bytes: 0, time: 0, fps: 0,
  *
  * @internal
  */
-class PipelineControlImpl implements PipelineControl {
+export class PipelineControlImpl implements PipelineControl {
   private _stopped = false;
   private _completion: Promise<void>;
   private signalCleanup?: () => void;
@@ -1872,7 +1872,7 @@ async function* buildNamedStreamPipeline(
  *
  * @internal
  */
-async function consumeStreamInParallel(
+export async function consumeStreamInParallel(
   stream: AsyncIterable<Packet | null>,
   output: Muxer,
   streamIndex: number,

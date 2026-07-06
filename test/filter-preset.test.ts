@@ -114,11 +114,11 @@ describe('FilterPreset', () => {
 
     describe('overlay()', () => {
       it('should add overlay filter', () => {
-        strictEqual(FilterPreset.chain().overlay(100, 50).build(), 'overlay=100:50');
+        strictEqual(FilterPreset.chain().overlay(100, 50).build(), 'overlay=x=100:y=50');
       });
 
       it('should handle overlay with options', () => {
-        strictEqual(FilterPreset.chain().overlay(100, 50, { format: 'rgb' }).build(), 'overlay=100:50:format=rgb');
+        strictEqual(FilterPreset.chain().overlay(100, 50, { format: 'rgb' }).build(), 'overlay=x=100:y=50:format=rgb');
       });
     });
 

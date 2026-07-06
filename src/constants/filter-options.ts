@@ -3811,19 +3811,7 @@ export interface FilterOptionsMap {
     range?: 'tv' | 'mpeg' | 'pc' | 'jpeg';
     /** Output color primaries */
     primaries?:
-      | 'bt709'
-      | 'bt470m'
-      | 'bt470bg'
-      | 'smpte170m'
-      | 'smpte240m'
-      | 'smpte428'
-      | 'film'
-      | 'smpte431'
-      | 'smpte432'
-      | 'bt2020'
-      | 'jedec-p22'
-      | 'ebu3213'
-      | 'vgamut';
+      'bt709' | 'bt470m' | 'bt470bg' | 'smpte170m' | 'smpte240m' | 'smpte428' | 'film' | 'smpte431' | 'smpte432' | 'bt2020' | 'jedec-p22' | 'ebu3213' | 'vgamut';
     /** Output transfer characteristics */
     trc?:
       | 'bt709'
@@ -3859,19 +3847,7 @@ export interface FilterOptionsMap {
     irange?: 'tv' | 'mpeg' | 'pc' | 'jpeg';
     /** Input color primaries */
     iprimaries?:
-      | 'bt709'
-      | 'bt470m'
-      | 'bt470bg'
-      | 'smpte170m'
-      | 'smpte240m'
-      | 'smpte428'
-      | 'film'
-      | 'smpte431'
-      | 'smpte432'
-      | 'bt2020'
-      | 'jedec-p22'
-      | 'ebu3213'
-      | 'vgamut';
+      'bt709' | 'bt470m' | 'bt470bg' | 'smpte170m' | 'smpte240m' | 'smpte428' | 'film' | 'smpte431' | 'smpte432' | 'bt2020' | 'jedec-p22' | 'ebu3213' | 'vgamut';
     /** Input transfer characteristics */
     itrc?:
       | 'bt709'
@@ -6076,28 +6052,10 @@ export interface FilterOptionsMap {
     b?: number;
     /** set colors mode */
     colors_mode?:
-      | 'whiteonblack'
-      | 'blackonwhite'
-      | 'whiteongray'
-      | 'blackongray'
-      | 'coloronblack'
-      | 'coloronwhite'
-      | 'colorongray'
-      | 'blackoncolor'
-      | 'whiteoncolor'
-      | 'grayoncolor';
+      'whiteonblack' | 'blackonwhite' | 'whiteongray' | 'blackongray' | 'coloronblack' | 'coloronwhite' | 'colorongray' | 'blackoncolor' | 'whiteoncolor' | 'grayoncolor';
     /** set colors mode */
     l?:
-      | 'whiteonblack'
-      | 'blackonwhite'
-      | 'whiteongray'
-      | 'blackongray'
-      | 'coloronblack'
-      | 'coloronwhite'
-      | 'colorongray'
-      | 'blackoncolor'
-      | 'whiteoncolor'
-      | 'grayoncolor';
+      'whiteonblack' | 'blackonwhite' | 'whiteongray' | 'blackongray' | 'coloronblack' | 'coloronwhite' | 'colorongray' | 'blackoncolor' | 'whiteoncolor' | 'grayoncolor';
   };
   /**
    * Apply a High Quality 3D Denoiser.
@@ -6272,19 +6230,7 @@ export interface FilterOptionsMap {
   iccgen: {
     /** select color primaries */
     color_primaries?:
-      | 'auto'
-      | 'bt709'
-      | 'bt470m'
-      | 'bt470bg'
-      | 'smpte170m'
-      | 'smpte240m'
-      | 'film'
-      | 'bt2020'
-      | 'smpte428'
-      | 'smpte431'
-      | 'smpte432'
-      | 'jedec-p22'
-      | 'ebu3213';
+      'auto' | 'bt709' | 'bt470m' | 'bt470bg' | 'smpte170m' | 'smpte240m' | 'film' | 'bt2020' | 'smpte428' | 'smpte431' | 'smpte432' | 'jedec-p22' | 'ebu3213';
     /** select color transfer */
     color_trc?:
       | 'auto'
@@ -6533,14 +6479,7 @@ export interface FilterOptionsMap {
     scale?: number;
     /** target geometry of the lens correction (only when geometry correction is enabled) */
     target_geometry?:
-      | 'rectilinear'
-      | 'fisheye'
-      | 'panoramic'
-      | 'equirectangular'
-      | 'fisheye_orthographic'
-      | 'fisheye_stereographic'
-      | 'fisheye_equisolid'
-      | 'fisheye_thoby';
+      'rectilinear' | 'fisheye' | 'panoramic' | 'equirectangular' | 'fisheye_orthographic' | 'fisheye_stereographic' | 'fisheye_equisolid' | 'fisheye_thoby';
     /** Does reverse correction (regular image to lens distorted) */
     reverse?: boolean;
     /** Type of interpolation */
@@ -8707,34 +8646,10 @@ export interface FilterOptionsMap {
     out_chroma_loc?: 'auto' | 'unknown' | 'left' | 'center' | 'topleft' | 'top' | 'bottomleft' | 'bottom';
     /** set input primaries */
     in_primaries?:
-      | 'auto'
-      | 'bt709'
-      | 'bt470m'
-      | 'bt470bg'
-      | 'smpte170m'
-      | 'smpte240m'
-      | 'film'
-      | 'bt2020'
-      | 'smpte428'
-      | 'smpte431'
-      | 'smpte432'
-      | 'jedec-p22'
-      | 'ebu3213';
+      'auto' | 'bt709' | 'bt470m' | 'bt470bg' | 'smpte170m' | 'smpte240m' | 'film' | 'bt2020' | 'smpte428' | 'smpte431' | 'smpte432' | 'jedec-p22' | 'ebu3213';
     /** set output primaries */
     out_primaries?:
-      | 'auto'
-      | 'bt709'
-      | 'bt470m'
-      | 'bt470bg'
-      | 'smpte170m'
-      | 'smpte240m'
-      | 'film'
-      | 'bt2020'
-      | 'smpte428'
-      | 'smpte431'
-      | 'smpte432'
-      | 'jedec-p22'
-      | 'ebu3213';
+      'auto' | 'bt709' | 'bt470m' | 'bt470bg' | 'smpte170m' | 'smpte240m' | 'film' | 'bt2020' | 'smpte428' | 'smpte431' | 'smpte432' | 'jedec-p22' | 'ebu3213';
     /** set output color transfer */
     in_transfer?:
       | 'auto'
@@ -8833,34 +8748,10 @@ export interface FilterOptionsMap {
     out_chroma_loc?: 'auto' | 'unknown' | 'left' | 'center' | 'topleft' | 'top' | 'bottomleft' | 'bottom';
     /** set input primaries */
     in_primaries?:
-      | 'auto'
-      | 'bt709'
-      | 'bt470m'
-      | 'bt470bg'
-      | 'smpte170m'
-      | 'smpte240m'
-      | 'film'
-      | 'bt2020'
-      | 'smpte428'
-      | 'smpte431'
-      | 'smpte432'
-      | 'jedec-p22'
-      | 'ebu3213';
+      'auto' | 'bt709' | 'bt470m' | 'bt470bg' | 'smpte170m' | 'smpte240m' | 'film' | 'bt2020' | 'smpte428' | 'smpte431' | 'smpte432' | 'jedec-p22' | 'ebu3213';
     /** set output primaries */
     out_primaries?:
-      | 'auto'
-      | 'bt709'
-      | 'bt470m'
-      | 'bt470bg'
-      | 'smpte170m'
-      | 'smpte240m'
-      | 'film'
-      | 'bt2020'
-      | 'smpte428'
-      | 'smpte431'
-      | 'smpte432'
-      | 'jedec-p22'
-      | 'ebu3213';
+      'auto' | 'bt709' | 'bt470m' | 'bt470bg' | 'smpte170m' | 'smpte240m' | 'film' | 'bt2020' | 'smpte428' | 'smpte431' | 'smpte432' | 'jedec-p22' | 'ebu3213';
     /** set output color transfer */
     in_transfer?:
       | 'auto'

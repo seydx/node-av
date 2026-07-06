@@ -525,13 +525,17 @@ export class FilterComplexAPI implements Disposable {
    * Process frame streams from multiple inputs and yield frames from specified output.
    *
    * High-level async generator for multi-input filtering.
-   * Filter is only flushed when EOF (null) is explicitly sent to any input.
+   * Inputs may end at different times - shorter inputs are flushed individually
+   * while the remaining inputs keep flowing, matching ffmpeg CLI behaviour.
    *
    * **EOF Handling:**
-   * - Filter is only flushed when EOF (null) is explicitly sent to ANY input
-   * - Generator yields null after flushing when null is received
-   * - No automatic flushing - filter stays open until EOF or close()
-   * - Iterator completion without null does not trigger flush
+   * - EOF (null) from one input flushes only that input; the others continue.
+   *   The filter decides what happens (e.g. overlay's `eof_action`, default
+   *   `repeat`, keeps compositing the last overlay frame)
+   * - When ALL inputs have ended and at least one signaled EOF, the graph is
+   *   finalized and the generator yields null
+   * - Iterator completion without null does not trigger a flush - the filter
+   *   stays open until EOF or close()
    *
    * @param outLabel - Output label to receive frames from
    *
@@ -610,11 +614,8 @@ export class FilterComplexAPI implements Disposable {
       }
     }
 
-    // Helper to process a single frame and yield output
-    const processFrame = async function* (this: FilterComplexAPI, label: string, frame: Frame): AsyncGenerator<Frame> {
-      await this.process(label, frame);
-
-      // Try to receive output frames
+    // Helper to drain all currently available output frames
+    const drainOutput = async function* (this: FilterComplexAPI): AsyncGenerator<Frame> {
       while (true) {
         const outFrame = await this.receive(outLabel);
         if (!outFrame || outFrame === EOF) {
@@ -622,6 +623,12 @@ export class FilterComplexAPI implements Disposable {
         }
         yield outFrame;
       }
+    }.bind(this);
+
+    // Helper to process a single frame and yield output
+    const processFrame = async function* (this: FilterComplexAPI, label: string, frame: Frame): AsyncGenerator<Frame> {
+      await this.process(label, frame);
+      yield* drainOutput();
     }.bind(this);
 
     // Helper to finalize (flush all inputs and yield remaining frames)
@@ -676,56 +683,78 @@ export class FilterComplexAPI implements Disposable {
 
     // Track which inputs have finished
     const finishedInputs = new Set<string>();
-    let shouldFinalize = flushInputs.size > 0; // True if any single input was null
+    let sawEof = flushInputs.size > 0; // True once any input signaled EOF (null)
 
-    // Process frames from iterable inputs in parallel
-    while (finishedInputs.size < iterableInputs.size) {
-      // Read one frame from each active input
-      const readPromises: Promise<{ label: string; result: IteratorResult<Frame | null> }>[] = [];
-
-      for (const [label, iterator] of iterableInputs) {
-        if (!finishedInputs.has(label)) {
-          readPromises.push(
-            iterator.next().then((result) => ({
-              label,
-              result,
-            })),
-          );
-        }
-      }
-
-      // Wait for all reads to complete
-      const results = await Promise.all(readPromises);
-
-      // Process each result
-      for (const { label, result } of results) {
-        if (result.done) {
-          // Iterator finished without explicit null - no automatic flush
-          finishedInputs.add(label);
-          continue;
-        }
-
-        const frame = result.value;
-
-        if (frame === null) {
-          // Explicit null from input stream - flush this input
-          await this.flush(label);
-          shouldFinalize = true;
-          finishedInputs.add(label);
-        } else {
-          // Send frame to input
-          yield* processFrame(label, frame);
-        }
-      }
-
-      // If we got null from stream, finalize and return
-      if (shouldFinalize) {
-        yield* finalize();
-        return;
-      }
+    // Inputs given as explicit null: signal EOF on that leg right away.
+    for (const label of flushInputs) {
+      await this.flush(label);
     }
 
-    // Iterators finished without explicit null - no automatic flush
+    try {
+      // Process frames from iterable inputs in parallel
+      while (finishedInputs.size < iterableInputs.size) {
+        // Read one frame from each active input
+        const readPromises: Promise<{ label: string; result: IteratorResult<Frame | null> }>[] = [];
+
+        for (const [label, iterator] of iterableInputs) {
+          if (!finishedInputs.has(label)) {
+            readPromises.push(
+              iterator.next().then((result) => ({
+                label,
+                result,
+              })),
+            );
+          }
+        }
+
+        // Wait for all reads to complete
+        const results = await Promise.all(readPromises);
+
+        // Process each result
+        for (const { label, result } of results) {
+          if (result.done) {
+            // Iterator finished without explicit null - no automatic flush
+            finishedInputs.add(label);
+            continue;
+          }
+
+          const frame = result.value;
+
+          if (frame === null) {
+            // EOF for THIS input only: signal it downstream and keep the other
+            // inputs flowing. What happens next is the filter's decision - e.g.
+            // overlay's eof_action (default `repeat`) keeps compositing the last
+            // overlay frame while the main input continues (matches ffmpeg CLI).
+            await this.flush(label);
+            sawEof = true;
+            finishedInputs.add(label);
+            yield* drainOutput();
+          } else {
+            // Send frame to input
+            yield* processFrame(label, frame);
+          }
+        }
+      }
+
+      // All inputs ended. If any signaled EOF explicitly, finalize the graph
+      // (flush remaining legs, drain buffered output) and yield null. Iterators
+      // that merely completed without a null do not trigger a flush.
+      if (sawEof) {
+        yield* finalize();
+      }
+    } finally {
+      // Close input iterators that are still open. The inputs are driven via
+      // manual iterators (not for-await), so an early consumer stop
+      // (generator.return) would otherwise leave the upstream generators
+      // (decoders, demuxer packet queues) registered and running - a full
+      // demuxer queue then blocks the shared read loop and starves the other
+      // stream's consumers (teardown deadlock).
+      for (const [label, iterator] of iterableInputs) {
+        if (!finishedInputs.has(label)) {
+          await iterator.return?.(undefined);
+        }
+      }
+    }
   }
 
   /**
@@ -733,13 +762,15 @@ export class FilterComplexAPI implements Disposable {
    * Synchronous version of frames.
    *
    * High-level sync generator for multi-input filtering.
-   * Filter is only flushed when EOF (null) is explicitly sent to any input.
+   * Inputs may end at different times - shorter inputs are flushed individually
+   * while the remaining inputs keep flowing, matching ffmpeg CLI behaviour.
    *
    * **EOF Handling:**
-   * - Filter is only flushed when EOF (null) is explicitly sent to ANY input
-   * - Generator yields null after flushing when null is received
-   * - No automatic flushing - filter stays open until EOF or close()
-   * - Iterator completion without null does not trigger flush
+   * - EOF (null) from one input flushes only that input; the others continue
+   * - When ALL inputs have ended and at least one signaled EOF, the graph is
+   *   finalized and the generator yields null
+   * - Iterator completion without null does not trigger a flush - the filter
+   *   stays open until EOF or close()
    *
    * @param outLabel - Output label to receive frames from
    *
@@ -815,11 +846,8 @@ export class FilterComplexAPI implements Disposable {
       throw new Error('FilterComplexAPI not initialized. Use async frames() method for lazy initialization.');
     }
 
-    // Helper to process a single frame and yield output
-    const processFrame = function* (this: FilterComplexAPI, label: string, frame: Frame): Generator<Frame> {
-      this.processSync(label, frame);
-
-      // Try to receive output frames
+    // Helper to drain all currently available output frames
+    const drainOutput = function* (this: FilterComplexAPI): Generator<Frame> {
       while (true) {
         const outFrame = this.receiveSync(outLabel);
         if (!outFrame || outFrame === EOF) {
@@ -827,6 +855,12 @@ export class FilterComplexAPI implements Disposable {
         }
         yield outFrame;
       }
+    }.bind(this);
+
+    // Helper to process a single frame and yield output
+    const processFrame = function* (this: FilterComplexAPI, label: string, frame: Frame): Generator<Frame> {
+      this.processSync(label, frame);
+      yield* drainOutput();
     }.bind(this);
 
     // Helper to finalize (flush all inputs and yield remaining frames)
@@ -881,45 +915,57 @@ export class FilterComplexAPI implements Disposable {
 
     // Track which inputs have finished
     const finishedInputs = new Set<string>();
-    let shouldFinalize = flushInputs.size > 0; // True if any single input was null
+    let sawEof = flushInputs.size > 0; // True once any input signaled EOF (null)
 
-    // Process frames from iterable inputs in round-robin fashion
-    while (finishedInputs.size < iterableInputs.size) {
-      // Read one frame from each active input
-      for (const [label, iterator] of iterableInputs) {
-        if (finishedInputs.has(label)) {
-          continue;
-        }
-
-        const result = iterator.next();
-
-        if (result.done) {
-          // Iterator finished without explicit null - no automatic flush
-          finishedInputs.add(label);
-          continue;
-        }
-
-        const frame = result.value;
-
-        if (frame === null) {
-          // Explicit null from input stream - flush this input
-          this.flushSync(label);
-          shouldFinalize = true;
-          finishedInputs.add(label);
-        } else {
-          // Send frame to input
-          yield* processFrame(label, frame);
-        }
-      }
-
-      // If we got null from stream, finalize and return
-      if (shouldFinalize) {
-        yield* finalize();
-        return;
-      }
+    // Inputs given as explicit null: signal EOF on that leg right away.
+    for (const label of flushInputs) {
+      this.flushSync(label);
     }
 
-    // Iterators finished without explicit null - no automatic flush
+    try {
+      // Process frames from iterable inputs in round-robin fashion
+      while (finishedInputs.size < iterableInputs.size) {
+        // Read one frame from each active input
+        for (const [label, iterator] of iterableInputs) {
+          if (finishedInputs.has(label)) {
+            continue;
+          }
+
+          const result = iterator.next();
+
+          if (result.done) {
+            // Iterator finished without explicit null - no automatic flush
+            finishedInputs.add(label);
+            continue;
+          }
+
+          const frame = result.value;
+
+          if (frame === null) {
+            // EOF for THIS input only - see frames() for the semantics.
+            this.flushSync(label);
+            sawEof = true;
+            finishedInputs.add(label);
+            yield* drainOutput();
+          } else {
+            // Send frame to input
+            yield* processFrame(label, frame);
+          }
+        }
+      }
+
+      // All inputs ended - finalize only if any input signaled EOF explicitly.
+      if (sawEof) {
+        yield* finalize();
+      }
+    } finally {
+      // Close input iterators that are still open - see frames() for why.
+      for (const [label, iterator] of iterableInputs) {
+        if (!finishedInputs.has(label)) {
+          iterator.return?.(undefined);
+        }
+      }
+    }
   }
 
   /**
