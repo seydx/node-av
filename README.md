@@ -129,10 +129,32 @@ while (true) {
       console.log(`Decoded frame ${frame.pts}, size: ${frame.width}x${frame.height}`);
 
       // Process frame data...
+
+      frame.unref();
     }
   }
 
   packet.unref();
+}
+
+// Flush the decoder - codecs buffer frames internally (B-frames, threading),
+// so the last frames only come out after signaling EOF with a null packet.
+ret = await decoderCtx.sendPacket(null);
+if (ret < 0 && ret !== AVERROR_EOF) {
+  FFmpegError.throwIfError(ret, 'Failed to flush decoder');
+}
+
+while (true) {
+  const ret = await decoderCtx.receiveFrame(frame);
+  if (ret === AVERROR_EOF || ret < 0) {
+    break;
+  }
+
+  console.log(`Decoded frame ${frame.pts}, size: ${frame.width}x${frame.height}`);
+
+  // Process frame data...
+
+  frame.unref();
 }
 ```
 
