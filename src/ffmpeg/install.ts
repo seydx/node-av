@@ -27,6 +27,7 @@ const __dirname = dirname(__filename);
 const __require = createRequire(import.meta.url);
 
 const releasesUrl = 'https://api.github.com/repos/seydx/node-av/releases';
+const releaseDownloadBase = 'https://github.com/seydx/node-av/releases/download';
 const pJson = __require('../../package.json');
 const ffmpegVersion = `v${FFMPEG_VERSION}`;
 
@@ -185,15 +186,22 @@ const getReleaseAssets = async (version: string): Promise<{ assets: string[]; fi
 };
 
 const downloadFFmpeg = async (): Promise<void> => {
-  const release = await getReleaseAssets(pJson.version);
+  const directUrl = `${releaseDownloadBase}/v${pJson.version}/${filename}`;
 
-  if (!filename || !release.assets.find((r) => r.endsWith(filename))) {
-    throw new Error(`No ffmpeg binary found for architecture (${sysPlatform} / ${arch})`);
+  try {
+    await downloadFile(directUrl);
+  } catch (directError) {
+    console.warn(`Direct download failed (${directError instanceof Error ? directError.message : directError}); trying the release API...`);
+
+    const release = await getReleaseAssets(pJson.version);
+    const apiUrl = release.assets.find((r) => r.endsWith(filename));
+
+    if (!apiUrl) {
+      throw new Error(`No ffmpeg binary found for architecture (${sysPlatform} / ${arch})`);
+    }
+
+    await downloadFile(apiUrl);
   }
-
-  const downloadUrl = release.assets.find((r) => r.endsWith(filename))!;
-
-  await downloadFile(downloadUrl);
 
   if (sysPlatform === 'linux' || sysPlatform === 'darwin') {
     console.log(`Making ${ffmpegExtractedFilePath} executable...`);
