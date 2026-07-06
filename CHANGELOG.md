@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-## [6.2.0-beta.1] - 2026-07-06
+## [6.2.0-beta.2] - 2026-07-06
 
 ### Added
 
@@ -12,12 +12,17 @@ All notable changes to this project will be documented in this file.
 - **`WebRTCStream` answers RTCP PLI with a fresh keyframe** (via the new `RTPStream.requestVideoKeyframe()`), and `setOffer()` now starts the stream automatically after negotiation (calling `start()` yourself remains valid — it is idempotent, including concurrent calls). The frame-source video encoder bounds its GOP to ~2s and prefers a `packetization-mode=1` H264 payload when a browser offers multiple variants, so receivers that join or lose packets mid-stream resync quickly. When the peer disconnects (tab closed/reloaded — detected via ICE consent, RFC 7675), the session stops itself and fires `onClose` instead of encoding into the void.
 - **`FilterComplexGraph.create()` accepts a `HardwareContext`.** Each `chain()` then builds with hardware-aware filter selection like `FilterPreset.chain(hw)` — e.g. `scale` → `scale_vaapi`/`scale_vt` and `overlay` → `overlay_vaapi`/`overlay_videotoolbox` — so a full-GPU multi-input graph (hardware decode → composite → hardware encode) is a matter of passing the context. `examples/api-webrtc-pip.ts` gained a `--hw` flag demonstrating it (with a runtime fallback to software when the build lacks the hardware overlay filter, e.g. `overlay_videotoolbox` requires an FFmpeg build with Metal).
 
+### Changed
+
+- **`Packet.timeBase` returns a `Rational`** (like `Frame.timeBase`) instead of the raw native object, so it stringifies as `num/den` and offers the arithmetic helpers ([#284](https://github.com/seydx/node-av/issues/284)). The setters on both `Packet` and `Frame` accept any `{ num, den }` object as before.
+
 ### Fixed
 
 - **macOS prebuilds were missing FFmpeg's Metal-based filters** (`overlay_videotoolbox`, …). The Metal Toolchain is a separate download since Xcode 26, and FFmpeg's configure silently disables Metal when its compiler is absent — the filters were dropped from the build without any error. The macOS FFmpeg build now requires Metal explicitly (`--enable-metal`) and CI installs the Metal Toolchain up front, so GPU compositing on VideoToolbox (e.g. the `--hw` picture-in-picture path) works.
 - **`FilterPreset.overlay()` now emits named options** (`overlay=x=…:y=…` instead of positional `overlay=…:…`) — some hardware overlays (`overlay_videotoolbox`) accept no positional shorthand and failed to parse.
 - **`FilterComplexAPI.frames()` / `framesSync()` leaked their input iterators on early termination.** The inputs are driven via manual iterators, so when a consumer stopped the generator early (e.g. a streaming session tearing down), the upstream decoder/demuxer generators were never closed — a full demuxer packet queue then blocked the shared read loop and starved the other stream's consumers, deadlocking teardown. The driver now closes all remaining input iterators in a `finally`.
 - **`FilterComplexAPI.frames()` / `framesSync()` ended the whole graph when ONE input ended.** With inputs of different lengths (e.g. a picture-in-picture overlay whose PiP clip is shorter than the main video), EOF from the shorter input flushed and terminated the entire filter graph — the composited output froze. EOF now flushes only that input and the remaining inputs keep flowing, so the filter decides what happens (e.g. overlay's `eof_action`, default `repeat`, keeps compositing the last overlay frame), matching ffmpeg CLI. The graph is finalized once all inputs have ended.
+- **The low-level decoding example in the README missed trailing frames** ([#283](https://github.com/seydx/node-av/issues/283)). It never flushed the decoder (codecs buffer frames internally), so the last frames were silently dropped, and it didn't `unref()` received frames. The example now drains the decoder with a null packet and frees each frame.
 
 ## [6.1.1] - 2026-07-06
 
