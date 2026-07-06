@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [6.2.0-beta.1] - 2026-07-06
+
 ### Added
 
 - **`RTPStream` / `WebRTCStream` / `FMP4Stream` accept a pre-composited frame source.** Besides a URL or `Demuxer`, `create()` now takes `{ video?, audio?: AsyncIterable<Frame | null> }` (the shared `MediaFrameSource` type) and encodes those frames straight to RTP/WebRTC/fragmented MP4 — no demuxer or decoder. This makes composited output (e.g. a picture-in-picture `overlay` from `FilterComplexAPI`) streamable to a browser directly, over WebRTC or MSE. WebRTC negotiation advertises the encoder's target codecs (H.264 video / OPUS audio); `FMP4Stream` encodes to H.264/AAC and interleaves both streams into its single fragmented container (`getCodecString()` works before `start()` for frame sources). See the new `examples/api-webrtc-pip.ts` and `examples/api-fmp4-pip.ts`.
