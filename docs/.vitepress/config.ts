@@ -11,6 +11,7 @@ export default defineConfig({
   title: 'NodeAV',
   description: 'FFmpeg bindings for Node.js',
   lastUpdated: true,
+  metaChunk: true,
   themeConfig: {
     logo: '/logo.png',
 

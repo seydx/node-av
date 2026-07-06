@@ -31,6 +31,7 @@
   "excludeExternals": true,
   "out": "./docs/api",
   "docsRoot": "./docs",
+  "membersWithOwnFile": ["Class", "Interface", "Enum", "Function"],
   "sidebar": {
     "autoConfiguration": true,
     "format": "vitepress",
