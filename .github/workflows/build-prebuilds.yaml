@@ -7,8 +7,8 @@ concurrency:
 env:
   CACHE_VERSION_WINDOWS: "v18"
   CACHE_VERSION_LINUX: "v33"
-  CACHE_VERSION_MACOS: "v16"
-  # JELLYFIN_FFMPEG_HASH: "21198ee5630df2b0dabe4bb416e6c9c4a32522ed"
+  CACHE_VERSION_MACOS: "v17"
+  JELLYFIN_FFMPEG_HASH: "5cd65f8388fbcd2f87088d3b10fe53fc5ea81ed5"
 
 on:
   workflow_dispatch:
@@ -882,6 +882,16 @@ jobs:
           restore-keys: |
             ffmpeg-macos-${{ matrix.arch }}-${{ env.CACHE_VERSION_MACOS }}-${{ steps.ffmpeg-hash.outputs.hash }}
             ffmpeg-macos-${{ matrix.arch }}-${{ env.CACHE_VERSION_MACOS }}-
+
+      - name: Ensure Metal Toolchain
+        if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
+        run: |
+          # Since Xcode 26 the Metal Toolchain is a separate download. Without it,
+          # FFmpeg drops its Metal-based filters (overlay_videotoolbox, ...) - the
+          # build requires it now via --enable-metal, so install it up front.
+          if ! xcrun -sdk macosx metal -v >/dev/null 2>&1; then
+            sudo xcodebuild -downloadComponent MetalToolchain
+          fi
 
       - name: Build FFmpeg
         id: build-ffmpeg
