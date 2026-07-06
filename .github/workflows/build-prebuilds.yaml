@@ -865,6 +865,10 @@ jobs:
             echo "hash=$(git -C externals/jellyfin-ffmpeg rev-parse HEAD)" >> $GITHUB_OUTPUT
           fi
 
+      - name: Get Xcode version
+        id: xcode-version
+        run: echo "version=$(xcodebuild -version | awk 'NR==1{print $2}')" >> $GITHUB_OUTPUT
+
       - name: Prepare directories
         run: |
           sudo mkdir -p /opt/ffbuild/prefix
@@ -878,10 +882,7 @@ jobs:
           path: |
             /opt/ffbuild/prefix
             externals/jellyfin-ffmpeg/config*.h
-          key: ffmpeg-macos-${{ matrix.arch }}-${{ env.CACHE_VERSION_MACOS }}-${{ steps.ffmpeg-hash.outputs.hash }}
-          restore-keys: |
-            ffmpeg-macos-${{ matrix.arch }}-${{ env.CACHE_VERSION_MACOS }}-${{ steps.ffmpeg-hash.outputs.hash }}
-            ffmpeg-macos-${{ matrix.arch }}-${{ env.CACHE_VERSION_MACOS }}-
+          key: ffmpeg-macos-${{ matrix.arch }}-${{ env.CACHE_VERSION_MACOS }}-xcode${{ steps.xcode-version.outputs.version }}-${{ steps.ffmpeg-hash.outputs.hash }}
 
       - name: Ensure Metal Toolchain
         if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
@@ -946,7 +947,7 @@ jobs:
           path: |
             /opt/ffbuild/prefix
             externals/jellyfin-ffmpeg/config*.h
-          key: ffmpeg-macos-${{ matrix.arch }}-${{ env.CACHE_VERSION_MACOS }}-${{ steps.ffmpeg-hash.outputs.hash }}
+          key: ffmpeg-macos-${{ matrix.arch }}-${{ env.CACHE_VERSION_MACOS }}-xcode${{ steps.xcode-version.outputs.version }}-${{ steps.ffmpeg-hash.outputs.hash }}
 
       - name: Upload FFmpeg cache as artifact
         if: inputs.upload_caches == true
