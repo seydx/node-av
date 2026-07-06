@@ -1,4 +1,5 @@
 import { bindings } from './binding.js';
+import { Rational } from './rational.js';
 
 import type { AVPacketFlag, AVPacketSideDataType } from '../constants/constants.js';
 import type { NativePacket, NativeWrapper } from './native-types.js';
@@ -124,12 +125,13 @@ export class Packet implements Disposable, NativeWrapper<NativePacket> {
    *
    * Direct mapping to AVPacket->time_base.
    */
-  get timeBase(): IRational {
-    return this.native.timeBase;
+  get timeBase(): Rational {
+    const tb = this.native.timeBase;
+    return new Rational(tb.num, tb.den);
   }
 
   set timeBase(value: IRational) {
-    this.native.timeBase = value;
+    this.native.timeBase = { num: value.num, den: value.den };
   }
 
   /**

@@ -525,7 +525,7 @@ export class Frame implements Disposable, NativeWrapper<NativeFrame> {
     return new Rational(tb.num, tb.den);
   }
 
-  set timeBase(value: Rational) {
+  set timeBase(value: IRational) {
     this.native.timeBase = { num: value.num, den: value.den };
   }
 
