@@ -57,7 +57,6 @@ import type { NativeHardwareFramesContext, NativeWrapper } from './native-types.
  */
 export class HardwareFramesContext implements Disposable, NativeWrapper<NativeHardwareFramesContext> {
   private native: NativeHardwareFramesContext;
-  private _deviceRef?: HardwareDeviceContext | null; // Cache for device context wrapper
 
   constructor() {
     this.native = new bindings.HardwareFramesContext();
@@ -150,21 +149,15 @@ export class HardwareFramesContext implements Disposable, NativeWrapper<NativeHa
    * Direct mapping to AVHWFramesContext->device_ref.
    */
   get deviceRef(): HardwareDeviceContext | null {
-    // Return cached wrapper if we already have one
-    if (this._deviceRef !== undefined) {
-      return this._deviceRef;
-    }
-
+    // Not cached: device_ref is unset before alloc(), and the native wrapper holds
+    // its own AVBufferRef, so a fresh wrapper per access is safe
     const native = this.native.deviceRef;
     if (!native) {
-      this._deviceRef = null;
       return null;
     }
 
-    // Create and cache the wrapper
     const device = Object.create(HardwareDeviceContext.prototype) as HardwareDeviceContext;
     (device as any).native = native;
-    this._deviceRef = device;
     return device;
   }
 
