@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-## [6.2.0-beta.3] - 2026-07-10
+## [6.2.0-beta.5] - 2026-07-10
 
 ### Added
 
