@@ -690,7 +690,7 @@ export class Decoder implements Disposable {
     options.exitOnError = options.exitOnError ?? true;
 
     // Enable COPY_OPAQUE flag to copy packet.opaque to frame.opaque
-    // codecContext.setFlags(AV_CODEC_FLAG_COPY_OPAQUE);
+    codecContext.setFlags(AV_CODEC_FLAG_COPY_OPAQUE);
 
     // Thread parameters need to be set before open2
     codecContext.threadCount = options.threadCount ?? 0;
