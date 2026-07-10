@@ -1047,11 +1047,7 @@ describe('Pipeline - Comprehensive Tests', () => {
         const control = pipeline(input, output);
         fail = true; // break the source while the pipeline is running
 
-        await assert.rejects(
-          control.completion,
-          (err: unknown) => err instanceof FFmpegError,
-          'completion should reject with the read error, not resolve as clean EOF',
-        );
+        await assert.rejects(control.completion, (err: unknown) => err instanceof FFmpegError, 'completion should reject with the read error, not resolve as clean EOF');
 
         await output.close();
         await input.close();

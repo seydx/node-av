@@ -845,10 +845,7 @@ describe('CodecContext', () => {
       // Queue a burst of async operations, then free while they may still be
       // on the threadpool - freeContext() waits for in-flight operations
       // (previously a use-after-free)
-      const pending = [
-        ...Array.from({ length: 8 }, async () => ctx.sendPacket(packet)),
-        ...Array.from({ length: 8 }, async () => ctx.receiveFrame(frame)),
-      ];
+      const pending = [...Array.from({ length: 8 }, async () => ctx.sendPacket(packet)), ...Array.from({ length: 8 }, async () => ctx.receiveFrame(frame))];
       ctx.freeContext();
 
       const results = await Promise.allSettled(pending);

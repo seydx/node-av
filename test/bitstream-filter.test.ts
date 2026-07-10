@@ -226,10 +226,7 @@ describe('BitStreamFilter', () => {
       // Queue a burst of async operations, then free while they may still be
       // on the threadpool - free() waits for in-flight operations (previously
       // a use-after-free)
-      const pending = [
-        ...Array.from({ length: 8 }, async () => ctx.sendPacket(inputPacket)),
-        ...Array.from({ length: 8 }, async () => ctx.receivePacket(outputPacket)),
-      ];
+      const pending = [...Array.from({ length: 8 }, async () => ctx.sendPacket(inputPacket)), ...Array.from({ length: 8 }, async () => ctx.receivePacket(outputPacket))];
       ctx.free();
 
       const results = await Promise.allSettled(pending);
