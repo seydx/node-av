@@ -78,7 +78,6 @@ export interface RTSPStreamInfo {
  * @see {@link Stream} For stream management
  */
 export class FormatContext extends OptionMember<NativeFormatContext> implements AsyncDisposable, NativeWrapper<NativeFormatContext> {
-  private _metadata?: Dictionary; // Cache for metadata wrapper
   private _ioContext: IOContext | null = null;
 
   constructor() {
@@ -214,31 +213,22 @@ export class FormatContext extends OptionMember<NativeFormatContext> implements 
    *
    * Key-value pairs of metadata (title, author, etc.).
    *
-   * Direct mapping to AVFormatContext->metadata.
+   * Returns a copy of AVFormatContext->metadata - mutating the returned
+   * Dictionary does not affect the context. Assign it back to apply changes.
    */
   get metadata(): Dictionary | null {
     const native = this.native.metadata;
     if (!native) {
-      // Clear cache if native is null
-      this._metadata = undefined;
       return null;
     }
 
-    // Return cached wrapper if available and still valid
-    if (this._metadata && (this._metadata as any).native === native) {
-      return this._metadata;
-    }
-
-    // Create and cache new wrapper
-    const device = Object.create(Dictionary.prototype) as Dictionary;
-    (device as any).native = native;
-    this._metadata = device;
-    return device;
+    const dict = Object.create(Dictionary.prototype) as Dictionary;
+    (dict as any).native = native;
+    return dict;
   }
 
   set metadata(value: Dictionary | null) {
     this.native.metadata = value?.getNative() ?? null;
-    this._metadata = undefined;
   }
 
   /**
@@ -682,6 +672,7 @@ export class FormatContext extends OptionMember<NativeFormatContext> implements 
    * console.log(`Found ${ctx.nbStreams} streams`);
    * ```
    *
+   * @see {@link findStreamInfoSync} For synchronous version
    * @see {@link openInput} Must be called first
    */
   async findStreamInfo(options: Dictionary[] | null = null): Promise<number> {
@@ -697,7 +688,7 @@ export class FormatContext extends OptionMember<NativeFormatContext> implements 
    *
    * Direct mapping to avformat_find_stream_info().
    *
-   * @param options - Options dictionary (single, not array for sync version)
+   * @param options - Per-stream options array
    *
    * @returns >=0 on success, negative AVERROR on error:
    *   - AVERROR_EOF: End of file reached
@@ -714,8 +705,8 @@ export class FormatContext extends OptionMember<NativeFormatContext> implements 
    *
    * @see {@link findStreamInfo} For async version
    */
-  findStreamInfoSync(options: Dictionary | null = null): number {
-    return this.native.findStreamInfoSync(options?.getNative() ?? null);
+  findStreamInfoSync(options: Dictionary[] | null = null): number {
+    return this.native.findStreamInfoSync(options?.map((d) => d.getNative()) ?? null);
   }
 
   /**
@@ -902,10 +893,53 @@ export class FormatContext extends OptionMember<NativeFormatContext> implements 
    * FFmpegError.throwIfError(ret, 'seekFile');
    * ```
    *
+   * @see {@link seekFileSync} For synchronous version
    * @see {@link seekFrame} For simpler seeking
    */
   async seekFile(streamIndex: number, minTs: bigint, ts: bigint, maxTs: bigint, flags: AVSeekFlag = AVFLAG_NONE): Promise<number> {
     return await this.native.seekFile(streamIndex, minTs, ts, maxTs, flags);
+  }
+
+  /**
+   * Seek to timestamp with bounds synchronously.
+   * Synchronous version of seekFile.
+   *
+   * More precise seeking with min/max timestamp bounds.
+   *
+   * Direct mapping to avformat_seek_file().
+   *
+   * @param streamIndex - Stream to seek in (-1 for default)
+   *
+   * @param minTs - Minimum acceptable timestamp
+   *
+   * @param ts - Target timestamp
+   *
+   * @param maxTs - Maximum acceptable timestamp
+   *
+   * @param flags - Seek flags
+   *
+   * @returns >=0 on success, negative AVERROR on error
+   *
+   * @example
+   * ```typescript
+   * import { FFmpegError } from 'node-av';
+   *
+   * // Seek to 10s with 0.5s tolerance
+   * const target = 10000n;
+   * const ret = ctx.seekFileSync(
+   *   -1,
+   *   target - 500n,
+   *   target,
+   *   target + 500n
+   * );
+   * FFmpegError.throwIfError(ret, 'seekFileSync');
+   * ```
+   *
+   * @see {@link seekFile} For async version
+   * @see {@link seekFrameSync} For simpler seeking
+   */
+  seekFileSync(streamIndex: number, minTs: bigint, ts: bigint, maxTs: bigint, flags: AVSeekFlag = AVFLAG_NONE): number {
+    return this.native.seekFileSync(streamIndex, minTs, ts, maxTs, flags);
   }
 
   /**
