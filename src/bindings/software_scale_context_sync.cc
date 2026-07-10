@@ -21,8 +21,12 @@ Napi::Value SoftwareScaleContext::ScaleFrameSync(const Napi::CallbackInfo& info)
     return Napi::Number::New(env, AVERROR(EINVAL));
   }
 
-  Frame* dst = Napi::ObjectWrap<Frame>::Unwrap(info[0].As<Napi::Object>());
-  Frame* src = Napi::ObjectWrap<Frame>::Unwrap(info[1].As<Napi::Object>());
+  Frame* dst = UnwrapNativeObject<Frame>(env, info[0], "Frame");
+  Frame* src = UnwrapNativeObject<Frame>(env, info[1], "Frame");
+  if (!dst || !dst->Get() || !src || !src->Get()) {
+    Napi::TypeError::New(env, "Invalid frame(s)").ThrowAsJavaScriptException();
+    return Napi::Number::New(env, AVERROR(EINVAL));
+  }
 
   // Direct synchronous call
   int ret = sws_scale_frame(ctx_, dst->Get(), src->Get());

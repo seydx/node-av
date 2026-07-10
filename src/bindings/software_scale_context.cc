@@ -40,6 +40,12 @@ SoftwareScaleContext::~SoftwareScaleContext() {
 Napi::Value SoftwareScaleContext::AllocContext(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
+  // Replacing the context frees the old one - wait for in-flight async
+  // operations first
+  if (ctx_ && !GuardAsyncOps(env, async_ops_, "SoftwareScaleContext")) {
+    return env.Undefined();
+  }
+
   sws_freeContext(ctx_);
 
   SwsContext* new_ctx = sws_alloc_context();
@@ -70,6 +76,12 @@ Napi::Value SoftwareScaleContext::GetContext(const Napi::CallbackInfo& info) {
   int dstH = info[4].As<Napi::Number>().Int32Value();
   int dstFormat = info[5].As<Napi::Number>().Int32Value();
   int flags = info[6].As<Napi::Number>().Int32Value();
+
+  // Replacing the context frees the old one - wait for in-flight async
+  // operations first
+  if (ctx_ && !GuardAsyncOps(env, async_ops_, "SoftwareScaleContext")) {
+    return env.Undefined();
+  }
 
   sws_freeContext(ctx_);
 
@@ -107,8 +119,15 @@ Napi::Value SoftwareScaleContext::InitContext(const Napi::CallbackInfo& info) {
 Napi::Value SoftwareScaleContext::FreeContext(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
-  sws_freeContext(ctx_);
-  ctx_ = nullptr;
+  if (ctx_) {
+    // Freeing while a worker still scales on the threadpool would be a
+    // use-after-free; wait bounded, then error instead of crashing
+    if (!GuardAsyncOps(env, async_ops_, "SoftwareScaleContext")) {
+      return env.Undefined();
+    }
+    sws_freeContext(ctx_);
+    ctx_ = nullptr;
+  }
 
   return env.Undefined();
 }
