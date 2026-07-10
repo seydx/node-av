@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import { join } from 'node:path';
 
 import { type } from 'node:os';
-import { log, spawnRebuild, useGlobalFFmpeg } from './ffmpeg.js';
+import { log } from './ffmpeg.js';
 
 const require = createRequire(import.meta.url);
 
@@ -67,87 +67,50 @@ const tryLoadPrebuilt = () => {
   return false;
 };
 
-const buildFromSource = () => {
-  log('Building from source...');
-
-  // Check for required build dependencies
-  const missingDeps = [];
-
-  try {
-    require('node-addon-api');
-  } catch {
-    missingDeps.push('node-addon-api');
+const isMuslLibc = () => {
+  if (process.platform !== 'linux') {
+    return false;
   }
 
   try {
-    require('node-gyp');
+    const report = process.report?.getReport?.();
+    return !report?.header?.glibcVersionRuntime;
   } catch {
-    missingDeps.push('node-gyp');
+    return false;
+  }
+};
+
+const noPrebuiltError = () => {
+  log('');
+  log(`No prebuilt binary available for ${process.platform}-${process.arch}.`);
+
+  if (isMuslLibc()) {
+    log('Note: You appear to be on a musl-based system (e.g. Alpine Linux).');
+    log('Prebuilt binaries are only provided for glibc-based Linux distributions.');
   }
 
-  if (missingDeps.length > 0) {
-    log('');
-    log(`Missing build dependencies: ${missingDeps.join(', ')}`);
-    log('Please install:');
-    log(`  npm install --save-dev ${missingDeps.join(' ')}`);
-    log('');
-    log('Then run npm install again.');
-    process.exit(1);
-  }
-
-  log('Building native bindings...');
-
-  const status = spawnRebuild();
-  if (status !== 0) {
-    log('');
-    log('Build failed. Please ensure you have:');
-    log('  - FFmpeg 7.1+ libraries and headers installed');
-    log('  - Python 3.12+ installed');
-    log('  - A C++ compiler with C++17 support');
-    log('');
-    log('See https://github.com/seydx/node-av for detailed requirements');
-    process.exit(status);
-  }
-
-  log('Build completed successfully!');
+  log('The published npm package does not contain the native sources,');
+  log('so it cannot be built from source inside node_modules.');
+  log('To build from source, clone the repository and follow the build instructions:');
+  log('  https://github.com/seydx/node-av');
+  process.exit(1);
 };
 
 (async () => {
   try {
     const shouldBuildFromSource = process.env.npm_config_build_from_source === 'true';
 
-    // Priority 1: User explicitly wants to build from source
     if (shouldBuildFromSource) {
-      if (!useGlobalFFmpeg()) {
-        log('--build-from-source specified but no FFmpeg libraries found');
-        log('Please install FFmpeg 7.1+ with development headers');
-        process.exit(1);
-      }
-      // Fall through to build logic below
-    } else {
-      // Priority 2: Try to use prebuilt binary if not forcing source build
-      if (tryLoadPrebuilt()) {
-        return;
-      }
+      log('--build-from-source was specified, but the published npm package cannot be built from source.');
+      noPrebuiltError();
     }
 
-    // Build from source (either requested or as fallback)
-    if (useGlobalFFmpeg()) {
-      // Determine why we're building
-      if (shouldBuildFromSource) {
-        log('Building from source as requested');
-      } else {
-        log('No prebuilt binary available for your platform');
-        log('System FFmpeg detected, building from source automatically');
-      }
-
-      buildFromSource();
-    } else {
-      // No FFmpeg found and no prebuilt available
-      log('⚠️  No prebuilt binary and no system FFmpeg found');
-      log('See https://github.com/seydx/node-av for installation instructions');
-      process.exit(1);
+    // Try to use prebuilt binary
+    if (tryLoadPrebuilt()) {
+      return;
     }
+
+    noPrebuiltError();
   } catch (err) {
     console.error(`node-av: Installation error: ${err.message}`);
     process.exit(1);
