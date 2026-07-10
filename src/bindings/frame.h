@@ -3,6 +3,7 @@
 
 #include <napi.h>
 #include "common.h"
+#include "promise_worker.h"
 
 extern "C" {
 #include <libavutil/frame.h>
@@ -15,6 +16,7 @@ namespace ffmpeg {
 
 class Frame : public Napi::ObjectWrap<Frame> {
 public:
+  static thread_local Napi::FunctionReference constructor;
   static Napi::Object Init(Napi::Env env, Napi::Object exports);
   Frame(const Napi::CallbackInfo& info);
   ~Frame();
@@ -24,11 +26,22 @@ public:
   void SyncExternalMemory(napi_env env);
 
 private:
+  // Async workers (in other translation units) that operate on this frame's
+  // AVFrame from the threadpool; they mark the frame busy via async_ops_.
   friend class HwframeTransferDataWorker;
+  friend class HWFCTransferDataWorker;
+  friend class SwsScaleFrameWorker;
+  friend class FCBuffersrcAddFrameWorker;
+  friend class FCBuffersinkGetFrameWorker;
+  friend class ScalerProcessWorker;
 
-  static thread_local Napi::FunctionReference constructor;
 
   AVFrame* frame_ = nullptr;
+
+  // In-flight threadpool operations touching frame_ (hwframe transfers,
+  // scaling, filter I/O). free()/unref()/alloc() wait on this so they cannot
+  // pull the buffers out from under a worker (use-after-free).
+  AsyncOpCounter async_ops_;
 
   // Bytes of native buffer memory currently reported to V8 via
   // napi_adjust_external_memory. Kept in sync by SyncExternalMemory().
@@ -38,8 +51,8 @@ private:
   // them allocates an Array plus a Buffer wrapper per plane on every access, which
   // dominates per-sample/per-pixel loops. The cache is dropped whenever the frame's
   // data pointers may have changed: every SyncExternalMemory() call site (alloc,
-  // free, ref, unref, clone, getBuffer, makeWritable, and all native fill sites)
-  // plus applyCropping (shifts data pointers) and fromBuffer (re-points them).
+  // free, ref, unref, clone, getBuffer, makeWritable, fromBuffer, and all native
+  // fill sites) plus applyCropping (shifts data pointers without changing buf[]).
   Napi::Reference<Napi::Array> cached_data_;
   Napi::Reference<Napi::Array> cached_extended_data_;
 

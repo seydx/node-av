@@ -146,6 +146,12 @@ Frame::~Frame() {
 Napi::Value Frame::Alloc(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
+  // Replacing the frame frees the old one - wait for in-flight async
+  // operations first
+  if (frame_ && !GuardAsyncOps(env, async_ops_, "Frame")) {
+    return env.Undefined();
+  }
+
   AVFrame* frame = av_frame_alloc();
   if (!frame) {
     Napi::Error::New(env, "Failed to allocate frame (ENOMEM)").ThrowAsJavaScriptException();
@@ -161,6 +167,12 @@ Napi::Value Frame::Alloc(const Napi::CallbackInfo& info) {
 
 Napi::Value Frame::Free(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
+  // Freeing while a worker still reads/writes the frame on the threadpool
+  // (hwframe transfer, scaling, filter I/O) would be a use-after-free; wait
+  // bounded, then error instead of crashing
+  if (frame_ && !GuardAsyncOps(env, async_ops_, "Frame")) {
+    return env.Undefined();
+  }
   av_frame_free(&frame_);
   SyncExternalMemory(env);
   return env.Undefined();
@@ -191,8 +203,13 @@ Napi::Value Frame::Ref(const Napi::CallbackInfo& info) {
 
 Napi::Value Frame::Unref(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
-  
+
   if (frame_) {
+    // unref drops the data buffers a worker may still be using - same
+    // use-after-free window as free()
+    if (!GuardAsyncOps(env, async_ops_, "Frame")) {
+      return env.Undefined();
+    }
     av_frame_unref(frame_);
   }
   SyncExternalMemory(env);
@@ -336,20 +353,55 @@ Napi::Value Frame::FromBuffer(const Napi::CallbackInfo& info) {
       return Napi::Number::New(env, AVERROR(EINVAL));
     }
     
-    // Fill frame data planes from buffer
-    int ret = av_image_fill_arrays(
-      frame_->data,
-      frame_->linesize,
+    // The frame must own its pixel data: filling frame_->data[] with pointers
+    // into the JS buffer would leave the planes dangling once that Buffer is
+    // GC'd. Allocate frame-owned planes if needed and copy the bytes instead.
+    if (!frame_->data[0]) {
+      int ret = av_frame_get_buffer(frame_, 0);
+      if (ret < 0) {
+        SyncExternalMemory(env);
+        return Napi::Number::New(env, ret);
+      }
+    }
+
+    // Un-share the planes before writing - refcounted frames may share their
+    // buffers with other refs (after ref()/clone()).
+    int ret = av_frame_make_writable(frame_);
+    if (ret < 0) {
+      SyncExternalMemory(env);
+      return Napi::Number::New(env, ret);
+    }
+
+    // Describe the packed source buffer, then copy plane by plane.
+    uint8_t* src_data[4];
+    int src_linesize[4];
+    ret = av_image_fill_arrays(
+      src_data,
+      src_linesize,
       data,
       static_cast<AVPixelFormat>(frame_->format),
       frame_->width,
       frame_->height,
       1
     );
+    if (ret < 0) {
+      SyncExternalMemory(env);
+      return Napi::Number::New(env, ret);
+    }
 
-    // av_image_fill_arrays re-points data[] at the JS buffer - drop cached views.
-    InvalidateDataCache();
-    return Napi::Number::New(env, ret);
+    av_image_copy(
+      frame_->data,
+      frame_->linesize,
+      (const uint8_t* const*)src_data,
+      src_linesize,
+      static_cast<AVPixelFormat>(frame_->format),
+      frame_->width,
+      frame_->height
+    );
+
+    // Buffers may have been (re)allocated above; this also drops cached views.
+    SyncExternalMemory(env);
+    return Napi::Number::New(env, 0);
   }
   // For audio frames
   else if (frame_->nb_samples > 0) {
@@ -371,13 +423,25 @@ Napi::Value Frame::FromBuffer(const Napi::CallbackInfo& info) {
       Napi::Error::New(env, "Buffer too small for audio data").ThrowAsJavaScriptException();
       return Napi::Number::New(env, AVERROR(EINVAL));
     }
-    
+
+    // Allocate frame-owned planes if the caller skipped getBuffer() - the
+    // memcpys below would otherwise write through null data pointers.
+    if (!frame_->data[0]) {
+      int ret = av_frame_get_buffer(frame_, 0);
+      if (ret < 0) {
+        SyncExternalMemory(env);
+        return Napi::Number::New(env, ret);
+      }
+      SyncExternalMemory(env);
+    }
+
     // Copy audio data
     if (is_planar) {
-      // For planar formats, copy to each plane
+      // For planar formats, copy to each plane. extended_data covers all
+      // channels; data[] only holds the first AV_NUM_DATA_POINTERS.
       int plane_size = frame_->nb_samples * bytes_per_sample;
       for (int ch = 0; ch < channels; ch++) {
-        memcpy(frame_->data[ch], data + (ch * plane_size), plane_size);
+        memcpy(frame_->extended_data[ch], data + (ch * plane_size), plane_size);
       }
     } else {
       // For interleaved formats, copy to data[0]
@@ -857,6 +921,26 @@ void Frame::SetAlphaMode(const Napi::CallbackInfo& info, const Napi::Value& valu
   }
 }
 
+// Create a JS view over one frame plane, pinned by its own reference on the
+// plane's backing AVBufferRef. JS code may legitimately hold the view across
+// unref()/free()/the next decode into the same frame; without the pin the view
+// would read/write freed heap. The pin can keep the buffer alive after the
+// wrapper subtracted its external-memory report - that slight under-report is
+// acceptable for a GC pressure signal.
+static Napi::Value MakePlaneView(Napi::Env env, AVFrame* frame, int plane, uint8_t* data, size_t size) {
+  AVBufferRef* buf = av_frame_get_plane_buffer(frame, plane);
+  if (buf) {
+    AVBufferRef* ref = av_buffer_ref(buf);
+    if (ref) {
+      return Napi::Buffer<uint8_t>::NewOrCopy(env, data, size, [ref](Napi::Env, uint8_t*) mutable {
+        av_buffer_unref(&ref);
+      });
+    }
+  }
+  // Non-refcounted frame data (buf[0] == NULL): nothing to pin, hand out a copy.
+  return Napi::Buffer<uint8_t>::Copy(env, data, size);
+}
+
 Napi::Value Frame::GetData(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
@@ -889,16 +973,17 @@ Napi::Value Frame::GetData(const Napi::CallbackInfo& info) {
     int bytes_per_sample = av_get_bytes_per_sample(sample_fmt);
     
     if (av_sample_fmt_is_planar(sample_fmt)) {
-      // Planar audio - one plane per channel
-      for (int i = 0; i < nb_channels && f->data[i]; i++) {
+      // Planar audio - one plane per channel (data[] only holds the first
+      // AV_NUM_DATA_POINTERS channels; the rest are in extendedData)
+      for (int i = 0; i < nb_channels && i < AV_NUM_DATA_POINTERS && f->data[i]; i++) {
         size_t plane_size = f->nb_samples * bytes_per_sample;
-        planes.Set(static_cast<uint32_t>(i), Napi::Buffer<uint8_t>::NewOrCopy(env, f->data[i], plane_size));
+        planes.Set(static_cast<uint32_t>(i), MakePlaneView(env, f, i, f->data[i], plane_size));
       }
     } else {
       // Interleaved audio - all channels in one plane
       if (f->data[0]) {
         size_t plane_size = f->nb_samples * nb_channels * bytes_per_sample;
-        planes.Set(static_cast<uint32_t>(0), Napi::Buffer<uint8_t>::NewOrCopy(env, f->data[0], plane_size));
+        planes.Set(static_cast<uint32_t>(0), MakePlaneView(env, f, 0, f->data[0], plane_size));
       }
     }
   } else {
@@ -916,7 +1001,7 @@ Napi::Value Frame::GetData(const Napi::CallbackInfo& info) {
         size_t planeSize = f->linesize[i] * planeHeight;
 
         // Create buffer view (copies in Electron where external buffers are not allowed)
-        planes.Set(static_cast<uint32_t>(i), Napi::Buffer<uint8_t>::NewOrCopy(env, f->data[i], planeSize));
+        planes.Set(static_cast<uint32_t>(i), MakePlaneView(env, f, i, f->data[i], planeSize));
       }
     }
   }
@@ -961,15 +1046,15 @@ Napi::Value Frame::GetExtendedData(const Napi::CallbackInfo& info) {
       // Each channel in separate buffer
       for (int ch = 0; ch < nb_channels; ch++) {
         if (!f->extended_data[ch]) break;
-        
+
         size_t channel_size = nb_samples * bytes_per_sample;
-        extData.Set(ch, Napi::Buffer<uint8_t>::NewOrCopy(env, f->extended_data[ch], channel_size));
+        extData.Set(ch, MakePlaneView(env, f, ch, f->extended_data[ch], channel_size));
       }
     } else {
       // All channels interleaved in single buffer
       size_t total_size = nb_samples * nb_channels * bytes_per_sample;
       if (f->extended_data[0]) {
-        extData.Set(0u, Napi::Buffer<uint8_t>::NewOrCopy(env, f->extended_data[0], total_size));
+        extData.Set(0u, MakePlaneView(env, f, 0, f->extended_data[0], total_size));
       }
     }
   } else {
@@ -981,13 +1066,14 @@ Napi::Value Frame::GetExtendedData(const Napi::CallbackInfo& info) {
 
       // Calculate plane size based on format and dimensions
       int planeHeight = f->height;
-      if (i > 0 && desc) {
-        // For chroma planes in YUV formats
+      if (i > 0 && i < 3 && desc) {
+        // Only planes 1/2 are chroma and possibly subsampled; plane 3 (alpha)
+        // is full height - same sizing as GetData.
         planeHeight = AV_CEIL_RSHIFT(f->height, desc->log2_chroma_h);
       }
 
       size_t planeSize = f->linesize[i] * planeHeight;
-      extData.Set(i, Napi::Buffer<uint8_t>::NewOrCopy(env, f->extended_data[i], planeSize));
+      extData.Set(i, MakePlaneView(env, f, i, f->extended_data[i], planeSize));
     }
   }
 
@@ -1121,11 +1207,19 @@ Napi::Value Frame::NewSideData(const Napi::CallbackInfo& info) {
     return env.Undefined();
   }
   
-  // Return as Buffer that references the side data (not a copy)
-  // Note: The buffer lifetime is tied to the frame
-  return Napi::Buffer<uint8_t>::NewOrCopy(env, sd->data, sd->size, [](Napi::Env, uint8_t*) {
-    // No-op finalizer since the data is owned by the frame
-  });
+  // Return as Buffer that references the side data (not a copy), pinned by its
+  // own reference on the backing AVBufferRef so the view stays valid even if
+  // the frame is unreffed/freed while JS still holds it.
+  if (sd->buf) {
+    AVBufferRef* ref = av_buffer_ref(sd->buf);
+    if (ref) {
+      return Napi::Buffer<uint8_t>::NewOrCopy(env, sd->data, sd->size, [ref](Napi::Env, uint8_t*) mutable {
+        av_buffer_unref(&ref);
+      });
+    }
+  }
+  // No refcounted backing (should not happen for av_frame_new_side_data).
+  return Napi::Buffer<uint8_t>::Copy(env, sd->data, sd->size);
 }
 
 Napi::Value Frame::RemoveSideData(const Napi::CallbackInfo& info) {

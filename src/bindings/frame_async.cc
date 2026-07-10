@@ -22,6 +22,10 @@ public:
     // Hold references to prevent GC during async operation
     src_ref_.Reset(srcObj, 1);
     dst_ref_.Reset(dstObj, 1);
+    // Mark both frames busy so free()/unref() waits instead of pulling the
+    // buffers out from under the transfer (see promise_worker.h)
+    src_->async_ops_.Begin();
+    dst_->async_ops_.Begin();
   }
 
   ~HwframeTransferDataWorker() {
@@ -33,15 +37,19 @@ public:
     // Null checks to prevent use-after-free crashes
     if (!src_ || !src_->Get() || !dst_ || !dst_->Get()) {
       ret_ = AVERROR(EINVAL);
-      return;
+    } else {
+      ret_ = av_hwframe_transfer_data(dst_->Get(), src_->Get(), flags_);
     }
-
-    ret_ = av_hwframe_transfer_data(dst_->Get(), src_->Get(), flags_);
+    // Release before OnOK so a GuardAsyncOps() wait on the main thread can
+    // proceed even though the OnOK callback is still queued behind it
+    EndOps();
   }
 
   void OnOK() override {
     // The transfer allocated the destination's (software) buffers on the worker
     // thread; reconcile V8 accounting now that we are back on the JS thread.
+    // Safe even if the frame was freed after EndOps(): SyncExternalMemory
+    // handles a null AVFrame.
     if (ret_ >= 0) {
       dst_->SyncExternalMemory(Env());
     }
@@ -49,6 +57,7 @@ public:
   }
 
   void OnError(const Napi::Error& e) override {
+    EndOps();  // Execute may have been skipped
     deferred_.Reject(e.Value());
   }
 
@@ -57,12 +66,22 @@ public:
   }
 
 private:
+  void EndOps() {
+    if (ops_ended_) {
+      return;
+    }
+    ops_ended_ = true;
+    src_->async_ops_.End();
+    dst_->async_ops_.End();
+  }
+
   Napi::ObjectReference src_ref_;
   Napi::ObjectReference dst_ref_;
   Frame* src_;
   Frame* dst_;
   int flags_;
   int ret_;
+  bool ops_ended_ = false;
   Napi::Promise::Deferred deferred_;
 };
 
