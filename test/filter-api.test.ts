@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 
 import {
   AV_CHANNEL_LAYOUT_STEREO,
+  AV_NOPTS_VALUE,
   AV_PIX_FMT_RGB24,
   AV_PIX_FMT_YUV420P,
   AV_SAMPLE_FMT_FLTP,
@@ -334,6 +335,55 @@ describe('High-Level Filter API', () => {
       }
 
       assert.ok(remainingCount >= 0);
+      filter.close();
+    });
+
+    it('should pass AV_NOPTS_VALUE timestamps through unrescaled (async)', async () => {
+      const filter = FilterAPI.create('null');
+
+      using frame = new Frame();
+      frame.alloc();
+      frame.width = 320;
+      frame.height = 240;
+      frame.format = AV_PIX_FMT_YUV420P;
+      frame.pts = AV_NOPTS_VALUE;
+      frame.timeBase = new Rational(1, 25);
+      const ret = frame.getBuffer();
+      assert.ok(ret >= 0);
+
+      const outputs = await filter.processAll(frame);
+      assert.ok(outputs.length > 0, 'null filter should pass the frame through');
+
+      for (const output of outputs) {
+        // Rescaling INT64_MIN with av_rescale_q produces a garbage timestamp
+        assert.strictEqual(output.pts, AV_NOPTS_VALUE, 'AV_NOPTS_VALUE must survive the input rescale');
+        output.free();
+      }
+
+      filter.close();
+    });
+
+    it('should pass AV_NOPTS_VALUE timestamps through unrescaled (sync)', () => {
+      const filter = FilterAPI.create('null');
+
+      using frame = new Frame();
+      frame.alloc();
+      frame.width = 320;
+      frame.height = 240;
+      frame.format = AV_PIX_FMT_YUV420P;
+      frame.pts = AV_NOPTS_VALUE;
+      frame.timeBase = new Rational(1, 25);
+      const ret = frame.getBuffer();
+      assert.ok(ret >= 0);
+
+      const outputs = filter.processAllSync(frame);
+      assert.ok(outputs.length > 0, 'null filter should pass the frame through');
+
+      for (const output of outputs) {
+        assert.strictEqual(output.pts, AV_NOPTS_VALUE, 'AV_NOPTS_VALUE must survive the input rescale');
+        output.free();
+      }
+
       filter.close();
     });
   });

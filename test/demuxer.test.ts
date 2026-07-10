@@ -8,7 +8,7 @@ import { Demuxer } from '../src/api/index.js';
 import { IOStream } from '../src/api/io-stream.js';
 import { StreamingUtils } from '../src/api/utilities/streaming.js';
 import { AV_CODEC_ID_AAC, AV_CODEC_ID_H264, AV_CODEC_ID_OPUS } from '../src/constants/constants.js';
-import { AVMEDIA_TYPE_AUDIO, AVMEDIA_TYPE_VIDEO, AVSEEK_CUR, AVSEEK_END, AVSEEK_SET, AVSEEK_SIZE } from '../src/index.js';
+import { AVERROR_EIO, AVMEDIA_TYPE_AUDIO, AVMEDIA_TYPE_VIDEO, AVSEEK_CUR, AVSEEK_END, AVSEEK_SET, AVSEEK_SIZE, FFmpegError } from '../src/index.js';
 import { getInputFile, prepareTestEnvironment } from './index.js';
 
 import type { AVSeekWhence, IOInputCallbacks } from '../src/index.js';
@@ -704,6 +704,158 @@ describe('Demuxer', () => {
       assert.ok(packetCount > 0, 'Should have read some packets');
 
       media.closeSync();
+    });
+
+    it('should support two concurrent packets() consumers on the same stream without deadlock', { timeout: 15000 }, async () => {
+      const media = await Demuxer.open(inputFile);
+      openInstances.push(media);
+
+      const videoStream = media.video();
+      assert.ok(videoStream, 'Should have video stream');
+
+      // Both consumers wait on the same queue key - packets are distributed
+      // between them, and both must terminate at EOF (a lost wakeup would
+      // park one of them forever and deadlock the demuxer).
+      const [countA, countB] = await Promise.all([
+        (async () => {
+          let count = 0;
+          for await (using packet of media.packets(videoStream.index)) {
+            if (packet) count++;
+          }
+          return count;
+        })(),
+        (async () => {
+          let count = 0;
+          for await (using packet of media.packets(videoStream.index)) {
+            if (packet) count++;
+          }
+          return count;
+        })(),
+      ]);
+
+      assert.ok(countA + countB > 0, 'Consumers should have received packets');
+
+      await media.close();
+    });
+  });
+
+  describe('read errors', () => {
+    // Callbacks that serve a real file until setFail() flips, then report an I/O error
+    function createFailingCallbacks(buffer: Buffer): { callbacks: IOInputCallbacks; setFail: () => void } {
+      let position = 0;
+      let fail = false;
+
+      const callbacks: IOInputCallbacks = {
+        read: (size: number) => {
+          if (fail) {
+            return AVERROR_EIO;
+          }
+          if (position >= buffer.length) {
+            return null; // EOF
+          }
+          const end = Math.min(position + size, buffer.length);
+          const chunk = buffer.subarray(position, end);
+          position = end;
+          return chunk;
+        },
+        seek: (offset: bigint, whence: AVSeekWhence) => {
+          if (whence === AVSEEK_SIZE) {
+            return BigInt(buffer.length);
+          } else if (whence === AVSEEK_SET) {
+            position = Number(offset);
+          } else if (whence === AVSEEK_CUR) {
+            position += Number(offset);
+          } else if (whence === AVSEEK_END) {
+            position = buffer.length + Number(offset);
+          }
+          return BigInt(position);
+        },
+      };
+
+      return { callbacks, setFail: () => (fail = true) };
+    }
+
+    it('should throw FFmpegError from packets() on a mid-stream read error (async)', { timeout: 15000 }, async () => {
+      const buffer = await readFile(inputFile);
+      const { callbacks, setFail } = createFailingCallbacks(buffer);
+
+      const media = await Demuxer.open(callbacks, { format: 'mp4', bufferSize: 4096 });
+      openInstances.push(media);
+
+      await assert.rejects(
+        async () => {
+          let count = 0;
+          for await (using packet of media.packets()) {
+            if (packet) count++;
+            if (count === 3) setFail(); // break the source mid-stream
+          }
+        },
+        (err: unknown) => err instanceof FFmpegError,
+        'Mid-stream read failure should throw FFmpegError, not end as clean EOF',
+      );
+
+      await media.close();
+    });
+
+    it('should throw FFmpegError from packetsSync() on a mid-stream read error (sync)', { timeout: 15000 }, () => {
+      const buffer = readFileSync(inputFile);
+      const { callbacks, setFail } = createFailingCallbacks(buffer);
+
+      const media = Demuxer.openSync(callbacks, { format: 'mp4', bufferSize: 4096 });
+
+      assert.throws(
+        () => {
+          let count = 0;
+          for (using packet of media.packetsSync()) {
+            if (packet) count++;
+            if (count === 3) setFail(); // break the source mid-stream
+          }
+        },
+        (err: unknown) => err instanceof FFmpegError,
+        'Mid-stream read failure should throw FFmpegError, not end as clean EOF',
+      );
+
+      media.closeSync();
+    });
+
+    it('should still end cleanly on real end-of-file (async)', { timeout: 15000 }, async () => {
+      const buffer = await readFile(inputFile);
+      const { callbacks } = createFailingCallbacks(buffer); // never flips to failure
+
+      const media = await Demuxer.open(callbacks, { format: 'mp4', bufferSize: 4096 });
+      openInstances.push(media);
+
+      let count = 0;
+      for await (using packet of media.packets()) {
+        if (packet) count++;
+      }
+
+      assert.ok(count > 0, 'Should have read all packets to EOF without throwing');
+
+      await media.close();
+    });
+
+    it('should fail packets() when the Readable source errors mid-stream', { timeout: 15000 }, async () => {
+      const data = readFileSync(getInputFile('video-vp9.webm'));
+      const readable = new Readable({ read() {} });
+      readable.push(data); // feed everything, but never signal EOF
+
+      const media = await Demuxer.open(readable, { format: 'webm', bufferSize: 2048 });
+      openInstances.push(media);
+
+      await assert.rejects(
+        async () => {
+          let count = 0;
+          for await (using packet of media.packets()) {
+            if (packet) count++;
+            if (count === 3) readable.destroy(new Error('simulated network drop'));
+          }
+        },
+        (err: unknown) => err instanceof FFmpegError,
+        'A Readable error should surface as a read error, not clean EOF',
+      );
+
+      await media.close();
     });
   });
 

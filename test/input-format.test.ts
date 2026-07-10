@@ -413,6 +413,20 @@ describe('InputFormat', () => {
       }
     });
 
+    it('should not crash when freeContext() races an in-flight probeBuffer (async)', { timeout: 10000 }, async () => {
+      const io = new IOContext();
+      await io.open2(inputFile, AVIO_FLAG_READ);
+
+      // probeBuffer reads through the IOContext on the threadpool -
+      // freeContext() waits for the probe instead of pulling the context out
+      // from under it (previously a use-after-free)
+      const probe = InputFormat.probeBuffer(io);
+      io.freeContext();
+
+      const [result] = await Promise.allSettled([probe]);
+      assert.notEqual(result.status, undefined);
+    });
+
     it('should handle probing non-media IOContext (async)', async () => {
       const io = new IOContext();
       await io.open2(inputTextFile, AVIO_FLAG_READ);

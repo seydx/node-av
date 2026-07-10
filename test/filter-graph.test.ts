@@ -1088,6 +1088,30 @@ describe('FilterGraph', () => {
       // Graph is now invalid but cleanup should be complete
       assert.ok(true, 'Should clean up all resources');
     });
+
+    it('should not crash when free() races an in-flight config()', { timeout: 10000 }, async () => {
+      const graph = new FilterGraph();
+      graph.alloc();
+
+      const bufferFilter = Filter.getByName('buffer');
+      const sinkFilter = Filter.getByName('buffersink');
+      assert.ok(bufferFilter);
+      assert.ok(sinkFilter);
+
+      const src = graph.createFilter(bufferFilter, 'src', 'video_size=320x240:pix_fmt=0:time_base=1/25');
+      const sink = graph.createFilter(sinkFilter, 'sink');
+      assert.ok(src);
+      assert.ok(sink);
+      assert.equal(src.link(0, sink, 0), 0, 'Should link successfully');
+
+      // Free while config() may still run on the threadpool - free() waits
+      // for the in-flight operation (previously a use-after-free)
+      const pending = graph.config();
+      graph.free();
+
+      const results = await Promise.allSettled([pending]);
+      assert.notEqual(results[0].status, undefined);
+    });
   });
 
   describe('Command Interface', () => {

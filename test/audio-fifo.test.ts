@@ -754,6 +754,100 @@ describe('AudioFifo', () => {
     });
   });
 
+  describe('Buffer Count Validation', () => {
+    it('should throw TypeError for too few plane buffers on planar FIFO (sync)', () => {
+      const fifo = new AudioFifo();
+      fifo.alloc(AV_SAMPLE_FMT_FLTP, 2, 512);
+
+      const buffer = Buffer.alloc(128 * 4);
+      assert.throws(() => fifo.writeSync([buffer], 128), TypeError, 'writeSync should throw TypeError for missing plane buffer');
+      assert.throws(() => fifo.readSync([buffer], 128), TypeError, 'readSync should throw TypeError for missing plane buffer');
+      assert.throws(() => fifo.peekSync([buffer], 128), TypeError, 'peekSync should throw TypeError for missing plane buffer');
+
+      fifo.free();
+    });
+
+    it('should reject with TypeError for too few plane buffers on planar FIFO (async)', async () => {
+      const fifo = new AudioFifo();
+      fifo.alloc(AV_SAMPLE_FMT_FLTP, 2, 512);
+
+      const buffer = Buffer.alloc(128 * 4);
+      await assert.rejects(fifo.write([buffer], 128), TypeError, 'write should reject with TypeError for missing plane buffer');
+      await assert.rejects(fifo.read([buffer], 128), TypeError, 'read should reject with TypeError for missing plane buffer');
+      await assert.rejects(fifo.peek([buffer], 128), TypeError, 'peek should reject with TypeError for missing plane buffer');
+
+      fifo.free();
+    });
+
+    it('should throw TypeError for single buffer on multi-channel planar FIFO', async () => {
+      const fifo = new AudioFifo();
+      fifo.alloc(AV_SAMPLE_FMT_FLTP, 2, 512);
+
+      const buffer = Buffer.alloc(128 * 4 * 2);
+      assert.throws(() => fifo.writeSync(buffer, 128), TypeError, 'Single interleaved buffer should be rejected on planar FIFO');
+      await assert.rejects(fifo.write(buffer, 128), TypeError, 'Single interleaved buffer should be rejected on planar FIFO (async)');
+
+      fifo.free();
+    });
+
+    it('should throw TypeError for too many plane buffers on planar FIFO', async () => {
+      const fifo = new AudioFifo();
+      fifo.alloc(AV_SAMPLE_FMT_FLTP, 2, 512);
+
+      const buffers = [Buffer.alloc(128 * 4), Buffer.alloc(128 * 4), Buffer.alloc(128 * 4)];
+      assert.throws(() => fifo.writeSync(buffers, 128), TypeError, 'writeSync should throw TypeError for extra plane buffer');
+      await assert.rejects(fifo.write(buffers, 128), TypeError, 'write should reject with TypeError for extra plane buffer');
+
+      fifo.free();
+    });
+
+    it('should still accept the correct plane buffer count on planar FIFO', async () => {
+      const fifo = new AudioFifo();
+      fifo.alloc(AV_SAMPLE_FMT_FLTP, 2, 512);
+
+      const left = Buffer.alloc(128 * 4);
+      const right = Buffer.alloc(128 * 4);
+      const written = fifo.writeSync([left, right], 128);
+      assert.equal(written, 128, 'Should write with correct plane buffer count');
+
+      const read = await fifo.read([left, right], 128);
+      assert.equal(read, 128, 'Should read with correct plane buffer count');
+
+      fifo.free();
+    });
+
+    it('should throw TypeError for buffer array mismatch on interleaved FIFO', async () => {
+      const fifo = new AudioFifo();
+      fifo.alloc(AV_SAMPLE_FMT_S16, 2, 512);
+
+      const buffer = Buffer.alloc(128 * 2 * 2);
+      const buffers = [buffer, Buffer.alloc(128 * 2 * 2)];
+      assert.throws(() => fifo.writeSync(buffers, 128), TypeError, 'writeSync should throw TypeError for multiple buffers on interleaved FIFO');
+      await assert.rejects(fifo.write(buffers, 128), TypeError, 'write should reject with TypeError for multiple buffers on interleaved FIFO');
+
+      // Interleaved formats need exactly one buffer - both forms are accepted
+      const written = fifo.writeSync(buffer, 128);
+      assert.equal(written, 128, 'Single buffer should work on interleaved FIFO');
+      const written2 = await fifo.write([buffer], 128);
+      assert.equal(written2, 128, 'Single-element array should work on interleaved FIFO');
+
+      fifo.free();
+    });
+
+    it('should validate against channel count for planar mono FIFO', () => {
+      const fifo = new AudioFifo();
+      fifo.alloc(AV_SAMPLE_FMT_FLTP, 1, 512);
+
+      const buffer = Buffer.alloc(128 * 4);
+      // Mono planar needs exactly one buffer - both forms are accepted
+      assert.equal(fifo.writeSync(buffer, 128), 128, 'Single buffer should work on mono planar FIFO');
+      assert.equal(fifo.writeSync([buffer], 128), 128, 'Single-element array should work on mono planar FIFO');
+      assert.throws(() => fifo.writeSync([buffer, buffer], 128), TypeError, 'Two buffers should be rejected on mono planar FIFO');
+
+      fifo.free();
+    });
+  });
+
   describe('Memory Management', () => {
     it('should handle multiple allocations', () => {
       const fifo = new AudioFifo();
@@ -784,6 +878,24 @@ describe('AudioFifo', () => {
 
       fifo.free();
       assert.ok(true, 'Should replace FIFO cleanly');
+    });
+
+    it('should not crash when free() races in-flight async operations', { timeout: 10000 }, async () => {
+      const fifo = new AudioFifo();
+      fifo.alloc(AV_SAMPLE_FMT_S16, 2, 1024);
+
+      const nbSamples = 64;
+      const buffer = Buffer.alloc(nbSamples * 2 * avGetBytesPerSample(AV_SAMPLE_FMT_S16));
+      // Queue a burst of async writes, then free while they may still be on
+      // the threadpool - free() waits for in-flight operations (previously a
+      // use-after-free)
+      const pending = Array.from({ length: 16 }, async () => fifo.write(buffer, nbSamples));
+      fifo.free();
+
+      const results = await Promise.allSettled(pending);
+      for (const r of results) {
+        assert.notEqual(r.status, undefined);
+      }
     });
   });
 

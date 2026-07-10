@@ -178,6 +178,37 @@ describe('HardwareDeviceContext', () => {
       }
     });
 
+    it('should use the device string of each create call (no caching across calls)', () => {
+      const types = HardwareDeviceContext.iterateTypes();
+      const typeNames = types.map((t) => HardwareDeviceContext.getTypeName(t));
+
+      // VideoToolbox rejects any non-empty device string ("Device selection
+      // unsupported"), which makes the device string observable: if the first
+      // call's (empty, accepted) device string were cached and reused, the
+      // second call would incorrectly succeed.
+      const vtIndex = typeNames.indexOf(FF_HWDEVICE_TYPE_VIDEOTOOLBOX);
+      if (vtIndex === -1) {
+        assert.ok(true, 'VideoToolbox not available');
+        return;
+      }
+      const vtType = types[vtIndex];
+
+      const first = new HardwareDeviceContext();
+      const ret1 = first.create(vtType, '', null);
+      if (ret1 !== 0) {
+        first.free();
+        assert.ok(true, 'VideoToolbox device creation not available');
+        return;
+      }
+
+      const second = new HardwareDeviceContext();
+      const ret2 = second.create(vtType, 'nonexistent-device', null);
+      assert.ok(ret2 < 0, 'Second create must use its own device string and fail, not reuse the first');
+
+      second.free();
+      first.free();
+    });
+
     it('should attempt to create from existing device', () => {
       const types = HardwareDeviceContext.iterateTypes();
 

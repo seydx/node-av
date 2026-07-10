@@ -573,6 +573,23 @@ describe('Fifo', () => {
   });
 
   describe('Memory Management', () => {
+    it('should not crash when free() races in-flight async operations', { timeout: 10000 }, async () => {
+      const fifo = new Fifo();
+      fifo.alloc(1024, 4);
+
+      const buffer = Buffer.alloc(64 * 4);
+      // Queue a burst of async writes, then free while they may still be on
+      // the threadpool - free() waits for in-flight operations (previously a
+      // use-after-free)
+      const pending = Array.from({ length: 16 }, async () => fifo.write(buffer, 64));
+      fifo.free();
+
+      const results = await Promise.allSettled(pending);
+      for (const r of results) {
+        assert.notEqual(r.status, undefined);
+      }
+    });
+
     it('should handle multiple allocations', () => {
       const fifo = new Fifo();
 

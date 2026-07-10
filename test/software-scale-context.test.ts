@@ -583,6 +583,37 @@ describe('SoftwareScaleContext', () => {
       dstFrame.free();
       sws.freeContext();
     });
+
+    it('should not crash when freeContext()/frame.free() race an in-flight scaleFrame', { timeout: 10000 }, async () => {
+      const sws = new SoftwareScaleContext();
+
+      sws.getContext(1920, 1080, AV_PIX_FMT_YUV420P, 1280, 720, AV_PIX_FMT_YUV420P, SWS_BILINEAR);
+
+      const srcFrame = new Frame();
+      srcFrame.alloc();
+      srcFrame.width = 1920;
+      srcFrame.height = 1080;
+      srcFrame.format = AV_PIX_FMT_YUV420P;
+      srcFrame.getBuffer();
+
+      const dstFrame = new Frame();
+      dstFrame.alloc();
+      dstFrame.width = 1280;
+      dstFrame.height = 720;
+      dstFrame.format = AV_PIX_FMT_YUV420P;
+      dstFrame.getBuffer();
+
+      // Free the context and both frames while the scale may still be on the
+      // threadpool - each free waits for the in-flight operation (previously
+      // a use-after-free)
+      const pending = sws.scaleFrame(dstFrame, srcFrame);
+      sws.freeContext();
+      srcFrame.free();
+      dstFrame.free();
+
+      const results = await Promise.allSettled([pending]);
+      assert.notEqual(results[0].status, undefined);
+    });
   });
 
   describe('Performance Scenarios', () => {

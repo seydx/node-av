@@ -4,7 +4,7 @@ import { describe, it } from 'node:test';
 import { Decoder } from '../src/api/decoder.js';
 import { Demuxer } from '../src/api/demuxer.js';
 import { HardwareContext } from '../src/api/hardware.js';
-import { AV_CODEC_ID_H264, AV_PIX_FMT_RGB24, AV_PIX_FMT_YUV420P, AV_PIX_FMT_YUV444P, AV_SAMPLE_FMT_FLTP } from '../src/constants/constants.js';
+import { AV_CODEC_FLAG_COPY_OPAQUE, AV_CODEC_ID_H264, AV_PIX_FMT_RGB24, AV_PIX_FMT_YUV420P, AV_PIX_FMT_YUV444P, AV_SAMPLE_FMT_FLTP } from '../src/constants/constants.js';
 import { AV_CHANNEL_LAYOUT_MONO } from '../src/constants/channel-layouts.js';
 import { FF_DECODER_AAC, FF_DECODER_H264 } from '../src/constants/decoders.js';
 import { Codec, Packet } from '../src/lib/index.js';
@@ -81,6 +81,35 @@ describe('Decoder', () => {
       const decoder = Decoder.createSync(audioStream);
       assert.ok(decoder);
       assert.equal(decoder.isDecoderOpen, true);
+
+      decoder.close();
+      media.closeSync();
+    });
+
+    it('should enable COPY_OPAQUE for packet-to-frame opaque propagation (async)', async () => {
+      const media = await Demuxer.open(inputFile);
+      const videoStream = media.video();
+      assert.ok(videoStream, 'Should find video stream');
+
+      const decoder = await Decoder.create(videoStream);
+      const ctx = decoder.getCodecContext();
+      assert.ok(ctx, 'Should expose the codec context');
+      assert.ok((ctx.flags & AV_CODEC_FLAG_COPY_OPAQUE) !== 0, 'AV_CODEC_FLAG_COPY_OPAQUE should be set');
+
+      decoder.close();
+      await media.close();
+    });
+
+    it('should enable COPY_OPAQUE for packet-to-frame opaque propagation (sync)', () => {
+      const media = Demuxer.openSync(inputFile);
+      const videoStream = media.video();
+      assert.ok(videoStream, 'Should find video stream');
+
+      // createSync must not silently differ from create here
+      const decoder = Decoder.createSync(videoStream);
+      const ctx = decoder.getCodecContext();
+      assert.ok(ctx, 'Should expose the codec context');
+      assert.ok((ctx.flags & AV_CODEC_FLAG_COPY_OPAQUE) !== 0, 'AV_CODEC_FLAG_COPY_OPAQUE should be set');
 
       decoder.close();
       media.closeSync();

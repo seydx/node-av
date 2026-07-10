@@ -210,6 +210,37 @@ describe('BitStreamFilter', () => {
       ctx.free();
     });
 
+    it('should not crash when free() races in-flight async operations', { timeout: 10000 }, async () => {
+      const filter = BitStreamFilter.getByName('null');
+      assert.ok(filter);
+
+      const ctx = new BitStreamFilterContext();
+      ctx.alloc(filter);
+      ctx.init();
+
+      const inputPacket = new Packet();
+      inputPacket.alloc();
+      const outputPacket = new Packet();
+      outputPacket.alloc();
+
+      // Queue a burst of async operations, then free while they may still be
+      // on the threadpool - free() waits for in-flight operations (previously
+      // a use-after-free)
+      const pending = [
+        ...Array.from({ length: 8 }, async () => ctx.sendPacket(inputPacket)),
+        ...Array.from({ length: 8 }, async () => ctx.receivePacket(outputPacket)),
+      ];
+      ctx.free();
+
+      const results = await Promise.allSettled(pending);
+      for (const r of results) {
+        assert.notEqual(r.status, undefined);
+      }
+
+      inputPacket.free();
+      outputPacket.free();
+    });
+
     it('should handle EOF correctly (async)', async () => {
       const filter = BitStreamFilter.getByName('null');
       assert.ok(filter);

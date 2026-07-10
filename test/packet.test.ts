@@ -289,6 +289,45 @@ describe('Packet', () => {
       assert.deepEqual([...packet.data], [5, 6]);
       assert.equal(packet.getSideData(AV_PKT_DATA_NEW_EXTRADATA), null);
     });
+
+    it('preserves metadata when assigning data', () => {
+      // Regression: `data` maps to AVPacket->data only - assigning a payload
+      // must not reset timing/stream fields, whatever the assignment order.
+      packet.pts = 12345n;
+      packet.dts = 12000n;
+      packet.duration = 40n;
+      packet.pos = 512n;
+      packet.streamIndex = 2;
+      packet.flags = AV_PKT_FLAG_KEY;
+      packet.timeBase = new Rational(1, 90000);
+
+      packet.data = Buffer.from([1, 2, 3, 4]);
+
+      assert.deepEqual([...(packet.data ?? [])], [1, 2, 3, 4], 'payload was assigned');
+      assert.equal(packet.pts, 12345n, 'pts survives data assignment');
+      assert.equal(packet.dts, 12000n, 'dts survives data assignment');
+      assert.equal(packet.duration, 40n, 'duration survives data assignment');
+      assert.equal(packet.pos, 512n, 'pos survives data assignment');
+      assert.equal(packet.streamIndex, 2, 'streamIndex survives data assignment');
+      assert.equal(packet.flags & AV_PKT_FLAG_KEY, AV_PKT_FLAG_KEY, 'flags survive data assignment');
+      assert.equal(packet.timeBase.num, 1, 'timeBase.num survives data assignment');
+      assert.equal(packet.timeBase.den, 90000, 'timeBase.den survives data assignment');
+    });
+
+    it('preserves metadata when clearing data with null', () => {
+      packet.data = Buffer.from([1, 2, 3]);
+      packet.pts = 777n;
+      packet.streamIndex = 1;
+      packet.flags = AV_PKT_FLAG_KEY;
+
+      packet.data = null;
+
+      assert.equal(packet.data, null, 'payload was cleared');
+      assert.equal(packet.size, 0, 'size is reset');
+      assert.equal(packet.pts, 777n, 'pts survives clearing the payload');
+      assert.equal(packet.streamIndex, 1, 'streamIndex survives clearing the payload');
+      assert.equal(packet.flags & AV_PKT_FLAG_KEY, AV_PKT_FLAG_KEY, 'flags survive clearing the payload');
+    });
   });
 
   describe('Error Handling', () => {

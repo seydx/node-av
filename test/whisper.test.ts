@@ -3,9 +3,12 @@ import { describe, it } from 'node:test';
 
 import { Decoder } from '../src/api/decoder.js';
 import { Demuxer } from '../src/api/demuxer.js';
+import { FilterAPI } from '../src/api/filter.js';
 import { WhisperTranscriber } from '../src/api/whisper.js';
 import { AV_SAMPLE_FMT_S16 } from '../src/index.js';
 import { getInputFile, isCI, prepareTestEnvironment, skipInCI } from './index.js';
+
+import type { Frame } from '../src/lib/frame.js';
 
 prepareTestEnvironment();
 
@@ -298,6 +301,158 @@ describe('WhisperTranscriber', () => {
         const curr = segments[i];
 
         assert.ok(curr.start >= prev.start, `Segment ${i} start time (${curr.start}) should be >= previous start (${prev.start})`);
+      }
+    });
+
+    it('should derive segment timestamps from the audio position (frame PTS)', async () => {
+      await using input = await Demuxer.open({
+        type: 'audio',
+        input: audioFile,
+        sampleRate: 48000,
+        sampleFormat: AV_SAMPLE_FMT_S16,
+        channels: 1,
+      });
+
+      const audioStream = input.audio();
+      assert.ok(audioStream, 'Audio stream should exist');
+
+      using decoder = await Decoder.create(audioStream);
+      using transcriber = await WhisperTranscriber.create({
+        model: 'tiny.en',
+        modelDir: './models',
+        language: 'en',
+        useGpu: isCI() ? false : true,
+      });
+
+      // Simulate audio positioned 60s into a stream (e.g. after a silent
+      // intro): segment timestamps must reflect the frame PTS, not a counter
+      // that only advances on chunks that produced text (which starts at 0)
+      const offsetMs = 60_000;
+
+      async function* offsetFrames() {
+        for await (const frame of decoder.frames(input.packets(audioStream!.index))) {
+          if (!frame) {
+            yield null;
+            break;
+          }
+
+          const tb = frame.timeBase;
+          frame.pts += BigInt(Math.round((offsetMs / 1000) * (tb.den / Math.max(1, tb.num))));
+          yield frame;
+        }
+      }
+
+      const segments: {
+        start: number;
+        end: number;
+        text: string;
+      }[] = [];
+
+      for await (const segment of transcriber.transcribe(offsetFrames())) {
+        segments.push(segment);
+
+        if (segments.length >= 2) {
+          break;
+        }
+      }
+
+      assert.ok(segments.length > 0, 'Should transcribe at least one segment');
+      assert.ok(segments[0].start >= offsetMs - 1500, `First segment start (${segments[0].start}) should reflect the 60s audio position`);
+
+      for (const segment of segments) {
+        assert.ok(segment.end >= segment.start, 'End time should be >= start time');
+      }
+
+      for (let i = 1; i < segments.length; i++) {
+        assert.ok(segments[i].start >= segments[i - 1].start, 'Segment start times should be monotonic');
+      }
+    });
+
+    it('should flush buffered audio when input ends without EOF signal', async () => {
+      await using input = await Demuxer.open({
+        type: 'audio',
+        input: audioFile,
+        sampleRate: 48000,
+        sampleFormat: AV_SAMPLE_FMT_S16,
+        channels: 1,
+      });
+
+      const audioStream = input.audio();
+      assert.ok(audioStream, 'Audio stream should exist');
+
+      using decoder = await Decoder.create(audioStream);
+      using transcriber = await WhisperTranscriber.create({
+        model: 'tiny.en',
+        modelDir: './models',
+        language: 'en',
+        useGpu: isCI() ? false : true,
+      });
+
+      // Feed ~2s of speech and end the generator WITHOUT a trailing null:
+      // everything is still sitting in the whisper queue (default 3s) and is
+      // only transcribed because transcribe() flushes the filter at the end
+      async function* shortInput() {
+        let samples = 0;
+        for await (const frame of decoder.frames(input.packets(audioStream!.index))) {
+          if (!frame) break;
+
+          samples += frame.nbSamples;
+          yield frame;
+
+          if (samples >= 48000 * 2) break;
+        }
+      }
+
+      const segments: { text: string }[] = [];
+      for await (const segment of transcriber.transcribe(shortInput())) {
+        segments.push(segment);
+      }
+
+      assert.ok(segments.length > 0, 'Flushing must transcribe the queued audio');
+    });
+
+    it('should emit a segment for a single frame after flush', async () => {
+      await using input = await Demuxer.open({
+        type: 'audio',
+        input: audioFile,
+        sampleRate: 48000,
+        sampleFormat: AV_SAMPLE_FMT_S16,
+        channels: 1,
+      });
+
+      const audioStream = input.audio();
+      assert.ok(audioStream, 'Audio stream should exist');
+
+      using decoder = await Decoder.create(audioStream);
+      using transcriber = await WhisperTranscriber.create({
+        model: 'tiny.en',
+        modelDir: './models',
+        language: 'en',
+        useGpu: isCI() ? false : true,
+      });
+
+      // Merge ~2s of speech into one frame so the JSDoc single-frame example
+      // has enough audio to transcribe - it can only emit anything at all
+      // because transcribe() flushes the whisper queue at the end
+      using merger = FilterAPI.create('asetnsamples=n=96000:p=0');
+
+      let bigFrame: Frame | null = null;
+      for await (const frame of merger.frames(decoder.frames(input.packets(audioStream.index)))) {
+        if (!frame) break;
+        bigFrame = frame;
+        break;
+      }
+      assert.ok(bigFrame, 'Should have merged a 2s frame');
+
+      try {
+        const segments: { text: string }[] = [];
+        for await (const segment of transcriber.transcribe(bigFrame)) {
+          segments.push(segment);
+        }
+
+        assert.ok(segments.length > 0, 'Single frame must emit a segment after the flush');
+      } finally {
+        bigFrame.free();
       }
     });
 

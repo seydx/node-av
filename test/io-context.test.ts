@@ -49,6 +49,36 @@ describe('IOContext', () => {
       assert.ok(true);
     });
 
+    it('should handle repeated alloc/free cycles with custom buffer', () => {
+      // The I/O buffer is owned by the caller (avio_context_free does not free it) -
+      // exercising alloc/free cycles proves no crash or double-free in the cleanup path
+      const io = new IOContext();
+
+      io.allocContext(4096, 0);
+      assert.equal(io.bufferSize, 4096, 'Should use requested buffer size');
+      io.freeContext();
+
+      io.allocContext(8192, 1);
+      assert.equal(io.bufferSize, 8192, 'Should use new buffer size');
+      io.freeContext();
+
+      assert.ok(true, 'Should alloc/free custom buffers cleanly');
+    });
+
+    it('should free replaced context when allocating with callbacks twice', () => {
+      const io = new IOContext();
+
+      io.allocContextWithCallbacks(4096, 0, () => null);
+      assert.equal(io.bufferSize, 4096, 'Should use first buffer size');
+
+      // Second allocation replaces the first context (old context and buffer freed internally)
+      io.allocContextWithCallbacks(2048, 0, () => null);
+      assert.equal(io.bufferSize, 2048, 'Should use second buffer size');
+
+      io.freeContext();
+      assert.ok(true, 'Should replace and free contexts cleanly');
+    });
+
     it('should support async disposal', async () => {
       // Test async disposal pattern without using statement
       const io = new IOContext();
@@ -117,6 +147,32 @@ describe('IOContext', () => {
       const io = new IOContext();
       const ret = io.open2Sync('/non/existent/file.mp4', AVIO_FLAG_READ);
       assert.ok(ret < 0, 'Should return negative error code');
+    });
+
+    it('should reject opening an already-open context (async)', async () => {
+      const io = new IOContext();
+      const ret = await io.open2(testVideoFile, AVIO_FLAG_READ);
+      assert.equal(ret, 0, 'Should open file successfully');
+
+      // Second open on the same instance must error instead of leaking/replacing the context
+      await assert.rejects(io.open2(testImageFile, AVIO_FLAG_READ), /already initialized/, 'Second open should be rejected');
+
+      // Original context must still be intact and closable
+      const closeret = await io.closep();
+      assert.equal(closeret, 0, 'Should close original context successfully');
+    });
+
+    it('should throw when opening an already-open context (sync)', () => {
+      const io = new IOContext();
+      const ret = io.open2Sync(testVideoFile, AVIO_FLAG_READ);
+      assert.equal(ret, 0, 'Should open file successfully');
+
+      // Second open on the same instance must error instead of leaking/replacing the context
+      assert.throws(() => io.open2Sync(testImageFile, AVIO_FLAG_READ), /already initialized/, 'Second open should throw');
+
+      // Original context must still be intact and closable
+      const closeret = io.closepSync();
+      assert.equal(closeret, 0, 'Should close original context successfully');
     });
 
     it('should handle file:// URLs (async)', async () => {
@@ -945,6 +1001,53 @@ describe('IOContext', () => {
       assert.ok(Buffer.isBuffer(data2));
       const closeret2 = io.closepSync();
       assert.equal(closeret2, 0, 'Should return 0 on success');
+    });
+  });
+
+  describe('Async Operation Guard', () => {
+    it('should not crash when freeContext() races in-flight async reads', { timeout: 10000 }, async () => {
+      const io = new IOContext();
+      const ret = await io.open2(testVideoFile, AVIO_FLAG_READ);
+      assert.equal(ret, 0, 'Should open file successfully');
+
+      // Queue a burst of async reads, then free while they may still be on
+      // the threadpool - freeContext() waits for in-flight operations
+      // (previously a use-after-free)
+      const pending = Array.from({ length: 8 }, async () => io.read(4096));
+      io.freeContext();
+
+      const results = await Promise.allSettled(pending);
+      for (const r of results) {
+        assert.notEqual(r.status, undefined);
+      }
+    });
+
+    it('should error instead of deadlocking when freeContext() races a parked callback read', { timeout: 10000 }, async () => {
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+
+      const io = new IOContext();
+      io.allocContextWithCallbacks(4096, 0, async () => {
+        // Park the read until the test releases it
+        await gate;
+        return AVERROR_EOF;
+      });
+
+      // The read parks on the JS callback above: the worker thread waits for
+      // the main thread, so freeContext() must fail fast (busy error) instead
+      // of blocking the event loop until a timeout
+      const pending = io.read(1024);
+      assert.throws(() => io.freeContext(), /busy/, 'freeContext() should throw while a callback read is parked');
+
+      // Release the parked read - it must settle within the test timeout
+      release();
+      const result = await pending;
+      assert.equal(result, AVERROR_EOF, 'Parked read should settle with EOF');
+
+      // With no operations in flight the context frees cleanly
+      io.freeContext();
     });
   });
 

@@ -112,6 +112,19 @@ describe('HardwareContext', () => {
       hw2?.dispose();
     });
 
+    it('should not mutate the caller options object', () => {
+      HardwareContext.resetAutoCache();
+
+      // auto() used to write the VAAPI default render node into options.device,
+      // leaking it to the caller and into subsequently tried device types
+      const options = {};
+      const hw = HardwareContext.auto(options);
+
+      assert.deepStrictEqual(options, {}, 'auto() must not modify the passed options object');
+
+      hw?.dispose();
+    });
+
     it('should bypass cache when options provided', () => {
       // Reset and get cached result
       HardwareContext.resetAutoCache();

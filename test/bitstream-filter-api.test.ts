@@ -2,7 +2,19 @@ import assert from 'node:assert';
 import { existsSync, unlinkSync } from 'node:fs';
 import { describe, it } from 'node:test';
 
-import { AV_CODEC_ID_AAC, AV_CODEC_ID_H264, BitStreamFilterAPI, Decoder, Demuxer, Encoder, FF_ENCODER_LIBX264, Muxer, Packet, pipeline } from '../src/index.js';
+import {
+  AV_CODEC_ID_AAC,
+  AV_CODEC_ID_H264,
+  BitStreamFilter,
+  BitStreamFilterAPI,
+  Decoder,
+  Demuxer,
+  Encoder,
+  FF_ENCODER_LIBX264,
+  Muxer,
+  Packet,
+  pipeline,
+} from '../src/index.js';
 import { getInputFile, getOutputFile, prepareTestEnvironment } from './index.js';
 
 prepareTestEnvironment();
@@ -306,6 +318,253 @@ describe('BitStreamFilterAPI', () => {
       }
 
       assert.ok(processedCount > 0, 'Should have processed packets');
+    });
+  });
+
+  describe('Buffering Filters', () => {
+    // setts holds one packet back: packet N is only emitted once N+1 arrives,
+    // so the last packet only comes out after a real EOF was sent to the filter
+    // (av_bsf_flush would discard it instead).
+    it('should release packets buffered by setts on flush (async)', async function (t) {
+      if (!BitStreamFilter.getByName('setts')) {
+        t.skip();
+        return;
+      }
+
+      await using media = await Demuxer.open(inputFile);
+      const stream = media.video();
+      assert.ok(stream);
+
+      using bsf = BitStreamFilterAPI.create('setts', stream);
+
+      let sent = 0;
+      let received = 0;
+
+      for await (using packet of media.packets()) {
+        if (!packet) break;
+        if (packet.streamIndex !== stream.index) continue;
+
+        const filtered = await bsf.filterAll(packet);
+        received += filtered.length;
+        for (const outPacket of filtered) {
+          outPacket.free();
+        }
+
+        sent++;
+        if (sent >= 5) break;
+      }
+
+      assert.ok(sent > 0, 'Should have sent packets');
+      assert.ok(received < sent, 'setts should still be buffering at least one packet');
+
+      for await (using packet of bsf.flushPackets()) {
+        assert.ok(packet instanceof Packet);
+        received++;
+      }
+
+      assert.strictEqual(received, sent, 'Flush must release all buffered packets');
+    });
+
+    it('should release packets buffered by setts on flush (sync)', function (t) {
+      if (!BitStreamFilter.getByName('setts')) {
+        t.skip();
+        return;
+      }
+
+      using media = Demuxer.openSync(inputFile);
+      const stream = media.video();
+      assert.ok(stream);
+
+      using bsf = BitStreamFilterAPI.create('setts', stream);
+
+      let sent = 0;
+      let received = 0;
+
+      for (using packet of media.packetsSync()) {
+        if (!packet) break;
+        if (packet.streamIndex !== stream.index) continue;
+
+        const filtered = bsf.filterAllSync(packet);
+        received += filtered.length;
+        for (const outPacket of filtered) {
+          outPacket.free();
+        }
+
+        sent++;
+        if (sent >= 5) break;
+      }
+
+      assert.ok(sent > 0, 'Should have sent packets');
+      assert.ok(received < sent, 'setts should still be buffering at least one packet');
+
+      for (using packet of bsf.flushPacketsSync()) {
+        assert.ok(packet instanceof Packet);
+        received++;
+      }
+
+      assert.strictEqual(received, sent, 'Flush must release all buffered packets');
+    });
+
+    it('should drain buffered packets in the packets() generator (async)', async function (t) {
+      if (!BitStreamFilter.getByName('setts')) {
+        t.skip();
+        return;
+      }
+
+      await using media = await Demuxer.open(inputFile);
+      const stream = media.video();
+      assert.ok(stream);
+
+      using bsf = BitStreamFilterAPI.create('setts', stream);
+
+      let sent = 0;
+
+      async function* videoPackets() {
+        for await (using packet of media.packets()) {
+          if (!packet) break;
+          if (packet.streamIndex !== stream!.index) continue;
+
+          yield packet;
+          sent++;
+          if (sent >= 5) break;
+        }
+        yield null; // EOF - the generator must flush and drain the filter
+      }
+
+      let received = 0;
+      let sawEof = false;
+      for await (using filtered of bsf.packets(videoPackets())) {
+        if (filtered === null) {
+          sawEof = true;
+          break;
+        }
+        received++;
+      }
+
+      assert.ok(sawEof, 'Generator should signal EOF');
+      assert.strictEqual(received, sent, 'Generator must drain packets still buffered at EOF');
+    });
+
+    it('should drain buffered packets in the packetsSync() generator (sync)', function (t) {
+      if (!BitStreamFilter.getByName('setts')) {
+        t.skip();
+        return;
+      }
+
+      using media = Demuxer.openSync(inputFile);
+      const stream = media.video();
+      assert.ok(stream);
+
+      using bsf = BitStreamFilterAPI.create('setts', stream);
+
+      let sent = 0;
+
+      function* videoPackets() {
+        for (using packet of media.packetsSync()) {
+          if (!packet) break;
+          if (packet.streamIndex !== stream!.index) continue;
+
+          yield packet;
+          sent++;
+          if (sent >= 5) break;
+        }
+        yield null; // EOF - the generator must flush and drain the filter
+      }
+
+      let received = 0;
+      let sawEof = false;
+      for (using filtered of bsf.packetsSync(videoPackets())) {
+        if (filtered === null) {
+          sawEof = true;
+          break;
+        }
+        received++;
+      }
+
+      assert.ok(sawEof, 'Generator should signal EOF');
+      assert.strictEqual(received, sent, 'Generator must drain packets still buffered at EOF');
+    });
+  });
+
+  describe('EAGAIN Handling', () => {
+    it('should not drop a packet when send returns EAGAIN (async)', async () => {
+      await using media = await Demuxer.open(inputFile);
+      const stream = media.video();
+      assert.ok(stream);
+
+      using bsf = BitStreamFilterAPI.create('null', stream);
+
+      // Collect two packets up front
+      const inputs: Packet[] = [];
+      for await (using packet of media.packets()) {
+        if (!packet) break;
+        if (packet.streamIndex !== stream.index) continue;
+
+        const cloned = packet.clone();
+        assert.ok(cloned);
+        inputs.push(cloned);
+        if (inputs.length >= 2) break;
+      }
+      assert.strictEqual(inputs.length, 2, 'Should have collected two packets');
+
+      try {
+        // Two sends without a receive in between: the second send hits EAGAIN
+        // (packet NOT consumed) and must be retried, not silently dropped
+        await bsf.filter(inputs[0]);
+        await bsf.filter(inputs[1]);
+
+        let received = 0;
+        let outPacket;
+        while ((outPacket = await bsf.receive()) !== null) {
+          received++;
+          outPacket.free();
+        }
+
+        assert.strictEqual(received, 2, 'Both packets must survive back-to-back sends');
+      } finally {
+        for (const packet of inputs) {
+          packet.free();
+        }
+      }
+    });
+
+    it('should not drop a packet when send returns EAGAIN (sync)', () => {
+      using media = Demuxer.openSync(inputFile);
+      const stream = media.video();
+      assert.ok(stream);
+
+      using bsf = BitStreamFilterAPI.create('null', stream);
+
+      // Collect two packets up front
+      const inputs: Packet[] = [];
+      for (using packet of media.packetsSync()) {
+        if (!packet) break;
+        if (packet.streamIndex !== stream.index) continue;
+
+        const cloned = packet.clone();
+        assert.ok(cloned);
+        inputs.push(cloned);
+        if (inputs.length >= 2) break;
+      }
+      assert.strictEqual(inputs.length, 2, 'Should have collected two packets');
+
+      try {
+        bsf.filterSync(inputs[0]);
+        bsf.filterSync(inputs[1]);
+
+        let received = 0;
+        let outPacket;
+        while ((outPacket = bsf.receiveSync()) !== null) {
+          received++;
+          outPacket.free();
+        }
+
+        assert.strictEqual(received, 2, 'Both packets must survive back-to-back sends');
+      } finally {
+        for (const packet of inputs) {
+          packet.free();
+        }
+      }
     });
   });
 

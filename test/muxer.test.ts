@@ -5,6 +5,7 @@ import { describe, it } from 'node:test';
 
 import {
   AV_PKT_DATA_DISPLAYMATRIX,
+  AVERROR_EIO,
   AVSEEK_CUR,
   AVSEEK_END,
   AVSEEK_SET,
@@ -1599,6 +1600,100 @@ describe('Muxer', () => {
       assert(outVideo);
       assert.equal(outVideo.metadata?.get('title'), 'configured', 'stream metadata set in configure should be written');
       await cleanup();
+    });
+  });
+
+  describe('context options', () => {
+    it('applies MuxerOptions.context before the header on the async path', async () => {
+      const outputFile = getTempFile('mkv');
+      await using input = await Demuxer.open(inputFile);
+      const videoStream = input.video();
+      assert(videoStream);
+
+      const output = await Muxer.open(outputFile, {
+        format: 'matroska',
+        context: { metadata: Dictionary.fromObject({ title: 'context test' }) },
+      });
+
+      const streamIdx = output.addStream(videoStream);
+
+      // Write via the async path - header write (and context application) happens on first packet
+      let count = 0;
+      for await (using packet of input.packets(videoStream.index)) {
+        if (!packet) break;
+        await output.writePacket(packet, streamIdx);
+        if (++count >= 10) break;
+      }
+      await output.writePacket(null, streamIdx);
+      await output.close();
+
+      await using verify = await Demuxer.open(outputFile);
+      assert.equal(verify.getFormatContext().metadata?.get('title'), 'context test', 'context metadata should be written with header on async path');
+      await cleanup();
+    });
+  });
+
+  describe('write error propagation', () => {
+    // Guard against the pre-fix behavior where a dead write worker caused writePacket/close to hang forever
+    const withTimeout = async <T>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
+      let timer: NodeJS.Timeout | undefined;
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`Timed out: ${label}`)), ms);
+      });
+      try {
+        return await Promise.race([promise, timeout]);
+      } finally {
+        clearTimeout(timer);
+      }
+    };
+
+    it('propagates async write worker failures instead of hanging', async () => {
+      await using input = await Demuxer.open(inputFile);
+      const videoStream = input.video();
+      const audioStream = input.audio();
+      assert(videoStream);
+      assert(audioStream);
+
+      // Fail I/O after the header made it through - the failure then happens
+      // inside the background write worker (2+ streams enable useAsyncWrite)
+      let flushedBytes = 0;
+      const callbacks: IOOutputCallbacks = {
+        write: (buffer: Buffer) => {
+          if (flushedBytes > 4096) {
+            return AVERROR_EIO;
+          }
+          flushedBytes += buffer.length;
+          return buffer.length;
+        },
+      };
+
+      const output = await Muxer.open(callbacks, { format: 'mpegts', bufferSize: 512 });
+      const videoIdx = output.addStream(videoStream);
+      const audioIdx = output.addStream(audioStream);
+
+      const writeAll = async () => {
+        for await (using packet of input.packets()) {
+          if (!packet) break;
+          if (packet.streamIndex === videoStream.index) {
+            await output.writePacket(packet, videoIdx);
+          } else if (packet.streamIndex === audioStream.index) {
+            await output.writePacket(packet, audioIdx);
+          }
+        }
+      };
+
+      // Write must reject with the underlying write error, not deadlock
+      await assert.rejects(withTimeout(writeAll(), 15000, 'writePacket should reject, not hang'), /Failed to write packet/);
+
+      // Subsequent writes surface the stored error too
+      await assert.rejects(output.writePacket(null, videoIdx), /Failed to write packet/);
+
+      // close() surfaces the error but still releases resources
+      await assert.rejects(withTimeout(output.close(), 15000, 'close should settle, not hang'), /Failed to write packet/);
+      assert.equal(output.isOpen, false, 'Muxer should be closed after failed close()');
+
+      // Second close is a no-op and must not throw
+      await output.close();
     });
   });
 });

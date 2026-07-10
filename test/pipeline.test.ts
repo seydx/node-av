@@ -1,17 +1,24 @@
 import assert from 'node:assert';
 import { existsSync, readdirSync, statSync, unlinkSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { after, describe, it } from 'node:test';
 
 import {
   AV_CODEC_ID_H264,
   AV_PIX_FMT_YUV420P,
+  AVERROR_EIO,
+  AVSEEK_CUR,
+  AVSEEK_END,
+  AVSEEK_SET,
+  AVSEEK_SIZE,
   BitStreamFilterAPI,
   Decoder,
   Demuxer,
   Encoder,
   FF_ENCODER_AAC,
   FF_ENCODER_LIBX264,
+  FFmpegError,
   FilterAPI,
   Frame,
   HardwareContext,
@@ -21,6 +28,8 @@ import {
   Rational,
 } from '../src/index.js';
 import { getInputFile, getOutputFile, getTmpDir, prepareTestEnvironment, skipInCI } from './index.js';
+
+import type { AVSeekWhence, IOInputCallbacks } from '../src/index.js';
 
 prepareTestEnvironment();
 
@@ -994,6 +1003,62 @@ describe('Pipeline - Comprehensive Tests', () => {
         }
       });
     });
+
+    it('should reject completion when the input errors mid-stream', { timeout: 15000 }, async () => {
+      const outputFile = getTestOutputPath('input-error.mp4');
+
+      try {
+        const buffer = await readFile(inputFile);
+        let position = 0;
+        let fail = false;
+
+        // Serve the real file until `fail` flips, then report an I/O error -
+        // simulates a live source dying mid-stream
+        const callbacks: IOInputCallbacks = {
+          read: (size: number) => {
+            if (fail) {
+              return AVERROR_EIO;
+            }
+            if (position >= buffer.length) {
+              return null; // EOF
+            }
+            const end = Math.min(position + size, buffer.length);
+            const chunk = buffer.subarray(position, end);
+            position = end;
+            return chunk;
+          },
+          seek: (offset: bigint, whence: AVSeekWhence) => {
+            if (whence === AVSEEK_SIZE) {
+              return BigInt(buffer.length);
+            } else if (whence === AVSEEK_SET) {
+              position = Number(offset);
+            } else if (whence === AVSEEK_CUR) {
+              position += Number(offset);
+            } else if (whence === AVSEEK_END) {
+              position = buffer.length + Number(offset);
+            }
+            return BigInt(position);
+          },
+        };
+
+        const input = await Demuxer.open(callbacks, { format: 'mp4', bufferSize: 4096 });
+        const output = await Muxer.open(outputFile);
+
+        const control = pipeline(input, output);
+        fail = true; // break the source while the pipeline is running
+
+        await assert.rejects(
+          control.completion,
+          (err: unknown) => err instanceof FFmpegError,
+          'completion should reject with the read error, not resolve as clean EOF',
+        );
+
+        await output.close();
+        await input.close();
+      } finally {
+        cleanupTestFile(outputFile);
+      }
+    });
   });
 
   describe('Hardware Acceleration', () => {
@@ -1313,6 +1378,55 @@ describe('Pipeline - Comprehensive Tests', () => {
         } finally {
           cleanupTestFile(videoOutputFile);
           cleanupTestFile(audioOutputFile);
+        }
+      });
+
+      it('should finalize all outputs of a multi-output named pipeline', { timeout: 30000 }, async () => {
+        const videoOutputFile = getTestOutputPath('multi-out-finalized-video.mp4');
+        const audioOutputFile = getTestOutputPath('multi-out-finalized-audio.mp4');
+
+        try {
+          await using input = await Demuxer.open(inputFile2);
+          const videoOutput = await Muxer.open(videoOutputFile);
+          const audioOutput = await Muxer.open(audioOutputFile);
+
+          // No manual output.close() - the pipeline itself must finalize both
+          // muxers, otherwise the MP4 trailer is never written
+          const control = pipeline(input, { video: 'passthrough', audio: 'passthrough' }, { video: videoOutput, audio: audioOutput });
+          await control.completion;
+
+          // Probing succeeds with a duration only if the trailer was written
+          await using verifyVideo = await Demuxer.open(videoOutputFile);
+          assert.ok(verifyVideo.video(), 'Video output should have video stream');
+          assert.ok(verifyVideo.duration > 0, 'Video output should have duration (trailer written)');
+
+          await using verifyAudio = await Demuxer.open(audioOutputFile);
+          assert.ok(verifyAudio.audio(), 'Audio output should have audio stream');
+          assert.ok(verifyAudio.duration > 0, 'Audio output should have duration (trailer written)');
+        } finally {
+          cleanupTestFile(videoOutputFile);
+          cleanupTestFile(audioOutputFile);
+        }
+      });
+
+      it('should close a shared output exactly once when multiple streams feed the same muxer', { timeout: 30000 }, async () => {
+        const outputFile = getTestOutputPath('multi-out-shared.mp4');
+
+        try {
+          await using input = await Demuxer.open(inputFile2);
+          const sharedOutput = await Muxer.open(outputFile);
+
+          // Both named streams point at the same Muxer - it must be closed
+          // once, after BOTH streams have finished
+          const control = pipeline(input, { video: 'passthrough', audio: 'passthrough' }, { video: sharedOutput, audio: sharedOutput });
+          await control.completion;
+
+          await using verify = await Demuxer.open(outputFile);
+          assert.ok(verify.video(), 'Shared output should have video stream');
+          assert.ok(verify.audio(), 'Shared output should have audio stream');
+          assert.ok(verify.duration > 0, 'Shared output should have duration (trailer written)');
+        } finally {
+          cleanupTestFile(outputFile);
         }
       });
 

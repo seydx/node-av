@@ -5,6 +5,7 @@ import {
   AVCOL_RANGE_JPEG,
   AV_CHANNEL_LAYOUT_STEREO,
   AV_CHANNEL_ORDER_UNSPEC,
+  AV_NOPTS_VALUE,
   AV_PIX_FMT_RGB24,
   AV_PIX_FMT_YUV420P,
   AV_PIX_FMT_YUV422P,
@@ -20,6 +21,8 @@ import {
 } from '../src/index.js';
 import { Frame, Rational, avcodecFindBestPixFmtOfList } from '../src/lib/index.js';
 import { encodeFrame, encodeFrameSync } from './index.js';
+
+import type { Packet } from '../src/lib/index.js';
 
 // Check for JPEG magic bytes: SOI (FFD8) at the start and EOI (FFD9) at the end.
 function isJpeg(buf: Buffer): boolean {
@@ -391,6 +394,46 @@ describe('Encoder', () => {
       }
     });
 
+    it('autoResample rate conversion keeps real-time packet timestamps', { timeout: 30000 }, () => {
+      // 96 kHz input resampled to 48 kHz: packet timing must follow the codec rate
+      // (timebase 1/48000), not the input timebase. Previously the 48 kHz sample
+      // counters were stamped in the input timebase, so audio played at the wrong
+      // speed and drifted progressively out of sync.
+      const encoder = Encoder.createSync(FF_ENCODER_LIBMP3LAME, { bitrate: '128k', autoResample: true });
+      try {
+        const inputFrames = 20;
+        let lastEndSeconds = 0;
+        const collect = (packets: Packet[]) => {
+          for (const p of packets) {
+            lastEndSeconds = (Number(p.pts + p.duration) * p.timeBase.num) / p.timeBase.den;
+            p.free();
+          }
+        };
+
+        for (let i = 0; i < inputFrames; i++) {
+          using frame = makeAudioFrame(96000, BigInt(i * 1152));
+          collect(encoder.encodeAllSync(frame));
+        }
+
+        const ctx = encoder.getCodecContext();
+        assert.equal(ctx?.timeBase.num, 1, 'codec timebase numerator should be 1');
+        assert.equal(ctx?.timeBase.den, 48000, 'codec timebase must be 1/target rate, not the input timebase');
+
+        collect(encoder.encodeAllSync(null)); // flush
+
+        // 20 frames x 1152 samples at 96 kHz = 0.24 s of audio; the encoded stream
+        // must end at that point in real time (within a frame of silence padding).
+        const expectedSeconds = (inputFrames * 1152) / 96000;
+        const frameSeconds = 1152 / 48000;
+        assert.ok(
+          Math.abs(lastEndSeconds - expectedSeconds) <= 2 * frameSeconds,
+          `encoded duration ${lastEndSeconds}s should match real-time input duration ${expectedSeconds}s`,
+        );
+      } finally {
+        encoder.close();
+      }
+    });
+
     it('throws a descriptive error for an unsupported input rate when autoResample is off (default)', () => {
       const encoder = Encoder.createSync(FF_ENCODER_LIBMP3LAME, { bitrate: '128k' });
       try {
@@ -439,6 +482,26 @@ describe('Encoder', () => {
           pkt.free();
         }
         assert.ok(packets > 0, 'should encode frames carrying an unspecified layout');
+      } finally {
+        encoder.close();
+      }
+    });
+
+    it('passes AV_NOPTS_VALUE frame pts through without rescaling it into garbage', () => {
+      // Rescaling AV_NOPTS_VALUE (INT64_MIN) produces a huge negative timestamp
+      // instead of the "unset" marker; the encoder must leave it untouched so the
+      // codec can apply its own fallback.
+      const encoder = Encoder.createSync(FF_ENCODER_MJPEG, {});
+      try {
+        using frame = createMjpegFrame(64, 64);
+        frame.pts = AV_NOPTS_VALUE;
+
+        const packets = [...encoder.encodeAllSync(frame), ...encoder.encodeAllSync(null)];
+        assert.ok(packets.length > 0, 'should produce a packet');
+        for (const p of packets) {
+          assert.ok(p.pts === AV_NOPTS_VALUE || p.pts >= 0n, `packet pts must be NOPTS or a sane fallback, got ${p.pts}`);
+          p.free();
+        }
       } finally {
         encoder.close();
       }
@@ -805,6 +868,89 @@ describe('Encoder', () => {
       }
 
       encoder.close();
+    });
+
+    // AAC uses a fixed frame size of 1024 samples, so input that isn't a multiple
+    // of it exercises the FIFO partial-drain path at flush.
+    const makePartialAudioFrame = (nbSamples: number, pts: bigint): Frame => {
+      const frame = new Frame();
+      frame.alloc();
+      frame.nbSamples = nbSamples;
+      frame.sampleRate = 44100;
+      frame.format = AV_SAMPLE_FMT_FLTP;
+      frame.channelLayout = AV_CHANNEL_LAYOUT_STEREO;
+      frame.pts = pts;
+      frame.timeBase = new Rational(1, 44100);
+      assert.equal(frame.getBuffer(), 0, 'Should allocate frame buffer');
+      for (const plane of frame.data ?? []) {
+        plane.fill(0);
+      }
+      return frame;
+    };
+
+    it('encodes the final partial FIFO frame instead of dropping it (async)', async () => {
+      const encoder = await Encoder.create(FF_ENCODER_AAC, { bitrate: '128k' });
+      try {
+        const inputSamples = 3 * 500; // 1500 samples: 1 full 1024 frame + a 476-sample tail
+        let streamEnd = 0n;
+
+        // Track the end position via pts + duration instead of summing durations:
+        // the AAC encoder prepends priming samples (negative pts), which shift the
+        // stream start but not the end coverage.
+        const track = (p: { pts: bigint; duration: bigint; free: () => void }): void => {
+          if (p.pts + p.duration > streamEnd) {
+            streamEnd = p.pts + p.duration;
+          }
+          p.free();
+        };
+
+        for (let i = 0; i < 3; i++) {
+          using frame = makePartialAudioFrame(500, BigInt(i * 500));
+          for (const p of await encoder.encodeAll(frame)) {
+            track(p);
+          }
+        }
+        for (const p of await encoder.encodeAll(null)) {
+          track(p);
+        }
+
+        // Previously the tail was silently dropped (stream ended at 1024 < 1500);
+        // now it is padded with silence, covering the input within one frame.
+        assert.ok(streamEnd >= BigInt(inputSamples), `stream end ${streamEnd} should cover the ${inputSamples} input samples`);
+        assert.ok(streamEnd <= BigInt(inputSamples + 1024), 'silence padding should not exceed one frame');
+      } finally {
+        encoder.close();
+      }
+    });
+
+    it('encodes the final partial FIFO frame instead of dropping it (sync)', () => {
+      const encoder = Encoder.createSync(FF_ENCODER_AAC, { bitrate: '128k' });
+      try {
+        const inputSamples = 3 * 500;
+        let streamEnd = 0n;
+
+        const track = (p: { pts: bigint; duration: bigint; free: () => void }): void => {
+          if (p.pts + p.duration > streamEnd) {
+            streamEnd = p.pts + p.duration;
+          }
+          p.free();
+        };
+
+        for (let i = 0; i < 3; i++) {
+          using frame = makePartialAudioFrame(500, BigInt(i * 500));
+          for (const p of encoder.encodeAllSync(frame)) {
+            track(p);
+          }
+        }
+        for (const p of encoder.encodeAllSync(null)) {
+          track(p);
+        }
+
+        assert.ok(streamEnd >= BigInt(inputSamples), `stream end ${streamEnd} should cover the ${inputSamples} input samples`);
+        assert.ok(streamEnd <= BigInt(inputSamples + 1024), 'silence padding should not exceed one frame');
+      } finally {
+        encoder.close();
+      }
     });
 
     it('should handle flush when encoder is closed (async)', async () => {

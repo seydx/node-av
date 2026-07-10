@@ -601,6 +601,24 @@ describe('SoftwareResampleContext', () => {
       assert.ok(true, 'Should replace context cleanly');
     });
 
+    it('should not crash when free() races an in-flight convert', { timeout: 10000 }, async () => {
+      const swr = new SoftwareResampleContext();
+      swr.allocSetOpts2(STEREO, AV_SAMPLE_FMT_S16, 44100, STEREO, AV_SAMPLE_FMT_S16, 44100);
+      swr.init();
+
+      const samplesPerChannel = 8192;
+      const inBuffer = Buffer.alloc(samplesPerChannel * 2 * 2);
+      const outBuffer = Buffer.alloc(samplesPerChannel * 2 * 2);
+
+      // Free while the conversion may still be on the threadpool - free()
+      // waits for the in-flight operation (previously a use-after-free)
+      const pending = swr.convert([outBuffer], samplesPerChannel, [inBuffer], samplesPerChannel);
+      swr.free();
+
+      const results = await Promise.allSettled([pending]);
+      assert.notEqual(results[0].status, undefined);
+    });
+
     it('should handle frame conversion with auto-allocated destination', () => {
       const swr = new SoftwareResampleContext();
 

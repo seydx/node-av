@@ -2,6 +2,7 @@ import assert from 'node:assert';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 
 import {
+  AV_CHANNEL_LAYOUT_MONO,
   AV_CHANNEL_LAYOUT_STEREO,
   AV_CODEC_FLAG_PSNR,
   AV_CODEC_FLAG_QSCALE,
@@ -587,6 +588,67 @@ describe('CodecContext', () => {
       options.free();
     });
 
+    it('should keep the options dictionary usable after open2Sync', () => {
+      const codec = Codec.findDecoder(AV_CODEC_ID_PCM_S16LE);
+      assert.ok(codec);
+
+      ctx.allocContext3(codec);
+      // PCM decoder requires channel layout to be set
+      ctx.channelLayout = AV_CHANNEL_LAYOUT_STEREO;
+      ctx.sampleRate = 48000;
+      ctx.sampleFormat = AV_SAMPLE_FMT_S16;
+
+      const options = new Dictionary();
+      options.alloc();
+      options.set('threads', '1'); // consumed by avcodec_open2
+      options.set('not_a_real_option', 'value'); // left unconsumed
+
+      const ret = ctx.open2Sync(codec, options);
+      assert.equal(ret, 0);
+      assert.ok(ctx.isOpen);
+
+      // The caller's dictionary must remain untouched and fully usable
+      // (previously avcodec_open2 freed it, making these calls a use-after-free)
+      assert.equal(options.get('threads'), '1');
+      assert.equal(options.get('not_a_real_option'), 'value');
+      assert.equal(options.count(), 2);
+      assert.deepEqual(options.getAll(), { threads: '1', not_a_real_option: 'value' });
+
+      options.free();
+    });
+
+    it('should reject open2 on an unallocated context (async)', async () => {
+      const codec = Codec.findDecoder(AV_CODEC_ID_PCM_S16LE);
+      assert.ok(codec);
+
+      const unallocated = new CodecContext();
+      await assert.rejects(async () => {
+        await unallocated.open2(codec, null);
+      }, /not allocated/);
+    });
+
+    it('should reject open2 on a freed context (async)', async () => {
+      const codec = Codec.findDecoder(AV_CODEC_ID_PCM_S16LE);
+      assert.ok(codec);
+
+      const freed = new CodecContext();
+      freed.allocContext3(codec);
+      freed.freeContext();
+
+      await assert.rejects(async () => {
+        await freed.open2(codec, null);
+      }, /not allocated/);
+    });
+
+    it('should throw TypeError for non-Codec argument (async)', async () => {
+      ctx.allocContext3(null);
+
+      const notACodec = { getNative: () => ({}) } as unknown as Codec;
+      await assert.rejects(async () => {
+        await ctx.open2(notACodec, null);
+      }, TypeError);
+    });
+
     it('should close codec context (async)', async () => {
       const codec = Codec.findDecoder(AV_CODEC_ID_PCM_S16LE);
       assert.ok(codec);
@@ -764,6 +826,39 @@ describe('CodecContext', () => {
       // PCM decoder might not need flushing
       assert.ok(ret === 0 || ret === -541478725); // 0 or EOF
     });
+
+    it('should not crash when freeContext() races in-flight async operations', { timeout: 10000 }, async () => {
+      const codec = Codec.findDecoder(AV_CODEC_ID_PCM_S16LE);
+      assert.ok(codec);
+
+      ctx.allocContext3(codec);
+      ctx.sampleFormat = AV_SAMPLE_FMT_S16;
+      ctx.sampleRate = 48000;
+      ctx.channelLayout = AV_CHANNEL_LAYOUT_STEREO;
+      await ctx.open2(codec, null);
+
+      const packet = new Packet();
+      packet.alloc();
+      const frame = new Frame();
+      frame.alloc();
+
+      // Queue a burst of async operations, then free while they may still be
+      // on the threadpool - freeContext() waits for in-flight operations
+      // (previously a use-after-free)
+      const pending = [
+        ...Array.from({ length: 8 }, async () => ctx.sendPacket(packet)),
+        ...Array.from({ length: 8 }, async () => ctx.receiveFrame(frame)),
+      ];
+      ctx.freeContext();
+
+      const results = await Promise.allSettled(pending);
+      for (const r of results) {
+        assert.notEqual(r.status, undefined);
+      }
+
+      frame.free();
+      packet.free();
+    });
   });
 
   describe('Options (setOption)', () => {
@@ -883,6 +978,34 @@ describe('CodecContext', () => {
       assert.ok(ret < 0); // Should be an error
 
       packet.free();
+    });
+
+    it('should return error for mismatched audio frame in sendFrameSync', () => {
+      const codec = Codec.findEncoder(AV_CODEC_ID_PCM_S16LE);
+      assert.ok(codec);
+
+      ctx.allocContext3(codec);
+      ctx.sampleFormat = AV_SAMPLE_FMT_S16;
+      ctx.sampleRate = 48000;
+      ctx.channelLayout = AV_CHANNEL_LAYOUT_STEREO;
+
+      const openRet = ctx.open2Sync(codec, null);
+      assert.equal(openRet, 0);
+
+      // Frame with fewer channels than the encoder expects
+      const frame = new Frame();
+      frame.alloc();
+      frame.format = AV_SAMPLE_FMT_S16;
+      frame.sampleRate = 48000;
+      frame.nbSamples = 1024;
+      frame.channelLayout = AV_CHANNEL_LAYOUT_MONO;
+      assert.equal(frame.getBuffer(), 0);
+
+      // Must return a negative error code instead of crashing inside FFmpeg
+      const ret = ctx.sendFrameSync(frame);
+      assert.ok(ret < 0);
+
+      frame.free();
     });
 
     it('should handle very large dimensions', () => {

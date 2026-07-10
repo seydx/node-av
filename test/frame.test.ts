@@ -16,6 +16,7 @@ import {
   AV_PIX_FMT_RGB24,
   AV_PIX_FMT_VIDEOTOOLBOX,
   AV_PIX_FMT_YUV420P,
+  AV_PIX_FMT_YUVA420P,
   AV_SAMPLE_FMT_FLT,
   AV_SAMPLE_FMT_FLTP,
   AV_SAMPLE_FMT_S16,
@@ -1199,6 +1200,104 @@ describe('Frame', () => {
         }
       }
       assert.equal(frames, 2, 'decoded two frames');
+    });
+  });
+
+  describe('Memory Safety', () => {
+    function allocVideoFrame(target: Frame, format = AV_PIX_FMT_YUV420P): void {
+      target.alloc();
+      target.width = 64;
+      target.height = 48;
+      target.format = format;
+      assert.equal(target.getBuffer(), 0, 'Should allocate frame buffer');
+    }
+
+    it('fromBuffer copies the source buffer (video)', () => {
+      allocVideoFrame(frame, AV_PIX_FMT_RGB24);
+
+      const raw = Buffer.alloc(64 * 48 * 3, 0xaa);
+      assert.ok(frame.fromBuffer(raw) >= 0, 'fromBuffer should succeed');
+
+      // Mutating the source afterwards must not affect the frame (proves the
+      // frame owns a copy rather than aliasing the JS buffer).
+      raw.fill(0x55);
+
+      const data = frame.data;
+      assert.ok(data?.[0], 'frame has data');
+      assert.equal(data[0][0], 0xaa, 'frame data is unaffected by source mutation');
+      assert.equal(data[0][data[0].length - 1], 0xaa, 'entire plane is unaffected');
+    });
+
+    it('fromBuffer allocates frame buffers when missing (video)', () => {
+      frame.alloc();
+      frame.width = 64;
+      frame.height = 48;
+      frame.format = AV_PIX_FMT_RGB24;
+      // No getBuffer()/allocBuffer() on purpose
+
+      const raw = Buffer.alloc(64 * 48 * 3, 0x33);
+      assert.ok(frame.fromBuffer(raw) >= 0, 'fromBuffer allocates and copies');
+
+      const data = frame.data;
+      assert.ok(data?.[0], 'frame has data');
+      assert.equal(data[0][0], 0x33, 'copied bytes are readable');
+    });
+
+    it('data views stay valid after unref (pinned by their buffer ref)', () => {
+      allocVideoFrame(frame);
+      const data = frame.data;
+      assert.ok(data?.[0], 'frame has data');
+      const view = data[0];
+      view.fill(0x42);
+
+      frame.unref();
+
+      // The old view pins its backing buffer, so reading it must return the
+      // old bytes instead of touching freed heap.
+      assert.equal(view[0], 0x42, 'old view still reads its pinned bytes');
+      assert.equal(view[view.length - 1], 0x42, 'entire old view remains readable');
+
+      // Refill; new accesses hand out fresh views over the new buffers.
+      frame.width = 64;
+      frame.height = 48;
+      frame.format = AV_PIX_FMT_YUV420P;
+      assert.equal(frame.getBuffer(), 0);
+      const fresh = frame.data;
+      assert.ok(fresh?.[0], 'refilled frame has data');
+      assert.notStrictEqual(fresh[0], view, 'refill produces a fresh view');
+    });
+
+    it('extendedData views stay valid after free', () => {
+      allocVideoFrame(frame);
+      const ext = frame.extendedData;
+      assert.ok(ext?.[0], 'frame has extended data');
+      const view = ext[0];
+      view.fill(0x24);
+
+      frame.free();
+
+      assert.equal(view[0], 0x24, 'old view still reads its pinned bytes');
+    });
+
+    it('newSideData view stays valid after unref', () => {
+      frame.alloc();
+      const sd = frame.newSideData(AV_FRAME_DATA_STEREO3D, 16);
+      sd.writeUInt32LE(0xdeadbeef, 0);
+
+      frame.unref();
+
+      assert.equal(sd.readUInt32LE(0), 0xdeadbeef, 'side data view is pinned');
+    });
+
+    it('sizes the alpha plane by full height in extendedData (YUVA)', () => {
+      allocVideoFrame(frame, AV_PIX_FMT_YUVA420P);
+
+      const data = frame.data;
+      const ext = frame.extendedData;
+      assert.ok(data?.[3], 'YUVA frame has an alpha plane in data');
+      assert.ok(ext?.[3], 'YUVA frame has an alpha plane in extendedData');
+      assert.equal(ext[3].length, data[3].length, 'alpha plane sizing matches the data getter (full height)');
+      assert.ok(ext[3].length > ext[1].length, 'alpha plane is larger than the subsampled chroma planes');
     });
   });
 });

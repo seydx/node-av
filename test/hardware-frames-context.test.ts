@@ -320,6 +320,70 @@ describe('HardwareFramesContext', () => {
         assert.ok(true, 'No hardware acceleration available');
       }
     });
+
+    it('keeps wrapped contexts valid after the owner drops them', () => {
+      const frames = new HardwareFramesContext();
+      const device = new HardwareDeviceContext();
+      const types = HardwareDeviceContext.iterateTypes();
+
+      if (types.length > 0) {
+        const ret = device.create(types[0], null, null);
+        if (ret === 0) {
+          frames.alloc(device);
+
+          // Configure and initialize
+          const typeName = HardwareDeviceContext.getTypeName(types[0]);
+          if (typeName === 'videotoolbox') {
+            frames.format = AV_PIX_FMT_VIDEOTOOLBOX;
+          } else if (typeName === 'cuda') {
+            frames.format = AV_PIX_FMT_CUDA;
+          } else if (typeName === 'vaapi') {
+            frames.format = AV_PIX_FMT_VAAPI;
+          } else {
+            frames.format = AV_PIX_FMT_NV12;
+          }
+          frames.swFormat = AV_PIX_FMT_YUV420P;
+          frames.width = 640;
+          frames.height = 480;
+          frames.initialPoolSize = 4;
+
+          const initRet = frames.init();
+          if (initRet === 0) {
+            const frame = new Frame();
+            frame.alloc();
+
+            if (frames.getBuffer(frame) === 0) {
+              // The wrapper must hold its own reference on the frames context
+              // (not borrow the frame's), so it survives frame.unref().
+              const held = frame.hwFramesCtx;
+              assert.ok(held, 'hardware frame exposes its frames context');
+
+              // Same for the device context wrapped through deviceRef.
+              const heldDevice = held.deviceRef;
+              assert.ok(heldDevice, 'frames context exposes its device context');
+
+              frame.unref();
+
+              assert.equal(held.width, 640, 'frames wrapper remains valid after the frame released its ref');
+              assert.equal(held.height, 480, 'frames wrapper reads the context, not freed memory');
+              assert.equal(typeof heldDevice.type, 'number', 'device wrapper remains valid');
+
+              // Freeing the held wrappers drops only their own references.
+              held.free();
+              heldDevice.free();
+              assert.equal(frames.width, 640, 'owner context is unaffected by freeing the wrappers');
+            }
+
+            frame.free();
+          }
+
+          frames.free();
+          device.free();
+        }
+      } else {
+        assert.ok(true, 'No hardware acceleration available');
+      }
+    });
   });
 
   describe('Transfer Operations', () => {

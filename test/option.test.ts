@@ -147,6 +147,41 @@ describe('Option API', () => {
     });
   });
 
+  describe('Type Inference and Int64 Precision', () => {
+    it('should infer the option type when none is given', () => {
+      const codec = Codec.findEncoderByName(FF_ENCODER_MPEG4);
+      assert.ok(codec, 'Should find mpeg4 encoder');
+
+      const ctx = new CodecContext();
+      ctx.allocContext3(codec);
+
+      // 'g' (GOP size) is an INT option - without an explicit type the option's
+      // declared type is looked up and the numeric value converted accordingly
+      const ret = ctx.setOption('g', 120);
+      assert.equal(ret, 0, 'Should set option without explicit type');
+
+      const gop = ctx.getOption('g', AV_OPT_TYPE_INT);
+      assert.equal(gop, 120, 'Inferred set should round-trip');
+
+      ctx.freeContext();
+    });
+
+    it('should keep full int64 precision above 2^53', () => {
+      const ctx = new FormatContext();
+      const ret = ctx.allocOutputContext2(null, 'mp4', null);
+      assert.equal(ret, 0, 'Should allocate output context');
+
+      const huge = (1n << 60n) + 3n; // Not representable as a double
+      const ret1 = ctx.setOption('max_interleave_delta', huge, AV_OPT_TYPE_INT64);
+      assert.equal(ret1, 0, 'Should set int64 option');
+
+      const value = ctx.getOption('max_interleave_delta', AV_OPT_TYPE_INT64);
+      assert.equal(value, huge, 'Should round-trip exactly (a double-based getter truncates above 2^53)');
+
+      ctx.freeContext();
+    });
+  });
+
   describe('FilterContext Options', () => {
     it('should set options on filter context', () => {
       const graph = new FilterGraph();

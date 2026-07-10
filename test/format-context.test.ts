@@ -5,10 +5,12 @@ import { after, afterEach, beforeEach, describe, it } from 'node:test';
 import {
   AV_CODEC_ID_H264,
   AV_CODEC_ID_PCM_S16LE,
+  AVERROR_EXIT,
   AV_SAMPLE_FMT_S16,
   AVFLAG_NONE,
   AVFMT_FLAG_GENPTS,
   AVFMT_FLAG_IGNIDX,
+  AV_DISPOSITION_ATTACHED_PIC,
   AVIO_FLAG_WRITE,
   AVMEDIA_TYPE_AUDIO,
   AVMEDIA_TYPE_VIDEO,
@@ -105,6 +107,34 @@ describe('FormatContext', () => {
       assert.ok(testCtx);
       // testCtx will be automatically disposed when leaving scope
     });
+
+    it('should fully free an output context on async dispose', async () => {
+      const disposeFile = getOutputFile('dispose-output.mp4');
+      const testCtx = new FormatContext();
+
+      let ret = testCtx.allocOutputContext2(null, null, disposeFile);
+      assert.equal(ret, 0);
+
+      ret = await testCtx.openOutput();
+      assert.equal(ret, 0);
+
+      await testCtx[Symbol.asyncDispose]();
+
+      // Context is freed: properties fall back to defaults
+      assert.equal(testCtx.nbStreams, 0);
+      assert.equal(testCtx.url, null);
+      assert.equal(testCtx.oformat, null);
+
+      // Double dispose and manual free must be no-ops (no double-free)
+      await testCtx[Symbol.asyncDispose]();
+      testCtx.freeContext();
+
+      try {
+        if (existsSync(disposeFile)) unlinkSync(disposeFile);
+      } catch {
+        // Ignore cleanup errors
+      }
+    });
   });
 
   describe('Input Operations', () => {
@@ -148,6 +178,61 @@ describe('FormatContext', () => {
       ctx.openInputSync(inputVideoFile, null, null);
       const ret = ctx.findStreamInfoSync(null);
       assert.equal(ret, 0);
+    });
+
+    it('should find stream info with per-stream options array (async)', async () => {
+      await ctx.openInput(inputVideoFile, null, null);
+      // video.mp4 has a video and an audio stream
+      assert.ok(ctx.nbStreams >= 2);
+
+      const videoOptions = Dictionary.fromObject({ threads: '1' });
+      const audioOptions = Dictionary.fromObject({ threads: '1' });
+
+      const ret = await ctx.findStreamInfo([videoOptions, audioOptions]);
+      assert.ok(ret >= 0);
+      assert.ok(ctx.nbStreams >= 2);
+      assert.equal(ctx.streams.length, ctx.nbStreams);
+
+      // Options are copied internally, the wrappers stay owned by us
+      videoOptions.free();
+      audioOptions.free();
+    });
+
+    it('should find stream info with per-stream options array (sync)', () => {
+      ctx.openInputSync(inputVideoFile, null, null);
+      // video.mp4 has a video and an audio stream
+      assert.ok(ctx.nbStreams >= 2);
+
+      const videoOptions = Dictionary.fromObject({ threads: '1' });
+      const audioOptions = Dictionary.fromObject({ threads: '1' });
+
+      const ret = ctx.findStreamInfoSync([videoOptions, audioOptions]);
+      assert.ok(ret >= 0);
+      assert.ok(ctx.nbStreams >= 2);
+      assert.equal(ctx.streams.length, ctx.nbStreams);
+
+      videoOptions.free();
+      audioOptions.free();
+    });
+
+    it('should find stream info with fewer options than streams (sync)', () => {
+      ctx.openInputSync(inputVideoFile, null, null);
+      assert.ok(ctx.nbStreams >= 2);
+
+      // Missing entries are treated as no options for that stream
+      const options = Dictionary.fromObject({ threads: '1' });
+      const ret = ctx.findStreamInfoSync([options]);
+      assert.ok(ret >= 0);
+      options.free();
+    });
+
+    it('should reject non-array non-null options for find stream info', async () => {
+      await ctx.openInput(inputVideoFile, null, null);
+
+      // Bypass the TS layer to exercise the native argument validation
+      const native = ctx.getNative() as any;
+      assert.throws(() => native.findStreamInfoSync('invalid'), TypeError);
+      assert.throws(() => native.findStreamInfo('invalid'), TypeError);
     });
 
     it('should read packets (async)', async () => {
@@ -194,6 +279,24 @@ describe('FormatContext', () => {
       const ret = ctx.seekFrameSync(-1, 0n, AVFLAG_NONE);
       // Seeking should work for mp4
       assert.equal(ret, 0);
+    });
+
+    it('should seek file with bounds (async)', async () => {
+      await ctx.openInput(inputVideoFile, null, null);
+      await ctx.findStreamInfo(null);
+
+      // Stream index -1 uses AV_TIME_BASE units
+      const ret = await ctx.seekFile(-1, 0n, 0n, 1000000n, AVFLAG_NONE);
+      assert.ok(ret >= 0);
+    });
+
+    it('should seek file with bounds (sync)', () => {
+      ctx.openInputSync(inputVideoFile, null, null);
+      ctx.findStreamInfoSync(null);
+
+      // Stream index -1 uses AV_TIME_BASE units
+      const ret = ctx.seekFileSync(-1, 0n, 0n, 1000000n, AVFLAG_NONE);
+      assert.ok(ret >= 0);
     });
 
     it('should close input (async)', async () => {
@@ -535,6 +638,47 @@ describe('FormatContext', () => {
     });
   });
 
+  describe('Metadata and Attached Pictures', () => {
+    it('should return metadata as a copy', () => {
+      const ret = ctx.allocOutputContext2(null, 'mp4', null);
+      assert.equal(ret, 0, 'Should allocate output context');
+
+      ctx.metadata = Dictionary.fromObject({ title: 'original' });
+      const copy = ctx.metadata;
+      assert.ok(copy, 'Should return metadata');
+      assert.equal(copy.get('title'), 'original');
+
+      // The getter returns an av_dict_copy - mutations must not affect the context
+      copy.set('title', 'mutated');
+      assert.equal(ctx.metadata?.get('title'), 'original', 'Mutating the returned copy must not affect the context');
+
+      // Assigning the dictionary back applies the change
+      ctx.metadata = copy;
+      assert.equal(ctx.metadata?.get('title'), 'mutated', 'Assigning back applies changes');
+    });
+
+    it('should expose attached pictures as functional packets', async () => {
+      const ret = await ctx.openInput(getInputFile('audio-cover.mp3'), null, null);
+      assert.equal(ret, 0, 'Should open input with cover art');
+      const ret2 = await ctx.findStreamInfo(null);
+      assert.ok(ret2 >= 0, 'Should find stream info');
+
+      const picStream = (ctx.streams ?? []).find((s) => (s.disposition & AV_DISPOSITION_ATTACHED_PIC) !== 0);
+      assert.ok(picStream, 'Should find attached picture stream');
+
+      const pic = picStream.attachedPic;
+      assert.ok(pic, 'Should return attached picture packet');
+      assert.ok(pic.size > 0, 'Attached picture has data');
+
+      // Previously the raw native object was returned - wrapper methods threw TypeError
+      const clone = pic.clone();
+      assert.ok(clone, 'Wrapper methods must work on the returned packet');
+      clone.free();
+
+      await ctx.closeInput();
+    });
+  });
+
   describe('Properties', () => {
     beforeEach(() => {
       ctx.allocOutputContext2(null, null, testFile);
@@ -791,6 +935,27 @@ describe('FormatContext', () => {
       assert.ok(Array.isArray(streams));
       assert.equal(streams.length, 0);
     });
+
+    it('should handle closeInputSync on a never-opened context', () => {
+      // Without any allocation - should be a no-op
+      ctx.closeInputSync();
+
+      // Allocated but never opened - must free and return promptly, no crash
+      ctx.allocContext();
+      ctx.closeInputSync();
+
+      // Properties should return sensible defaults after close
+      assert.equal(ctx.nbStreams, 0);
+      assert.deepEqual(ctx.streams, []);
+      assert.equal(ctx.url, null);
+
+      // Closing again must not crash (context pointer was cleared)
+      ctx.closeInputSync();
+
+      // Context can be reused afterwards
+      const ret = ctx.openInputSync(inputVideoFile, null, null);
+      assert.equal(ret, 0);
+    });
   });
 
   describe('Async Operations', () => {
@@ -853,6 +1018,51 @@ describe('FormatContext', () => {
       assert.ok(ret <= 0);
 
       // ctx.closeOutput();
+      packet.free();
+    });
+
+    it('should not crash when closeInput()/freeContext() race in-flight readFrame calls', { timeout: 10000 }, async () => {
+      await ctx.openInput(inputVideoFile, null, null);
+      await ctx.findStreamInfo(null);
+
+      const packets = Array.from({ length: 8 }, () => {
+        const packet = new Packet();
+        packet.alloc();
+        return packet;
+      });
+
+      // Queue a burst of async reads, then close and free while they may
+      // still be on the threadpool - the close paths interrupt blocked
+      // readers and wait for in-flight operations (previously a
+      // use-after-free)
+      const pending = packets.map(async (packet) => ctx.readFrame(packet));
+      const closing = ctx.closeInput();
+      ctx.freeContext();
+
+      // Every read must settle (0, EOF or AVERROR_EXIT) without crashing
+      const results = await Promise.allSettled([...pending, closing]);
+      for (const r of results) {
+        assert.notEqual(r.status, undefined);
+      }
+
+      for (const packet of packets) {
+        packet.free();
+      }
+    });
+
+    it('should abort readFrame after interrupt()', async () => {
+      await ctx.openInput(inputVideoFile, null, null);
+      await ctx.findStreamInfo(null);
+
+      const packet = new Packet();
+      packet.alloc();
+
+      // interrupt() flags the context; the pending read must observe it and
+      // bail out with AVERROR_EXIT instead of returning a packet
+      ctx.interrupt();
+      const ret = await ctx.readFrame(packet);
+      assert.equal(ret, AVERROR_EXIT);
+
       packet.free();
     });
   });

@@ -1,7 +1,9 @@
 import assert from 'node:assert';
+import { once } from 'node:events';
+import { Readable, Writable } from 'node:stream';
 import { describe, it } from 'node:test';
 
-import { AVSEEK_CUR, AVSEEK_END, AVSEEK_SET, IOStream } from '../src/index.js';
+import { AVERROR_EIO, AVSEEK_CUR, AVSEEK_END, AVSEEK_SET, IOStream } from '../src/index.js';
 
 describe('IOStream', () => {
   describe('create with Buffer', () => {
@@ -88,6 +90,90 @@ describe('IOStream', () => {
       // because we only check for 'read' property to identify IOInputCallbacks
       const invalidCallbacks = { seek: () => 0n } as any;
       assert.throws(() => IOStream.create(invalidCallbacks), /Invalid input type/);
+    });
+  });
+
+  describe('create with Readable stream', () => {
+    it('should surface a stream error as a read error, not EOF', { timeout: 5000 }, async () => {
+      const readable = new Readable({ read() {} });
+      const ioContext = IOStream.create(readable);
+
+      try {
+        readable.push(Buffer.from('0123456789'));
+
+        // Data pushed before the error still drains normally
+        const first = await ioContext.read(4);
+        assert.ok(Buffer.isBuffer(first), 'Should read buffered data');
+
+        readable.destroy(new Error('simulated stream failure'));
+        // Not events.once(): that would reject as soon as 'error' fires
+        await new Promise<void>((resolve) => readable.once('close', () => resolve()));
+
+        // Drain whatever is still buffered, then expect the error code
+        let result: Buffer | number;
+        do {
+          result = await ioContext.read(64);
+        } while (Buffer.isBuffer(result) && result.length > 0);
+
+        assert.equal(result, AVERROR_EIO, 'Should return AVERROR_EIO for a failed stream, not clean EOF');
+      } finally {
+        // Leaked callback contexts would keep the process alive
+        ioContext.freeContext();
+      }
+    });
+
+    it('should remove stream listeners when the I/O context is freed early', () => {
+      const readable = new Readable({ read() {} });
+      const ioContext = IOStream.create(readable);
+
+      assert.ok(readable.listenerCount('readable') > 0, 'Should attach listeners on create');
+
+      // Free without ever reaching EOF (e.g. demuxer closed early)
+      ioContext.freeContext();
+
+      assert.equal(readable.listenerCount('readable'), 0, 'readable listener should be removed');
+      assert.equal(readable.listenerCount('end'), 0, 'end listener should be removed');
+      assert.equal(readable.listenerCount('error'), 0, 'error listener should be removed');
+      assert.equal(readable.listenerCount('close'), 0, 'close listener should be removed');
+    });
+  });
+
+  describe('createOutput with Writable stream', () => {
+    it('should fail the write instead of hanging when the stream is destroyed while awaiting drain', { timeout: 5000 }, async () => {
+      const writable = new Writable({
+        highWaterMark: 1,
+        write() {
+          // Never call the callback - a stalled sink keeps backpressure active
+        },
+      });
+
+      const ioContext = IOStream.createOutput(writable, { bufferSize: 16 });
+
+      // Larger than bufferSize, so avio writes through and parks on 'drain'
+      const writePromise = ioContext.write(Buffer.alloc(1024));
+      setTimeout(() => writable.destroy(), 50);
+      await writePromise;
+
+      assert.ok(ioContext.error < 0, 'IO context should record a write error after destroy');
+
+      ioContext.freeContext();
+    });
+
+    it('should fail writes to an already destroyed stream', async () => {
+      const writable = new Writable({
+        write(_chunk, _encoding, callback) {
+          callback();
+        },
+      });
+      writable.destroy();
+      await once(writable, 'close');
+
+      const ioContext = IOStream.createOutput(writable, { bufferSize: 16 });
+
+      await ioContext.write(Buffer.alloc(64));
+      assert.ok(ioContext.error < 0, 'Write to a destroyed stream should record an error');
+
+      ioContext.freeContext();
     });
   });
 
