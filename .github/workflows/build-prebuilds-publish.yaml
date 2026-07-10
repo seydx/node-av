@@ -7,6 +7,9 @@ on:
 jobs:
   build:
     uses: ./.github/workflows/build-prebuilds.yaml
+    permissions:
+      contents: read
+      actions: write
 
   package-and-publish:
     name: "Package and Publish"
