@@ -9,7 +9,7 @@
   "os": ["OS_VALUE"],
   "cpu": ["CPU_VALUE"],
   "engines": {
-    "node": "^18.17.0 || ^20.3.0 || >=21.0.0"
+    "node": ">=22.18.0"
   },
   "bugs": {
     "url": "https://github.com/seydx/node-av/issues"
