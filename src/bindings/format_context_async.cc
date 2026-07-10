@@ -68,6 +68,10 @@ Napi::Value FormatContext::OpenInputAsync(const Napi::CallbackInfo& info) {
 
   FormatContext* self = this;
   return PromiseWorker::Run(env, &async_ops_, {info.This().As<Napi::Object>()}, [self, url, fmt, optionsHolder]() {
+    std::unique_lock<std::shared_timed_mutex> lifecycle(self->ctx_mutex_, std::defer_lock);
+    if (!lifecycle.try_lock_for(std::chrono::seconds(3))) {
+      return AVERROR(EBUSY);
+    }
     // If we already have a context (e.g., for custom I/O), use it
     AVFormatContext* ctx = self->ctx_;
 
@@ -120,6 +124,9 @@ Napi::Value FormatContext::FindStreamInfoAsync(const Napi::CallbackInfo& info) {
 
   FormatContext* self = this;
   return PromiseWorker::Run(env, &async_ops_, {info.This().As<Napi::Object>()}, [self, optionsHolder]() {
+    // Serializes FFmpeg calls on this context and pins it against close/free
+    // - AVFormatContext is not safe for concurrent use (see ctx_mutex_)
+    std::unique_lock<std::shared_timed_mutex> lifecycle(self->ctx_mutex_);
     if (!self->ctx_) {
       return AVERROR(EINVAL);
     }
@@ -150,6 +157,9 @@ Napi::Value FormatContext::ReadFrameAsync(const Napi::CallbackInfo& info) {
   return PromiseWorker::Run(
       env, &async_ops_, {info.This().As<Napi::Object>(), info[0].As<Napi::Object>()},
       [self, packet]() {
+        // Serializes FFmpeg calls on this context and pins it against close/free
+        // - AVFormatContext is not safe for concurrent use (see ctx_mutex_)
+        std::unique_lock<std::shared_timed_mutex> lifecycle(self->ctx_mutex_);
         // Check interrupt flag BEFORE calling av_read_frame()
         // The interrupt callback is only invoked during blocking I/O operations.
         // If packets are already buffered, av_read_frame() won't block and the
@@ -198,6 +208,9 @@ Napi::Value FormatContext::SeekFrameAsync(const Napi::CallbackInfo& info) {
 
   FormatContext* self = this;
   return PromiseWorker::Run(env, &async_ops_, {info.This().As<Napi::Object>()}, [self, stream_index, timestamp, flags]() {
+    // Serializes FFmpeg calls on this context and pins it against close/free
+    // - AVFormatContext is not safe for concurrent use (see ctx_mutex_)
+    std::unique_lock<std::shared_timed_mutex> lifecycle(self->ctx_mutex_);
     if (!self->ctx_) {
       return AVERROR(EINVAL);
     }
@@ -222,6 +235,9 @@ Napi::Value FormatContext::SeekFileAsync(const Napi::CallbackInfo& info) {
 
   FormatContext* self = this;
   return PromiseWorker::Run(env, &async_ops_, {info.This().As<Napi::Object>()}, [self, stream_index, min_ts, ts, max_ts, flags]() {
+    // Serializes FFmpeg calls on this context and pins it against close/free
+    // - AVFormatContext is not safe for concurrent use (see ctx_mutex_)
+    std::unique_lock<std::shared_timed_mutex> lifecycle(self->ctx_mutex_);
     if (!self->ctx_) {
       return AVERROR(EINVAL);
     }
@@ -257,6 +273,9 @@ Napi::Value FormatContext::WriteHeaderAsync(const Napi::CallbackInfo& info) {
 
   FormatContext* self = this;
   return PromiseWorker::Run(env, &async_ops_, {info.This().As<Napi::Object>()}, [self, optionsHolder]() {
+    // Serializes FFmpeg calls on this context and pins it against close/free
+    // - AVFormatContext is not safe for concurrent use (see ctx_mutex_)
+    std::unique_lock<std::shared_timed_mutex> lifecycle(self->ctx_mutex_);
     AVFormatContext* ctx = self->ctx_;
     if (!ctx) {
       return AVERROR(EINVAL);
@@ -295,6 +314,9 @@ Napi::Value FormatContext::WriteFrameAsync(const Napi::CallbackInfo& info) {
 
   FormatContext* self = this;
   return PromiseWorker::Run(env, &async_ops_, std::move(pins), [self, packet]() {
+    // Serializes FFmpeg calls on this context and pins it against close/free
+    // - AVFormatContext is not safe for concurrent use (see ctx_mutex_)
+    std::unique_lock<std::shared_timed_mutex> lifecycle(self->ctx_mutex_);
     if (!self->ctx_) {
       return AVERROR(EINVAL);
     }
@@ -321,6 +343,9 @@ Napi::Value FormatContext::InterleavedWriteFrameAsync(const Napi::CallbackInfo& 
 
   FormatContext* self = this;
   return PromiseWorker::Run(env, &async_ops_, std::move(pins), [self, packet]() {
+    // Serializes FFmpeg calls on this context and pins it against close/free
+    // - AVFormatContext is not safe for concurrent use (see ctx_mutex_)
+    std::unique_lock<std::shared_timed_mutex> lifecycle(self->ctx_mutex_);
     if (!self->ctx_) {
       return AVERROR(EINVAL);
     }
@@ -333,6 +358,9 @@ Napi::Value FormatContext::WriteTrailerAsync(const Napi::CallbackInfo& info) {
 
   FormatContext* self = this;
   return PromiseWorker::Run(env, &async_ops_, {info.This().As<Napi::Object>()}, [self]() {
+    // Serializes FFmpeg calls on this context and pins it against close/free
+    // - AVFormatContext is not safe for concurrent use (see ctx_mutex_)
+    std::unique_lock<std::shared_timed_mutex> lifecycle(self->ctx_mutex_);
     if (!self->ctx_) {
       return AVERROR(EINVAL);
     }
@@ -362,6 +390,9 @@ Napi::Value FormatContext::OpenOutputAsync(const Napi::CallbackInfo& info) {
 
   FormatContext* self = this;
   return PromiseWorker::Run(env, &async_ops_, {info.This().As<Napi::Object>()}, [self]() {
+    // Serializes FFmpeg calls on this context and pins it against close/free
+    // - AVFormatContext is not safe for concurrent use (see ctx_mutex_)
+    std::unique_lock<std::shared_timed_mutex> lifecycle(self->ctx_mutex_);
     AVFormatContext* ctx = self->ctx_;
     if (!ctx || !ctx->oformat || !ctx->url) {
       return AVERROR(EINVAL);
@@ -398,6 +429,10 @@ Napi::Value FormatContext::CloseOutputAsync(const Napi::CallbackInfo& info) {
   return PromiseWorker::Run(
       env, &async_ops_, {info.This().As<Napi::Object>()},
       [self]() {
+        std::unique_lock<std::shared_timed_mutex> lifecycle(self->ctx_mutex_, std::defer_lock);
+        if (!lifecycle.try_lock_for(std::chrono::seconds(3))) {
+          return AVERROR(EBUSY);
+        }
         AVFormatContext* ctx = self->ctx_;
         if (ctx && ctx->pb) {
           if (!ctx->oformat || !(ctx->oformat->flags & AVFMT_NOFILE)) {
@@ -445,6 +480,14 @@ Napi::Value FormatContext::CloseInputAsync(const Napi::CallbackInfo& info) {
           if (wait_count++ > 100) {
             break;
           }
+        }
+
+        // Exclusive hold on the context lifetime: a reader that slipped past
+        // the counters still pins ctx_ via its shared lock, so we either wait
+        // for it or fail with EBUSY - never free underneath it
+        std::unique_lock<std::shared_timed_mutex> lifecycle(self->ctx_mutex_, std::defer_lock);
+        if (!lifecycle.try_lock_for(std::chrono::seconds(3))) {
+          return AVERROR(EBUSY);
         }
 
         AVFormatContext* ctx = self->ctx_;
@@ -509,6 +552,10 @@ Napi::Value FormatContext::DisposeAsync(const Napi::CallbackInfo& info) {
     return PromiseWorker::Run(
         env, &async_ops_, {info.This().As<Napi::Object>()},
         [self]() {
+          std::unique_lock<std::shared_timed_mutex> lifecycle(self->ctx_mutex_, std::defer_lock);
+          if (!lifecycle.try_lock_for(std::chrono::seconds(3))) {
+            return AVERROR(EBUSY);
+          }
           AVFormatContext* ctx = self->ctx_;
           if (!ctx) {
             // Already freed (e.g., user called closeOutput() + freeContext() first)
@@ -559,6 +606,9 @@ Napi::Value FormatContext::FlushAsync(const Napi::CallbackInfo& info) {
   return PromiseWorker::Run(
       env, &async_ops_, {info.This().As<Napi::Object>()},
       [self]() {
+        // Serializes FFmpeg calls on this context and pins it against close/free
+        // - AVFormatContext is not safe for concurrent use (see ctx_mutex_)
+        std::unique_lock<std::shared_timed_mutex> lifecycle(self->ctx_mutex_);
         if (self->ctx_ && self->ctx_->pb) {
           avio_flush(self->ctx_->pb);
         }
@@ -602,6 +652,9 @@ Napi::Value FormatContext::SendRTSPPacketAsync(const Napi::CallbackInfo& info) {
 
   FormatContext* self = this;
   return PromiseWorker::Run(env, &async_ops_, {info.This().As<Napi::Object>()}, [self, stream_index, rtpData]() {
+    // Serializes FFmpeg calls on this context and pins it against close/free
+    // - AVFormatContext is not safe for concurrent use (see ctx_mutex_)
+    std::unique_lock<std::shared_timed_mutex> lifecycle(self->ctx_mutex_);
     if (!self->ctx_) {
       return AVERROR(EINVAL);
     }

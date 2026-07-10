@@ -11,6 +11,13 @@ namespace ffmpeg {
 
 Napi::Value FormatContext::ReadFrameSync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
+  // Serializes FFmpeg calls on this context and pins it against close/free
+  // - AVFormatContext is not safe for concurrent use (see ctx_mutex_)
+  std::unique_lock<std::shared_timed_mutex> lifecycle(ctx_mutex_, std::defer_lock);
+  if (!lifecycle.try_lock_for(std::chrono::seconds(3))) {
+    Napi::Error::New(env, "FormatContext is busy: operation still in flight").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
 
   if (info.Length() < 1) {
     Napi::TypeError::New(env, "Packet required").ThrowAsJavaScriptException();
@@ -55,6 +62,13 @@ Napi::Value FormatContext::ReadFrameSync(const Napi::CallbackInfo& info) {
 
 Napi::Value FormatContext::WriteFrameSync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
+  // Serializes FFmpeg calls on this context and pins it against close/free
+  // - AVFormatContext is not safe for concurrent use (see ctx_mutex_)
+  std::unique_lock<std::shared_timed_mutex> lifecycle(ctx_mutex_, std::defer_lock);
+  if (!lifecycle.try_lock_for(std::chrono::seconds(3))) {
+    Napi::Error::New(env, "FormatContext is busy: operation still in flight").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
 
   if (!ctx_) {
     Napi::Error::New(env, "FormatContext not initialized").ThrowAsJavaScriptException();
@@ -78,6 +92,13 @@ Napi::Value FormatContext::WriteFrameSync(const Napi::CallbackInfo& info) {
 
 Napi::Value FormatContext::InterleavedWriteFrameSync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
+  // Serializes FFmpeg calls on this context and pins it against close/free
+  // - AVFormatContext is not safe for concurrent use (see ctx_mutex_)
+  std::unique_lock<std::shared_timed_mutex> lifecycle(ctx_mutex_, std::defer_lock);
+  if (!lifecycle.try_lock_for(std::chrono::seconds(3))) {
+    Napi::Error::New(env, "FormatContext is busy: operation still in flight").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
 
   if (!ctx_) {
     Napi::Error::New(env, "FormatContext not initialized").ThrowAsJavaScriptException();
@@ -101,6 +122,13 @@ Napi::Value FormatContext::InterleavedWriteFrameSync(const Napi::CallbackInfo& i
 
 Napi::Value FormatContext::OpenInputSync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
+  // Exclusive hold on the context lifetime (see ctx_mutex_) - fail with
+  // EBUSY instead of freeing/replacing the context under a threadpool op
+  std::unique_lock<std::shared_timed_mutex> lifecycle(ctx_mutex_, std::defer_lock);
+  if (!lifecycle.try_lock_for(std::chrono::seconds(3))) {
+    Napi::Error::New(env, "FormatContext is busy: operation still in flight").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
 
   // avformat_open_input() frees a pre-allocated context (custom I/O) on
   // failure - wait for in-flight async operations that may still use it
@@ -162,6 +190,13 @@ Napi::Value FormatContext::OpenInputSync(const Napi::CallbackInfo& info) {
 
 Napi::Value FormatContext::FindStreamInfoSync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
+  // Serializes FFmpeg calls on this context and pins it against close/free
+  // - AVFormatContext is not safe for concurrent use (see ctx_mutex_)
+  std::unique_lock<std::shared_timed_mutex> lifecycle(ctx_mutex_, std::defer_lock);
+  if (!lifecycle.try_lock_for(std::chrono::seconds(3))) {
+    Napi::Error::New(env, "FormatContext is busy: operation still in flight").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
 
   if (!ctx_) {
     Napi::Error::New(env, "FormatContext not initialized").ThrowAsJavaScriptException();
@@ -185,6 +220,13 @@ Napi::Value FormatContext::FindStreamInfoSync(const Napi::CallbackInfo& info) {
 
 Napi::Value FormatContext::SeekFrameSync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
+  // Serializes FFmpeg calls on this context and pins it against close/free
+  // - AVFormatContext is not safe for concurrent use (see ctx_mutex_)
+  std::unique_lock<std::shared_timed_mutex> lifecycle(ctx_mutex_, std::defer_lock);
+  if (!lifecycle.try_lock_for(std::chrono::seconds(3))) {
+    Napi::Error::New(env, "FormatContext is busy: operation still in flight").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
 
   if (!ctx_) {
     Napi::Error::New(env, "FormatContext not initialized").ThrowAsJavaScriptException();
@@ -209,6 +251,13 @@ Napi::Value FormatContext::SeekFrameSync(const Napi::CallbackInfo& info) {
 
 Napi::Value FormatContext::SeekFileSync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
+  // Serializes FFmpeg calls on this context and pins it against close/free
+  // - AVFormatContext is not safe for concurrent use (see ctx_mutex_)
+  std::unique_lock<std::shared_timed_mutex> lifecycle(ctx_mutex_, std::defer_lock);
+  if (!lifecycle.try_lock_for(std::chrono::seconds(3))) {
+    Napi::Error::New(env, "FormatContext is busy: operation still in flight").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
 
   if (!ctx_) {
     Napi::Error::New(env, "FormatContext not initialized").ThrowAsJavaScriptException();
@@ -235,6 +284,13 @@ Napi::Value FormatContext::SeekFileSync(const Napi::CallbackInfo& info) {
 
 Napi::Value FormatContext::WriteHeaderSync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
+  // Serializes FFmpeg calls on this context and pins it against close/free
+  // - AVFormatContext is not safe for concurrent use (see ctx_mutex_)
+  std::unique_lock<std::shared_timed_mutex> lifecycle(ctx_mutex_, std::defer_lock);
+  if (!lifecycle.try_lock_for(std::chrono::seconds(3))) {
+    Napi::Error::New(env, "FormatContext is busy: operation still in flight").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
 
   if (!ctx_) {
     Napi::Error::New(env, "FormatContext not initialized").ThrowAsJavaScriptException();
@@ -271,6 +327,13 @@ Napi::Value FormatContext::WriteHeaderSync(const Napi::CallbackInfo& info) {
 
 Napi::Value FormatContext::WriteTrailerSync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
+  // Serializes FFmpeg calls on this context and pins it against close/free
+  // - AVFormatContext is not safe for concurrent use (see ctx_mutex_)
+  std::unique_lock<std::shared_timed_mutex> lifecycle(ctx_mutex_, std::defer_lock);
+  if (!lifecycle.try_lock_for(std::chrono::seconds(3))) {
+    Napi::Error::New(env, "FormatContext is busy: operation still in flight").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
 
   if (!ctx_) {
     Napi::Error::New(env, "FormatContext not initialized").ThrowAsJavaScriptException();
@@ -321,6 +384,20 @@ Napi::Value FormatContext::CloseInputSync(const Napi::CallbackInfo& info) {
     }
   }
 
+  // Exclusive hold on the context lifetime: a reader that slipped past the
+  // counters still pins ctx_ via its shared lock - fail with EBUSY instead of
+  // freeing underneath it (see ctx_mutex_)
+  std::unique_lock<std::shared_timed_mutex> lifecycle(ctx_mutex_, std::defer_lock);
+  if (!lifecycle.try_lock_for(std::chrono::seconds(3))) {
+    Napi::Error::New(env, "FormatContext is busy: operation still in flight").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+
+  if (!ctx_) {
+    // Freed concurrently while waiting
+    return env.Undefined();
+  }
+
   // Clear our references
   if (ctx_->interrupt_callback.opaque == this) {
     ctx_->interrupt_callback.opaque = nullptr;
@@ -353,6 +430,13 @@ Napi::Value FormatContext::CloseInputSync(const Napi::CallbackInfo& info) {
 
 Napi::Value FormatContext::OpenOutputSync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
+  // Serializes FFmpeg calls on this context and pins it against close/free
+  // - AVFormatContext is not safe for concurrent use (see ctx_mutex_)
+  std::unique_lock<std::shared_timed_mutex> lifecycle(ctx_mutex_, std::defer_lock);
+  if (!lifecycle.try_lock_for(std::chrono::seconds(3))) {
+    Napi::Error::New(env, "FormatContext is busy: operation still in flight").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
 
   if (!ctx_) {
     Napi::Error::New(env, "FormatContext not initialized").ThrowAsJavaScriptException();
@@ -387,6 +471,13 @@ Napi::Value FormatContext::OpenOutputSync(const Napi::CallbackInfo& info) {
 
 Napi::Value FormatContext::CloseOutputSync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
+  // Exclusive hold on the context lifetime (see ctx_mutex_) - fail with
+  // EBUSY instead of freeing/replacing the context under a threadpool op
+  std::unique_lock<std::shared_timed_mutex> lifecycle(ctx_mutex_, std::defer_lock);
+  if (!lifecycle.try_lock_for(std::chrono::seconds(3))) {
+    Napi::Error::New(env, "FormatContext is busy: operation still in flight").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
 
   if (!ctx_) {
     return env.Undefined();
@@ -425,6 +516,13 @@ Napi::Value FormatContext::CloseOutputSync(const Napi::CallbackInfo& info) {
 
 Napi::Value FormatContext::FlushSync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
+  // Serializes FFmpeg calls on this context and pins it against close/free
+  // - AVFormatContext is not safe for concurrent use (see ctx_mutex_)
+  std::unique_lock<std::shared_timed_mutex> lifecycle(ctx_mutex_, std::defer_lock);
+  if (!lifecycle.try_lock_for(std::chrono::seconds(3))) {
+    Napi::Error::New(env, "FormatContext is busy: operation still in flight").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
 
   if (!ctx_) {
     Napi::Error::New(env, "Format context not allocated").ThrowAsJavaScriptException();
@@ -440,6 +538,13 @@ Napi::Value FormatContext::FlushSync(const Napi::CallbackInfo& info) {
 
 Napi::Value FormatContext::SendRTSPPacketSync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
+  // Serializes FFmpeg calls on this context and pins it against close/free
+  // - AVFormatContext is not safe for concurrent use (see ctx_mutex_)
+  std::unique_lock<std::shared_timed_mutex> lifecycle(ctx_mutex_, std::defer_lock);
+  if (!lifecycle.try_lock_for(std::chrono::seconds(3))) {
+    Napi::Error::New(env, "FormatContext is busy: operation still in flight").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
 
   if (!ctx_) {
     Napi::Error::New(env, "Format context not allocated").ThrowAsJavaScriptException();

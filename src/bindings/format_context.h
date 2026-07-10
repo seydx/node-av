@@ -5,6 +5,7 @@
 #include <atomic>
 #include <mutex>
 #include <memory>
+#include <shared_mutex>
 #include <vector>
 #include "common.h"
 #include "promise_worker.h"
@@ -215,6 +216,15 @@ private:
   // wait on it (GuardAsyncOps) so they cannot free the AVFormatContext while
   // a threadpool operation still uses it.
   AsyncOpCounter async_ops_;
+
+  // Serializes AVFormatContext lifetime against concurrent use. The counters
+  // above are check-then-act (a close can slip between a worker's ctx_ null
+  // check and the FFmpeg call - observed as heap corruption on Linux CI), so
+  // operations additionally take this lock shared and close/free paths take it
+  // unique. Close paths request an interrupt first, so a blocked reader
+  // releases its shared hold promptly; unique acquisition is bounded
+  // (try_lock_for) and fails with EBUSY instead of freeing under a reader.
+  std::shared_timed_mutex ctx_mutex_;
 };
 
 } // namespace ffmpeg

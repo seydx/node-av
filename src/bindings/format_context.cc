@@ -207,6 +207,15 @@ Napi::Value FormatContext::FreeContext(const Napi::CallbackInfo& info) {
     return env.Undefined();
   }
 
+  // Exclusive hold on the context lifetime: a reader that slipped past the
+  // counters still pins ctx_ via its shared lock - fail with EBUSY instead of
+  // freeing underneath it (see ctx_mutex_)
+  std::unique_lock<std::shared_timed_mutex> lifecycle(ctx_mutex_, std::defer_lock);
+  if (!lifecycle.try_lock_for(std::chrono::seconds(3))) {
+    Napi::Error::New(env, "FormatContext is busy: operation still in flight").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+
   AVFormatContext* ctx = ctx_;
   ctx_ = nullptr;
 
