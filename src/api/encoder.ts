@@ -7,6 +7,7 @@ import {
   AV_CODEC_FLAG_FRAME_DURATION,
   AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX,
   AV_CODEC_HW_CONFIG_METHOD_HW_FRAMES_CTX,
+  AV_NOPTS_VALUE,
   AV_PICTURE_TYPE_NONE,
   AV_PIX_FMT_NONE,
   AV_PKT_FLAG_TRUSTED,
@@ -366,6 +367,8 @@ export class Encoder implements Disposable {
   private autoResample: boolean;
   private audioResampler?: SoftwareResampleContext;
   private resampledFrame?: Frame;
+  private resampleChangesRate = false;
+  private resampledPts = 0n;
   private audioInputLayout?: ChannelLayout;
   private autoFormat: boolean;
   private videoScaler?: SoftwareScaleContext;
@@ -1486,13 +1489,20 @@ export class Encoder implements Disposable {
     }
 
     // If using AudioFrameBuffer, flush remaining buffered samples first
-    if (this.audioFrameBuffer && this.audioFrameBuffer.size > 0) {
-      // Pull any remaining partial frame (may be less than frameSize)
-      // For the final frame, we pad or truncate as needed
+    if (this.audioFrameBuffer) {
+      // Drain all complete frames
       let _bufferedFrame;
       while (!this.isClosed && (_bufferedFrame = await this.audioFrameBuffer.pull()) !== null) {
         using bufferedFrame = _bufferedFrame;
         await this.codecContext.sendFrame(bufferedFrame);
+      }
+
+      // Encode the final partial frame padded with silence - otherwise the tail
+      // (up to frameSize - 1 samples, ~21 ms at 48 kHz/1024) would be dropped.
+      const _partialFrame = !this.isClosed ? await this.audioFrameBuffer.pullPartial() : null;
+      if (_partialFrame) {
+        using partialFrame = _partialFrame;
+        await this.codecContext.sendFrame(partialFrame);
       }
     }
 
@@ -1549,13 +1559,19 @@ export class Encoder implements Disposable {
     }
 
     // If using AudioFrameBuffer, flush remaining buffered samples first
-    if (this.audioFrameBuffer && this.audioFrameBuffer.size > 0) {
-      // Pull any remaining partial frame (may be less than frameSize)
-      // For the final frame, we pad or truncate as needed
+    if (this.audioFrameBuffer) {
+      // Drain all complete frames
       let _bufferedFrame;
       while (!this.isClosed && (_bufferedFrame = this.audioFrameBuffer.pullSync()) !== null) {
         using bufferedFrame = _bufferedFrame;
         this.codecContext.sendFrameSync(bufferedFrame);
+      }
+
+      // Encode the final partial frame padded with silence (see flush)
+      const _partialFrame = !this.isClosed ? this.audioFrameBuffer.pullPartialSync() : null;
+      if (_partialFrame) {
+        using partialFrame = _partialFrame;
+        this.codecContext.sendFrameSync(partialFrame);
       }
     }
 
@@ -1861,7 +1877,12 @@ export class Encoder implements Disposable {
       while (true) {
         const packet = await this.receiveFromQueue();
         if (!packet) break;
-        await target.writePacket(packet, streamIndex);
+        try {
+          // writePacket clones internally; the queue-owned packet is ours to free
+          await target.writePacket(packet, streamIndex);
+        } finally {
+          packet.free();
+        }
       }
     })();
 
@@ -2388,9 +2409,6 @@ export class Encoder implements Disposable {
    * @internal
    */
   private setupAudioParams(frame: Frame): void {
-    // Always use frame timebase (typically 1/sample_rate) for correct audio PTS.
-    this.codecContext.timeBase = frame.timeBase;
-
     const inRate = frame.sampleRate;
     const inFmt = frame.format as AVSampleFormat;
 
@@ -2407,6 +2425,15 @@ export class Encoder implements Disposable {
     const targetRate = pickSupportedRate(inRate, this.codec.supportedSamplerates);
     const targetFmt = pickSupportedSampleFormat(inFmt, this.codec.sampleFormats);
     const targetLayout = pickSupportedLayout(inLayout, this.codec.channelLayouts);
+
+    // When the codec forces a different sample rate, the frames that reach it
+    // carry PTS as a running sample counter at that rate (resampler and FIFO
+    // paths), so the codec timebase must be 1/target_rate - the input timebase
+    // would misread those counts (e.g. 44.1 kHz in -> Opus-forced 48 kHz would
+    // play ~8.8% slow). Without rate conversion, keep the frame timebase
+    // (typically 1/sample_rate).
+    this.resampleChangesRate = targetRate !== inRate;
+    this.codecContext.timeBase = this.resampleChangesRate ? new Rational(1, targetRate) : frame.timeBase;
 
     const needsResample = targetRate !== inRate || targetFmt !== inFmt || targetLayout.nbChannels !== inLayout.nbChannels;
 
@@ -2479,8 +2506,18 @@ export class Encoder implements Disposable {
     out.sampleRate = this.codecContext.sampleRate;
     out.channelLayout = this.codecContext.channelLayout;
     FFmpegError.throwIfError(this.audioResampler!.convertFrame(out, frame), 'Failed to resample audio frame');
-    out.timeBase = frame.timeBase;
-    out.pts = frame.pts;
+    if (this.resampleChangesRate) {
+      // Rate conversion changes the sample count, so the input PTS no longer
+      // matches the output. Stamp from a running output-sample counter in
+      // 1/out_rate (the codec timebase) - the same scheme the FIFO path uses
+      // when re-stamping - instead of replicating swr_next_pts() delay tracking.
+      out.timeBase = this.codecContext.timeBase;
+      out.pts = this.resampledPts;
+      this.resampledPts += BigInt(out.nbSamples);
+    } else {
+      out.timeBase = frame.timeBase;
+      out.pts = frame.pts;
+    }
     return out;
   }
 
@@ -2504,6 +2541,12 @@ export class Encoder implements Disposable {
     const ret = this.audioResampler.convertFrame(out, null);
     if (ret < 0 || out.nbSamples <= 0) {
       return null;
+    }
+    if (this.resampleChangesRate) {
+      // Continue the running output-sample counter (see resampleAudio)
+      out.timeBase = this.codecContext.timeBase;
+      out.pts = this.resampledPts;
+      this.resampledPts += BigInt(out.nbSamples);
     }
     return out;
   }
@@ -2650,15 +2693,17 @@ export class Encoder implements Disposable {
       frameDuration = 1n;
     }
 
-    if (pts !== null && pts !== undefined) {
+    // AV_NOPTS_VALUE (INT64_MIN) must pass through untouched - rescaling it
+    // yields a garbage timestamp instead of the "unset" marker.
+    if (pts !== AV_NOPTS_VALUE) {
       // Convert PTS to encoder timebase
       frame.pts = avRescaleQ(pts, oldTimebase, encoderTimebase);
-
-      // IMPORTANT: Set frame timebase to encoder timebase
-      // FFmpeg does this in adjust_frame_pts_to_encoder_tb(): frame->time_base = tb_dst
-      // This ensures encoder gets frames with correct timebase (1/framerate for video, 1/sample_rate for audio)
-      frame.timeBase = encoderTimebase;
     }
+
+    // IMPORTANT: Set frame timebase to encoder timebase
+    // FFmpeg does this in adjust_frame_pts_to_encoder_tb(): frame->time_base = tb_dst
+    // This ensures encoder gets frames with correct timebase (1/framerate for video, 1/sample_rate for audio)
+    frame.timeBase = encoderTimebase;
 
     // Set frame duration in encoder timebase
     // This matches FFmpeg's video_sync_process() which sets frame->duration
