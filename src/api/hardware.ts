@@ -222,11 +222,12 @@ export class HardwareContext implements Disposable {
 
     for (const deviceType of preferenceOrder) {
       try {
-        if (deviceType === AV_HWDEVICE_TYPE_VAAPI && !options.device) {
-          options.device = '/dev/dri/renderD128'; // Default VAAPI render node
+        let device = options.device;
+        if (deviceType === AV_HWDEVICE_TYPE_VAAPI && !device) {
+          device = '/dev/dri/renderD128'; // Default VAAPI render node
         }
 
-        const hwCtx = this.createFromType(deviceType, options.device, options.options);
+        const hwCtx = this.createFromType(deviceType, device, options.options);
 
         const isSupported = hwCtx.testDecoder();
         if (!isSupported) {
