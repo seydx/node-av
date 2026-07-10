@@ -83,6 +83,7 @@ export class BitStreamFilterAPI implements Disposable {
   private source: Stream | Encoder | BitStreamFilterAPI;
   private initialized = false;
   private packet: Packet;
+  private pendingOutput: Packet[] = [];
   private isClosed = false;
 
   // Worker pattern for push-based processing
@@ -363,11 +364,7 @@ export class BitStreamFilterAPI implements Disposable {
     this.ensureInitialized();
 
     // Send packet to filter (null signals EOF/flush)
-    const sendRet = await this.ctx.sendPacket(packet);
-
-    if (sendRet < 0 && sendRet !== AVERROR_EOF && sendRet !== AVERROR_EAGAIN) {
-      FFmpegError.throwIfError(sendRet, 'Failed to send packet to bitstream filter');
-    }
+    await this.sendPacketWithRetry(packet);
   }
 
   /**
@@ -431,11 +428,7 @@ export class BitStreamFilterAPI implements Disposable {
     this.ensureInitialized();
 
     // Send packet to filter (null signals EOF/flush)
-    const sendRet = this.ctx.sendPacketSync(packet);
-
-    if (sendRet < 0 && sendRet !== AVERROR_EOF && sendRet !== AVERROR_EAGAIN) {
-      FFmpegError.throwIfError(sendRet, 'Failed to send packet to bitstream filter');
-    }
+    this.sendPacketWithRetrySync(packet);
   }
 
   /**
@@ -754,8 +747,9 @@ export class BitStreamFilterAPI implements Disposable {
    * Sends null packet to filter to signal end-of-stream.
    * Does nothing if filter is closed.
    * Must call receive() or flushPackets() to get remaining buffered packets.
+   * Does not reset filter state - use {@link reset} for that.
    *
-   * Direct mapping to av_bsf_send_packet(NULL) and av_bsf_flush().
+   * Direct mapping to av_bsf_send_packet(NULL).
    *
    * @throws {FFmpegError} If flush fails
    *
@@ -785,14 +779,9 @@ export class BitStreamFilterAPI implements Disposable {
       return;
     }
 
-    // Send EOF
-    const sendRet = await this.ctx.sendPacket(null);
-    if (sendRet < 0 && sendRet !== AVERROR_EOF && sendRet !== AVERROR_EAGAIN) {
-      FFmpegError.throwIfError(sendRet, 'Failed to flush bitstream filter');
-    }
-
-    // Also flush the context to reset internal state
-    this.ctx.flush();
+    // Send EOF only - resetting via av_bsf_flush() here would discard the
+    // packets that buffering filters (vp9_superframe, setts, ...) still hold.
+    await this.sendPacketWithRetry(null);
   }
 
   /**
@@ -802,8 +791,9 @@ export class BitStreamFilterAPI implements Disposable {
    * Sends null packet to filter to signal end-of-stream.
    * Does nothing if filter is closed.
    * Must call receiveSync() or flushPacketsSync() to get remaining buffered packets.
+   * Does not reset filter state - use {@link reset} for that.
    *
-   * Direct mapping to av_bsf_send_packet(NULL) and av_bsf_flush().
+   * Direct mapping to av_bsf_send_packet(NULL).
    *
    * @throws {FFmpegError} If flush fails
    *
@@ -831,14 +821,8 @@ export class BitStreamFilterAPI implements Disposable {
       return;
     }
 
-    // Send EOF
-    const sendRet = this.ctx.sendPacketSync(null);
-    if (sendRet < 0 && sendRet !== AVERROR_EOF && sendRet !== AVERROR_EAGAIN) {
-      FFmpegError.throwIfError(sendRet, 'Failed to flush bitstream filter');
-    }
-
-    // Also flush the context to reset internal state
-    this.ctx.flush();
+    // See flush(): send EOF only, never av_bsf_flush()
+    this.sendPacketWithRetrySync(null);
   }
 
   /**
@@ -887,30 +871,13 @@ export class BitStreamFilterAPI implements Disposable {
       return null;
     }
 
-    // Clear previous packet data
-    this.packet.unref();
-
-    const recvRet = await this.ctx.receivePacket(this.packet);
-
-    if (recvRet === 0) {
-      // Filters like aac_adtstoasc deliver new global headers via packet side
-      // data rather than par_out; fold it into the output parameters so callers
-      // (and Muxer's bsf integration) can read it from outputCodecParameters.
-      this.foldNewExtradata(this.packet);
-      // Got a packet, clone it for the user
-      const cloned = this.packet.clone();
-      if (!cloned) {
-        throw new Error('Failed to clone packet (out of memory)');
-      }
-      return cloned;
-    } else if (recvRet === AVERROR_EAGAIN || recvRet === AVERROR_EOF) {
-      // Need more data or end of stream
-      return null;
-    } else {
-      // Error
-      FFmpegError.throwIfError(recvRet, 'Failed to receive packet from bitstream filter');
-      return null;
+    // Deliver output buffered by an EAGAIN-triggered drain first (FIFO order)
+    const pending = this.pendingOutput.shift();
+    if (pending) {
+      return pending;
     }
+
+    return await this.receiveFromContext();
   }
 
   /**
@@ -960,28 +927,13 @@ export class BitStreamFilterAPI implements Disposable {
       return null;
     }
 
-    // Clear previous packet data
-    this.packet.unref();
-
-    const recvRet = this.ctx.receivePacketSync(this.packet);
-
-    if (recvRet === 0) {
-      // See receive(): fold side-data extradata into the output parameters.
-      this.foldNewExtradata(this.packet);
-      // Got a packet, clone it for the user
-      const cloned = this.packet.clone();
-      if (!cloned) {
-        throw new Error('Failed to clone packet (out of memory)');
-      }
-      return cloned;
-    } else if (recvRet === AVERROR_EAGAIN || recvRet === AVERROR_EOF) {
-      // Need more data or end of stream
-      return null;
-    } else {
-      // Error
-      FFmpegError.throwIfError(recvRet, 'Failed to receive packet from bitstream filter');
-      return null;
+    // See receive(): pending output first
+    const pending = this.pendingOutput.shift();
+    if (pending) {
+      return pending;
     }
+
+    return this.receiveFromContextSync();
   }
 
   /**
@@ -1031,7 +983,9 @@ export class BitStreamFilterAPI implements Disposable {
       // Start pipe task: filter.outputQueue -> output
       this.pipeToPromise = (async () => {
         while (true) {
-          const packet = await this.receiveFromQueue();
+          // writePacket clones internally, so the queue-owned packet must be
+          // freed here - `using` also covers the write throwing
+          using packet = await this.receiveFromQueue();
           if (!packet) break;
           await target.writePacket(packet, streamIndex!);
         }
@@ -1087,6 +1041,10 @@ export class BitStreamFilterAPI implements Disposable {
    * @see {@link flushPacketsSync} For synchronous version
    */
   async *flushPackets(): AsyncGenerator<Packet> {
+    // Signal EOF first - buffering filters only release their queued packets
+    // after av_bsf_send_packet(NULL)
+    await this.flush();
+
     while (true) {
       const packet = await this.receive();
       if (!packet) break;
@@ -1099,7 +1057,7 @@ export class BitStreamFilterAPI implements Disposable {
    * Synchronous version of flushPackets.
    *
    * Convenient sync iteration over remaining packets.
-   * Automatically retrieves buffered packets after flush.
+   * Automatically sends flush signal and retrieves buffered packets.
    * Useful for end-of-stream processing.
    *
    * @yields {Packet} Buffered packets
@@ -1119,6 +1077,9 @@ export class BitStreamFilterAPI implements Disposable {
    * @see {@link flushPackets} For async version
    */
   *flushPacketsSync(): Generator<Packet> {
+    // See flushPackets(): EOF first, then drain
+    this.flushSync();
+
     while (true) {
       const packet = this.receiveSync();
       if (!packet) break;
@@ -1140,13 +1101,15 @@ export class BitStreamFilterAPI implements Disposable {
    * filter.reset();
    * ```
    *
-   * @see {@link flush} For reset with packet retrieval
+   * @see {@link flush} For end-of-stream signaling with packet retrieval
    */
   reset(): void {
     if (this.isClosed) {
       return;
     }
 
+    // Drop output buffered from an EAGAIN drain - it belongs to the old segment
+    this.clearPendingOutput();
     this.ctx.flush();
   }
 
@@ -1176,6 +1139,7 @@ export class BitStreamFilterAPI implements Disposable {
     this.inputQueue.clear();
     this.outputQueue.clear();
 
+    this.clearPendingOutput();
     this.packet.free();
     this.ctx.free();
   }
@@ -1244,6 +1208,154 @@ export class BitStreamFilterAPI implements Disposable {
     const initRet = this.ctx.init();
     FFmpegError.throwIfError(initRet, 'Failed to initialize bitstream filter');
     this.initialized = true;
+  }
+
+  /**
+   * Send a packet to the filter context, retrying once on EAGAIN.
+   *
+   * av_bsf_send_packet() returning EAGAIN means the packet was NOT consumed:
+   * the filter holds output that must be received before it accepts more
+   * input. That output is drained into pendingOutput (delivered by subsequent
+   * receive() calls in FIFO order) and the send is retried, mirroring how the
+   * FFmpeg CLI interleaves send/receive.
+   *
+   * @param packet - Packet to send, or null to signal EOF
+   *
+   * @throws {FFmpegError} If sending fails
+   *
+   * @internal
+   */
+  private async sendPacketWithRetry(packet: Packet | null): Promise<void> {
+    let sendRet = await this.ctx.sendPacket(packet);
+
+    if (sendRet === AVERROR_EAGAIN) {
+      while (true) {
+        const outPacket = await this.receiveFromContext();
+        if (!outPacket) break;
+        this.pendingOutput.push(outPacket);
+      }
+      sendRet = await this.ctx.sendPacket(packet);
+    }
+
+    if (sendRet < 0 && sendRet !== AVERROR_EOF && sendRet !== AVERROR_EAGAIN) {
+      FFmpegError.throwIfError(sendRet, 'Failed to send packet to bitstream filter');
+    }
+  }
+
+  /**
+   * Send a packet to the filter context, retrying once on EAGAIN.
+   * Synchronous version of sendPacketWithRetry.
+   *
+   * @param packet - Packet to send, or null to signal EOF
+   *
+   * @throws {FFmpegError} If sending fails
+   *
+   * @internal
+   */
+  private sendPacketWithRetrySync(packet: Packet | null): void {
+    let sendRet = this.ctx.sendPacketSync(packet);
+
+    if (sendRet === AVERROR_EAGAIN) {
+      while (true) {
+        const outPacket = this.receiveFromContextSync();
+        if (!outPacket) break;
+        this.pendingOutput.push(outPacket);
+      }
+      sendRet = this.ctx.sendPacketSync(packet);
+    }
+
+    if (sendRet < 0 && sendRet !== AVERROR_EOF && sendRet !== AVERROR_EAGAIN) {
+      FFmpegError.throwIfError(sendRet, 'Failed to send packet to bitstream filter');
+    }
+  }
+
+  /**
+   * Receive one packet directly from the filter context.
+   *
+   * Bypasses pendingOutput so an EAGAIN drain can buffer packets without
+   * re-reading them.
+   *
+   * @returns Cloned packet or null if no packets available
+   *
+   * @throws {FFmpegError} If receive fails
+   *
+   * @throws {Error} If packet cloning fails (out of memory)
+   *
+   * @internal
+   */
+  private async receiveFromContext(): Promise<Packet | null> {
+    // Clear previous packet data
+    this.packet.unref();
+
+    const recvRet = await this.ctx.receivePacket(this.packet);
+    return this.consumeReceived(recvRet);
+  }
+
+  /**
+   * Receive one packet directly from the filter context.
+   * Synchronous version of receiveFromContext.
+   *
+   * @returns Cloned packet or null if no packets available
+   *
+   * @throws {FFmpegError} If receive fails
+   *
+   * @throws {Error} If packet cloning fails (out of memory)
+   *
+   * @internal
+   */
+  private receiveFromContextSync(): Packet | null {
+    // Clear previous packet data
+    this.packet.unref();
+
+    const recvRet = this.ctx.receivePacketSync(this.packet);
+    return this.consumeReceived(recvRet);
+  }
+
+  /**
+   * Convert a receive return code into a cloned output packet.
+   *
+   * @param recvRet - Return code of av_bsf_receive_packet()
+   *
+   * @returns Cloned packet, or null on EAGAIN/EOF
+   *
+   * @throws {FFmpegError} If the return code is any other error
+   *
+   * @throws {Error} If packet cloning fails (out of memory)
+   *
+   * @internal
+   */
+  private consumeReceived(recvRet: number): Packet | null {
+    if (recvRet === 0) {
+      // Filters like aac_adtstoasc deliver new global headers via packet side
+      // data rather than par_out; fold it into the output parameters so callers
+      // (and Muxer's bsf integration) can read it from outputCodecParameters.
+      this.foldNewExtradata(this.packet);
+      // Got a packet, clone it for the user
+      const cloned = this.packet.clone();
+      if (!cloned) {
+        throw new Error('Failed to clone packet (out of memory)');
+      }
+      return cloned;
+    } else if (recvRet === AVERROR_EAGAIN || recvRet === AVERROR_EOF) {
+      // Need more data or end of stream
+      return null;
+    } else {
+      // Error
+      FFmpegError.throwIfError(recvRet, 'Failed to receive packet from bitstream filter');
+      return null;
+    }
+  }
+
+  /**
+   * Free and clear any packets buffered by an EAGAIN drain.
+   *
+   * @internal
+   */
+  private clearPendingOutput(): void {
+    for (const packet of this.pendingOutput) {
+      packet.free();
+    }
+    this.pendingOutput = [];
   }
 
   /**
@@ -1319,26 +1431,9 @@ export class BitStreamFilterAPI implements Disposable {
 
         this.ensureInitialized();
 
-        // Send packet to filter
-        const sendRet = await this.ctx.sendPacket(packet);
-
-        // Handle EAGAIN
-        if (sendRet === AVERROR_EAGAIN) {
-          // Filter buffer full, receive packets first
-          while (!this.outputQueue.isClosed) {
-            const outPacket = await this.receive();
-            if (!outPacket) break;
-            await this.outputQueue.send(outPacket);
-          }
-
-          // Retry sending
-          const retryRet = await this.ctx.sendPacket(packet);
-          if (retryRet < 0 && retryRet !== AVERROR_EOF && retryRet !== AVERROR_EAGAIN) {
-            FFmpegError.throwIfError(retryRet, 'Failed to send packet to bitstream filter');
-          }
-        } else if (sendRet < 0 && sendRet !== AVERROR_EOF) {
-          FFmpegError.throwIfError(sendRet, 'Failed to send packet to bitstream filter');
-        }
+        // Send packet to filter; on EAGAIN the pending output is buffered
+        // internally and delivered by the receive() calls below
+        await this.sendPacketWithRetry(packet);
 
         // Receive ALL available packets immediately
         while (!this.outputQueue.isClosed) {
