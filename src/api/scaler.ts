@@ -2,7 +2,6 @@ import {
   AV_CODEC_FLAG_QSCALE,
   AV_HWDEVICE_TYPE_OPENCL,
   AV_PIX_FMT_GRAY8,
-  AV_PIX_FMT_NONE,
   AV_PIX_FMT_NV12,
   AV_PIX_FMT_RGB24,
   AV_PIX_FMT_RGBA,
@@ -15,7 +14,7 @@ import { FF_ENCODER_MJPEG, FF_ENCODER_PNG } from '../constants/encoders.js';
 import { bindings } from '../lib/binding.js';
 import { FFmpegError } from '../lib/error.js';
 import { Frame } from '../lib/frame.js';
-import { EncoderPool } from './encoder-pool.js';
+import { EncoderPool, Mutex } from './encoder-pool.js';
 import { FilterPreset } from './filter-presets.js';
 import { FilterAPI } from './filter.js';
 
@@ -121,13 +120,49 @@ interface AppliedCrop {
 }
 
 /**
- * A cached filter graph plus the crop currently configured on it.
+ * Source frame parameters a cached graph was last fed with.
+ *
+ * @internal
+ */
+interface SourceSignature {
+  width: number;
+  height: number;
+  format: number;
+}
+
+/**
+ * A cached filter graph plus the crop currently configured on it and its
+ * concurrency state.
  *
  * @internal
  */
 interface HwGraphEntry {
   filter: FilterAPI;
   lastCrop: AppliedCrop | null;
+  /** Parameters of the last processed frame; null until the graph saw a frame. */
+  lastSrc: SourceSignature | null;
+  /** Serializes crop command + process + receive per graph. */
+  lock: Mutex;
+  /** In-flight async scales holding this graph alive. */
+  refs: number;
+  /** Retired while in use; disposed by the last release instead. */
+  evicted: boolean;
+}
+
+/**
+ * A resolved cache entry plus the operation configuration that selected it.
+ *
+ * @internal
+ */
+interface ResolvedGraph {
+  entry: HwGraphEntry;
+  key: string;
+  isHw: boolean;
+  commandable: boolean;
+  crop: ScalerCrop;
+  outW: number;
+  outH: number;
+  format: ScaledImageFormat;
 }
 
 /**
@@ -139,6 +174,10 @@ interface HwGraphEntry {
  * reusing it for every frame and every crop avoids per-frame allocation.
  * Software frames are scaled with swscale; hardware frames are cropped, scaled,
  * and converted on the GPU with only the small result downloaded.
+ *
+ * Safe for concurrent use: calls that share a cached graph or pooled encoder are
+ * serialized on that resource, while distinct output configurations run fully in
+ * parallel, and cache eviction never disposes a resource that is still in flight.
  *
  * @example
  * ```typescript
@@ -158,13 +197,14 @@ interface HwGraphEntry {
  */
 export class Scaler implements Disposable {
   private native: NativeScaler;
+  private syncNative?: NativeScaler;
+  private nativeLock = new Mutex();
   private hardware?: HardwareContext | null;
   private flags: SwsFlags;
   private maxCacheSize: number;
   private graphs = new Map<string, HwGraphEntry>();
   private jpegPool?: EncoderPool<typeof FF_ENCODER_MJPEG>;
   private pngPool?: EncoderPool<typeof FF_ENCODER_PNG>;
-  private downloadFrame?: Frame;
   private disposed = false;
 
   /**
@@ -222,10 +262,15 @@ export class Scaler implements Disposable {
           out.free();
         }
       }
-      return await this.native.process((await this.downloadToSoftware(frame)).getNative(), options);
+      const sw = await this.downloadToSoftware(frame);
+      try {
+        return await this.processNative(sw, options);
+      } finally {
+        sw.free();
+      }
     }
 
-    return await this.native.process(frame.getNative(), options);
+    return await this.processNative(frame, options);
   }
 
   /**
@@ -261,10 +306,15 @@ export class Scaler implements Disposable {
           out.free();
         }
       }
-      return this.native.processSync(this.downloadToSoftwareSync(frame).getNative(), options);
+      const sw = this.downloadToSoftwareSync(frame);
+      try {
+        return this.getSyncNative().processSync(sw.getNative(), options);
+      } finally {
+        sw.free();
+      }
     }
 
-    return this.native.processSync(frame.getNative(), options);
+    return this.getSyncNative().processSync(frame.getNative(), options);
   }
 
   /**
@@ -296,15 +346,19 @@ export class Scaler implements Disposable {
     }
 
     const quality = options.quality ?? 90;
-    const src = frame.isHwFrame() && !this.hardware ? await this.downloadToSoftware(frame) : frame;
-    // mjpeg wants planar YUV; tag it full-range so colors are correct without the
-    // deprecated yuvj* formats.
-    const out = await this.toFrame(src, options.crop, options.resize, 'yuv420p');
+    const downloaded = frame.isHwFrame() && !this.hardware ? await this.downloadToSoftware(frame) : null;
     try {
-      this.prepareJpegFrame(out, quality);
-      return await this.getJpegPool().encode(out);
+      // mjpeg wants planar YUV; tag it full-range so colors are correct without the
+      // deprecated yuvj* formats.
+      const out = await this.toFrame(downloaded ?? frame, options.crop, options.resize, 'yuv420p');
+      try {
+        this.prepareJpegFrame(out, quality);
+        return await this.getJpegPool().encode(out);
+      } finally {
+        out.free();
+      }
     } finally {
-      out.free();
+      downloaded?.free();
     }
   }
 
@@ -333,13 +387,17 @@ export class Scaler implements Disposable {
     }
 
     const quality = options.quality ?? 90;
-    const src = frame.isHwFrame() && !this.hardware ? this.downloadToSoftwareSync(frame) : frame;
-    const out = this.toFrameSync(src, options.crop, options.resize, 'yuv420p');
+    const downloaded = frame.isHwFrame() && !this.hardware ? this.downloadToSoftwareSync(frame) : null;
     try {
-      this.prepareJpegFrame(out, quality);
-      return this.getJpegPool().encodeSync(out);
+      const out = this.toFrameSync(downloaded ?? frame, options.crop, options.resize, 'yuv420p');
+      try {
+        this.prepareJpegFrame(out, quality);
+        return this.getJpegPool().encodeSync(out);
+      } finally {
+        out.free();
+      }
     } finally {
-      out.free();
+      downloaded?.free();
     }
   }
 
@@ -371,12 +429,16 @@ export class Scaler implements Disposable {
     }
 
     const format = options.format ?? 'rgb';
-    const src = frame.isHwFrame() && !this.hardware ? await this.downloadToSoftware(frame) : frame;
-    const out = await this.toFrame(src, options.crop, options.resize, format);
+    const downloaded = frame.isHwFrame() && !this.hardware ? await this.downloadToSoftware(frame) : null;
     try {
-      return await this.getPngPool().encode(out);
+      const out = await this.toFrame(downloaded ?? frame, options.crop, options.resize, format);
+      try {
+        return await this.getPngPool().encode(out);
+      } finally {
+        out.free();
+      }
     } finally {
-      out.free();
+      downloaded?.free();
     }
   }
 
@@ -405,12 +467,16 @@ export class Scaler implements Disposable {
     }
 
     const format = options.format ?? 'rgb';
-    const src = frame.isHwFrame() && !this.hardware ? this.downloadToSoftwareSync(frame) : frame;
-    const out = this.toFrameSync(src, options.crop, options.resize, format);
+    const downloaded = frame.isHwFrame() && !this.hardware ? this.downloadToSoftwareSync(frame) : null;
     try {
-      return this.getPngPool().encodeSync(out);
+      const out = this.toFrameSync(downloaded ?? frame, options.crop, options.resize, format);
+      try {
+        return this.getPngPool().encodeSync(out);
+      } finally {
+        out.free();
+      }
     } finally {
-      out.free();
+      downloaded?.free();
     }
   }
 
@@ -430,9 +496,13 @@ export class Scaler implements Disposable {
     this.disposed = true;
 
     this.native.close();
+    this.syncNative?.close();
+    this.syncNative = undefined;
 
+    // In-use graphs are retired, not disposed: the last in-flight scale disposes
+    // them on release, so close() during concurrent calls never crashes them.
     for (const entry of this.graphs.values()) {
-      entry.filter[Symbol.dispose]();
+      this.retireEntry(entry);
     }
 
     this.graphs.clear();
@@ -442,28 +512,30 @@ export class Scaler implements Disposable {
 
     this.pngPool?.close();
     this.pngPool = undefined;
-
-    this.downloadFrame?.free();
-    this.downloadFrame = undefined;
   }
 
   /**
    * Download a hardware frame to system memory (no hardware context available).
    *
-   * Reuses a single target frame across calls. The frame's own hwframe context
-   * selects a supported software format.
+   * Allocates a fresh target per call - concurrent downloads must not share a
+   * staging frame. The frame's own hwframe context selects a supported software
+   * format. The caller frees the returned frame.
    *
    * @param frame - Hardware source frame
    *
-   * @returns Software frame
+   * @returns Software frame (caller frees)
    *
    * @throws {FFmpegError} If the transfer fails
    *
    * @internal
    */
   private async downloadToSoftware(frame: Frame): Promise<Frame> {
-    const dst = this.prepareDownloadTarget();
+    const dst = new Frame();
+    dst.alloc();
     const ret = await frame.hwframeTransferData(dst, 0);
+    if (ret < 0) {
+      dst.free();
+    }
     FFmpegError.throwIfError(ret, 'Failed to download hardware frame');
     dst.copyProps(frame);
     return dst;
@@ -474,36 +546,58 @@ export class Scaler implements Disposable {
    *
    * @param frame - Hardware source frame
    *
-   * @returns Software frame
+   * @returns Software frame (caller frees)
    *
    * @throws {FFmpegError} If the transfer fails
    *
    * @internal
    */
   private downloadToSoftwareSync(frame: Frame): Frame {
-    const dst = this.prepareDownloadTarget();
+    const dst = new Frame();
+    dst.alloc();
     const ret = frame.hwframeTransferDataSync(dst, 0);
+    if (ret < 0) {
+      dst.free();
+    }
     FFmpegError.throwIfError(ret, 'Failed to download hardware frame');
     dst.copyProps(frame);
     return dst;
   }
 
   /**
-   * Lazily allocate and reset the reused download target frame.
+   * Run the pooled native software scaler, serialized per instance.
    *
-   * @returns The cleared download frame
+   * The native scaler reuses staging frames and sws contexts per configuration;
+   * overlapping async calls would race on them in the worker threads.
+   *
+   * @param frame - Software source frame
+   *
+   * @param options - Crop, resize, and format options
+   *
+   * @returns Tightly packed pixel data
+   *
+   * @throws {FFmpegError} If scaling fails
    *
    * @internal
    */
-  private prepareDownloadTarget(): Frame {
-    if (!this.downloadFrame) {
-      this.downloadFrame = new Frame();
-      this.downloadFrame.alloc();
-    }
-    const dst = this.downloadFrame;
-    dst.unref();
-    dst.format = AV_PIX_FMT_NONE;
-    return dst;
+  private async processNative(frame: Frame, options: ScaleOptions): Promise<Buffer> {
+    return await this.nativeLock.run(() => this.native.process(frame.getNative(), options));
+  }
+
+  /**
+   * The native scaler used by the sync path (lazily created).
+   *
+   * Sync calls block the event loop but can land while an async call's worker is
+   * scaling in the background; a separate native instance keeps them off the async
+   * scaler's pooled contexts, which are not safe to share across threads.
+   *
+   * @returns The sync-path native scaler
+   *
+   * @internal
+   */
+  private getSyncNative(): NativeScaler {
+    this.syncNative ??= new bindings.Scaler(this.flags);
+    return this.syncNative;
   }
 
   /**
@@ -530,27 +624,68 @@ export class Scaler implements Disposable {
    * @internal
    */
   private async toFrame(frame: Frame, crop: ScalerCrop | undefined, resize: ScalerResize | undefined, format: ScaledImageFormat): Promise<Frame> {
-    const { entry, key } = this.resolveGraph(frame, crop, resize, format);
-    await entry.filter.process(frame);
-    let out = await entry.filter.receive();
-    if (!(out instanceof Frame)) {
-      // Some hardware scalers (notably QSV's vpp_qsv) buffer internally and don't
-      // emit a frame synchronously after a single input - the buffersink returns
-      // EAGAIN. Flush to force the pending frame out, then evict the now-EOF'd
-      // graph so the next call rebuilds it. Zero-latency scalers (scale_vaapi,
-      // scale_vt) deliver on the first receive and never hit this path.
-      await entry.filter.flush();
-      out = await entry.filter.receive();
-      this.evictGraph(key);
+    // Retry loop: an entry can be retired while we queue on its lock (QSV flush
+    // eviction, mid-stream failure, or LRU pressure from concurrent calls). The
+    // next attempt then resolves a freshly built graph.
+    for (;;) {
+      if (this.disposed) {
+        throw new Error('Scaler has been disposed');
+      }
+
+      const acq = this.resolveGraph(frame, crop, resize, format);
+      const { entry, key } = acq;
+
+      // Hold the entry across the awaits below: eviction of an in-use graph is
+      // deferred to releaseGraph(), never disposing it mid-scale.
+      entry.refs++;
+      try {
+        // Serialize crop command + process + receive per graph: concurrent scales
+        // on the same output config would otherwise interleave on one FilterAPI
+        // and hand frames to the wrong caller.
+        const out = await entry.lock.run(async () => {
+          if (entry.evicted) {
+            return null; // Retired while we queued - retry with a fresh graph
+          }
+          this.prepareGraph(acq, frame);
+          try {
+            await entry.filter.process(frame);
+            let received = await entry.filter.receive();
+            if (!(received instanceof Frame)) {
+              // Some hardware scalers (notably QSV's vpp_qsv) buffer internally and don't
+              // emit a frame synchronously after a single input - the buffersink returns
+              // EAGAIN. Flush to force the pending frame out, then evict the now-EOF'd
+              // graph so the next call rebuilds it. Zero-latency scalers (scale_vaapi,
+              // scale_vt) deliver on the first receive and never hit this path.
+              await entry.filter.flush();
+              received = await entry.filter.receive();
+              this.evictGraph(key, entry);
+            }
+            if (!(received instanceof Frame)) {
+              throw new Error('Scaler: filter produced no frame');
+            }
+            return received;
+          } catch (error) {
+            // The graph is in an unknown mid-stream state; retire it so the next
+            // call rebuilds instead of inheriting the wreckage.
+            this.evictGraph(key, entry);
+            throw error;
+          }
+        });
+        if (out) {
+          return out;
+        }
+      } finally {
+        this.releaseGraph(entry);
+      }
     }
-    if (!(out instanceof Frame)) {
-      throw new Error('Scaler: filter produced no frame');
-    }
-    return out;
   }
 
   /**
    * Synchronous version of toFrame.
+   *
+   * Sync scales cannot interleave with each other (they block the event loop),
+   * but they can land between the awaits of an in-flight async scale; a busy
+   * cached graph is bypassed with a throwaway graph in that case.
    *
    * @param frame - Source frame (software, or hardware with a hardware context)
    *
@@ -565,26 +700,69 @@ export class Scaler implements Disposable {
    * @internal
    */
   private toFrameSync(frame: Frame, crop: ScalerCrop | undefined, resize: ScalerResize | undefined, format: ScaledImageFormat): Frame {
-    const { entry, key } = this.resolveGraph(frame, crop, resize, format);
-    entry.filter.processSync(frame);
-    let out = entry.filter.receiveSync();
-    if (!(out instanceof Frame)) {
-      // See toFrame: QSV's vpp_qsv buffers a frame; flush to drain it and evict
-      // the now-EOF'd graph so the next call rebuilds.
-      entry.filter.flushSync();
-      out = entry.filter.receiveSync();
-      this.evictGraph(key);
+    const acq = this.resolveGraph(frame, crop, resize, format);
+    const { entry, key } = acq;
+
+    if (entry.refs > 0) {
+      return this.scaleOneShotSync(frame, acq);
     }
-    if (!(out instanceof Frame)) {
-      throw new Error('Scaler: filter produced no frame');
+
+    this.prepareGraph(acq, frame);
+    try {
+      entry.filter.processSync(frame);
+      let out = entry.filter.receiveSync();
+      if (!(out instanceof Frame)) {
+        // See toFrame: QSV's vpp_qsv buffers a frame; flush to drain it and evict
+        // the now-EOF'd graph so the next call rebuilds.
+        entry.filter.flushSync();
+        out = entry.filter.receiveSync();
+        this.evictGraph(key, entry);
+      }
+      if (!(out instanceof Frame)) {
+        throw new Error('Scaler: filter produced no frame');
+      }
+      return out;
+    } catch (error) {
+      this.evictGraph(key, entry);
+      throw error;
     }
-    return out;
   }
 
   /**
-   * Resolve (and, on demand, build) the cached filter graph for a frame, applying
-   * the crop reconfiguration. Shared by the sync and async scaling paths; all of
-   * this work (parse, config, sendCommand) is synchronous.
+   * Scale through a throwaway graph with the crop baked in, bypassing the cache.
+   *
+   * @param frame - Source frame
+   *
+   * @param acq - Resolved operation configuration
+   *
+   * @returns The scaled output frame (caller frees)
+   *
+   * @throws {Error} If the graph produces no frame
+   *
+   * @internal
+   */
+  private scaleOneShotSync(frame: Frame, acq: ResolvedGraph): Frame {
+    const filter = FilterAPI.create(this.buildGraph(acq.isHw, acq.outW, acq.outH, acq.format, acq.crop, false), acq.isHw ? { hardware: this.hardware } : {});
+    try {
+      filter.processSync(frame);
+      let out = filter.receiveSync();
+      if (!(out instanceof Frame)) {
+        filter.flushSync();
+        out = filter.receiveSync();
+      }
+      if (!(out instanceof Frame)) {
+        throw new Error('Scaler: filter produced no frame');
+      }
+      return out;
+    } finally {
+      filter[Symbol.dispose]();
+    }
+  }
+
+  /**
+   * Resolve (and, on demand, build) the cached filter graph for a frame. Shared
+   * by the sync and async scaling paths; all of this work is synchronous, so a
+   * resolved entry cannot be evicted before the caller marks it in use.
    *
    * @param frame - Source frame (software, or hardware with a hardware context)
    *
@@ -594,13 +772,13 @@ export class Scaler implements Disposable {
    *
    * @param format - Output pixel format
    *
-   * @returns The cached graph entry (ready to process the frame) and its cache key
+   * @returns The cached graph entry and the resolved operation configuration
    *
    * @throws {Error} If the crop is out of bounds
    *
    * @internal
    */
-  private resolveGraph(frame: Frame, crop: ScalerCrop | undefined, resize: ScalerResize | undefined, format: ScaledImageFormat): { entry: HwGraphEntry; key: string } {
+  private resolveGraph(frame: Frame, crop: ScalerCrop | undefined, resize: ScalerResize | undefined, format: ScaledImageFormat): ResolvedGraph {
     const isHw = frame.isHwFrame();
     if (isHw && !this.hardware) {
       throw new Error('Scaler received a hardware frame but was created without a HardwareContext');
@@ -634,7 +812,7 @@ export class Scaler implements Disposable {
       // on the first processed frame, before any command can be sent, so the
       // initial crop must already be in place. Later crops use sendCommand.
       const filter = FilterAPI.create(this.buildGraph(isHw, outW, outH, format, cropRegion, commandable), isHw ? { hardware: this.hardware } : {});
-      entry = { filter, lastCrop: commandable ? { x: cropX, y: cropY, w: cropW, h: cropH } : null };
+      entry = { filter, lastCrop: commandable ? { x: cropX, y: cropY, w: cropW, h: cropH } : null, lastSrc: null, lock: new Mutex(), refs: 0, evicted: false };
       this.cacheSet(key, entry);
     } else {
       // Bump LRU recency.
@@ -642,39 +820,100 @@ export class Scaler implements Disposable {
       this.graphs.set(key, entry);
     }
 
-    if (commandable) {
-      // Reconfigure the crop only when it actually changed - identical crops reuse
-      // the graph untouched (no config_input/config_output re-run).
-      const c = entry.lastCrop;
-      if (c?.x !== cropX || c?.y !== cropY || c?.w !== cropW || c?.h !== cropH) {
-        // w/h are validated against the input dims (above); x/y are clamped per
-        // frame by the crop filter, so this order never produces a transient error.
-        entry.filter.sendCommand('crop@sc', 'w', String(cropW));
-        entry.filter.sendCommand('crop@sc', 'h', String(cropH));
-        entry.filter.sendCommand('crop@sc', 'x', String(cropX));
-        entry.filter.sendCommand('crop@sc', 'y', String(cropY));
-        entry.lastCrop = { x: cropX, y: cropY, w: cropW, h: cropH };
-      }
-    }
-
-    return { entry, key };
+    return { entry, key, isHw, commandable, crop: cropRegion, outW, outH, format };
   }
 
   /**
-   * Dispose a cached graph and remove it from the cache.
+   * Bring a cached graph in line with the current call. Must run under the entry
+   * lock (async path) or with no async call in flight (sync path).
    *
-   * Used after a graph has been flushed (and is therefore at EOF and can no
-   * longer accept frames) so the next operation rebuilds it.
+   * Rebuilds the graph when the source parameters changed: FilterAPI would
+   * otherwise reinitialize itself from the original graph description, silently
+   * resurrecting the crop baked in at build time instead of the current one. A
+   * graph that has not seen a frame yet is likewise rebuilt when the crop
+   * differs, because commands cannot be sent before initialization. Otherwise a
+   * changed crop is re-aimed with runtime commands - identical crops reuse the
+   * graph untouched (no config_input/config_output re-run).
    *
-   * @param key - Cache key of the graph to evict
+   * @param acq - Resolved graph and operation configuration
+   *
+   * @param frame - Frame about to be processed
    *
    * @internal
    */
-  private evictGraph(key: string): void {
-    const entry = this.graphs.get(key);
-    if (entry) {
+  private prepareGraph(acq: ResolvedGraph, frame: Frame): void {
+    const { entry, isHw, commandable, crop, outW, outH, format } = acq;
+
+    const src = entry.lastSrc;
+    const srcChanged = src !== null && (src.width !== frame.width || src.height !== frame.height || src.format !== frame.format);
+    const c = entry.lastCrop;
+    const cropChanged = commandable && (c?.x !== crop.x || c?.y !== crop.y || c?.w !== crop.width || c?.h !== crop.height);
+
+    if (srcChanged || (cropChanged && src === null)) {
       entry.filter[Symbol.dispose]();
+      entry.filter = FilterAPI.create(this.buildGraph(isHw, outW, outH, format, crop, commandable), isHw ? { hardware: this.hardware } : {});
+      entry.lastCrop = commandable ? { x: crop.x, y: crop.y, w: crop.width, h: crop.height } : null;
+    } else if (cropChanged) {
+      // w/h are validated against the input dims (in resolveGraph); x/y are clamped
+      // per frame by the crop filter, so this order never produces a transient error.
+      entry.filter.sendCommand('crop@sc', 'w', String(crop.width));
+      entry.filter.sendCommand('crop@sc', 'h', String(crop.height));
+      entry.filter.sendCommand('crop@sc', 'x', String(crop.x));
+      entry.filter.sendCommand('crop@sc', 'y', String(crop.y));
+      entry.lastCrop = { x: crop.x, y: crop.y, w: crop.width, h: crop.height };
+    }
+
+    entry.lastSrc = { width: frame.width, height: frame.height, format: frame.format };
+  }
+
+  /**
+   * Remove a graph from the cache and retire it.
+   *
+   * Identity-checked so a newer graph cached under the same key is left alone.
+   * Used after a flush (the graph is at EOF and can no longer accept frames) and
+   * after mid-stream failures, so the next operation rebuilds it.
+   *
+   * @param key - Cache key of the graph
+   *
+   * @param entry - The exact entry to evict
+   *
+   * @internal
+   */
+  private evictGraph(key: string, entry: HwGraphEntry): void {
+    if (this.graphs.get(key) === entry) {
       this.graphs.delete(key);
+    }
+    this.retireEntry(entry);
+  }
+
+  /**
+   * Take a graph out of service, disposing it now or on last release.
+   *
+   * An entry with in-flight scales is only marked; the final {@link releaseGraph}
+   * disposes the filter once nothing uses it anymore.
+   *
+   * @param entry - Entry removed from the cache
+   *
+   * @internal
+   */
+  private retireEntry(entry: HwGraphEntry): void {
+    entry.evicted = true;
+    if (entry.refs === 0) {
+      entry.filter[Symbol.dispose]();
+    }
+  }
+
+  /**
+   * Drop an in-flight reference, disposing the graph if it was retired meanwhile.
+   *
+   * @param entry - Entry acquired by {@link toFrame}
+   *
+   * @internal
+   */
+  private releaseGraph(entry: HwGraphEntry): void {
+    entry.refs--;
+    if (entry.refs === 0 && entry.evicted) {
+      entry.filter[Symbol.dispose]();
     }
   }
 
@@ -784,8 +1023,13 @@ export class Scaler implements Disposable {
       if (oldest === undefined) {
         break;
       }
-      this.graphs.get(oldest)?.filter[Symbol.dispose]();
+      const evictee = this.graphs.get(oldest);
       this.graphs.delete(oldest);
+      if (evictee) {
+        // In-use graphs are retired, not disposed - the last in-flight scale
+        // disposes them on release.
+        this.retireEntry(evictee);
+      }
     }
   }
 
