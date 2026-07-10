@@ -72,6 +72,21 @@ inline Napi::Object RationalToJS(const Napi::Env& env, const AVRational& r) {
   return obj;
 }
 
+// True while the env can still execute JS. After worker.terminate() the worker's
+// loop drains pending async completions, but every JS-entering napi call fails
+// and node-addon-api escalates that failure to a process-fatal abort - completion
+// handlers (OnOK/OnError) must bail out instead of touching their promises.
+// napi_get_named_property carries the can_call_into_js guard; napi_get_global
+// does not, so the combination probes the state without side effects.
+inline bool CanCallIntoJs(Napi::Env env) {
+  napi_value global;
+  if (napi_get_global(env, &global) != napi_ok) {
+    return false;
+  }
+  napi_value probe;
+  return napi_get_named_property(env, global, "undefined", &probe) == napi_ok;
+}
+
 template<typename T>
 T* UnwrapNativeObject(const Napi::Env& env, const Napi::Value& value, const char* typeName) {
   if (!value.IsObject()) {
