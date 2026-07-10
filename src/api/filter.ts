@@ -2,6 +2,7 @@
 import {
   AV_BUFFERSRC_FLAG_KEEP_REF,
   AV_BUFFERSRC_FLAG_PUSH,
+  AV_NOPTS_VALUE,
   AVERROR_EAGAIN,
   AVERROR_EOF,
   AVERROR_FILTER_NOT_FOUND,
@@ -757,10 +758,15 @@ export class FilterAPI implements Disposable {
     }
 
     // Rescale timestamps to filter's timeBase
+    // AV_NOPTS_VALUE must pass through untouched: av_rescale_q(INT64_MIN) yields garbage
     if (this.calculatedTimeBase) {
       const originalTimeBase = frame.timeBase;
-      frame.pts = avRescaleQ(frame.pts, originalTimeBase, this.calculatedTimeBase);
-      frame.duration = avRescaleQ(frame.duration, originalTimeBase, this.calculatedTimeBase);
+      if (frame.pts !== AV_NOPTS_VALUE) {
+        frame.pts = avRescaleQ(frame.pts, originalTimeBase, this.calculatedTimeBase);
+      }
+      if (frame.duration !== AV_NOPTS_VALUE) {
+        frame.duration = avRescaleQ(frame.duration, originalTimeBase, this.calculatedTimeBase);
+      }
       frame.timeBase = new Rational(this.calculatedTimeBase.num, this.calculatedTimeBase.den);
     }
 
@@ -844,11 +850,15 @@ export class FilterAPI implements Disposable {
       throw new Error('Could not reinitialize filter contexts');
     }
 
-    // Rescale timestamps to filter's timeBase
+    // Rescale timestamps to filter's timeBase (NOPTS passes through, see process())
     if (this.calculatedTimeBase) {
       const originalTimeBase = frame.timeBase;
-      frame.pts = avRescaleQ(frame.pts, originalTimeBase, this.calculatedTimeBase);
-      frame.duration = avRescaleQ(frame.duration, originalTimeBase, this.calculatedTimeBase);
+      if (frame.pts !== AV_NOPTS_VALUE) {
+        frame.pts = avRescaleQ(frame.pts, originalTimeBase, this.calculatedTimeBase);
+      }
+      if (frame.duration !== AV_NOPTS_VALUE) {
+        frame.duration = avRescaleQ(frame.duration, originalTimeBase, this.calculatedTimeBase);
+      }
       frame.timeBase = new Rational(this.calculatedTimeBase.num, this.calculatedTimeBase.den);
     }
 
