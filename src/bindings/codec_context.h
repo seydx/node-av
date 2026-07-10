@@ -3,6 +3,7 @@
 
 #include <napi.h>
 #include "common.h"
+#include "promise_worker.h"
 #include <memory>
 
 extern "C" {
@@ -14,6 +15,7 @@ namespace ffmpeg {
 
 class CodecContext : public Napi::ObjectWrap<CodecContext> {
 public:
+  static thread_local Napi::FunctionReference constructor;
   static Napi::Object Init(Napi::Env env, Napi::Object exports);
   CodecContext(const Napi::CallbackInfo& info);
   ~CodecContext();
@@ -22,16 +24,13 @@ public:
 
 private:
   friend class AVOptionWrapper;
-  friend class CCOpen2Worker;
-  friend class CCSendPacketWorker;
-  friend class CCReceiveFrameWorker;
-  friend class CCSendFrameWorker;
-  friend class CCReceivePacketWorker;
-
-  static thread_local Napi::FunctionReference constructor;
 
   AVCodecContext* context_ = nullptr;
   bool is_open_ = false;
+  AsyncOpCounter async_ops_;
+
+  // Shared by SendFrameSync and SendFrameAsync
+  static int ValidateAudioFrame(const AVCodecContext* avctx, const AVFrame* frame);
 
   enum AVPixelFormat hw_pix_fmt_ = AV_PIX_FMT_NONE;
   enum AVPixelFormat sw_pix_fmt_ = AV_PIX_FMT_NONE;

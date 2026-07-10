@@ -114,20 +114,56 @@ Napi::Value CodecContext::AllocContext3(const Napi::CallbackInfo& info) {
     }
   }
   
+  // Replacing an existing context while a worker still uses it on the
+  // threadpool would be a use-after-free; wait for in-flight operations first
+  if (context_) {
+    if (!GuardAsyncOps(env, async_ops_, "CodecContext")) {
+      return env.Undefined();
+    }
+  }
+
   AVCodecContext* ctx = avcodec_alloc_context3(codec);
   if (!ctx) {
     Napi::Error::New(env, "Failed to allocate codec context (ENOMEM)").ThrowAsJavaScriptException();
     return env.Undefined();
   }
-  
+
   context_ = ctx;
   return env.Undefined();
 }
 
 Napi::Value CodecContext::FreeContext(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
-  avcodec_free_context(&context_);
+
+  if (context_) {
+    // Freeing while a worker still uses the context on the threadpool would be
+    // a use-after-free; wait bounded, then error instead of crashing
+    if (!GuardAsyncOps(env, async_ops_, "CodecContext")) {
+      return env.Undefined();
+    }
+    avcodec_free_context(&context_);
+  }
+
   return env.Undefined();
+}
+
+int CodecContext::ValidateAudioFrame(const AVCodecContext* avctx, const AVFrame* frame) {
+  if (!frame || avctx->codec_type != AVMEDIA_TYPE_AUDIO) {
+    return 0;
+  }
+
+  // A channel count mismatch makes FFmpeg dereference per-channel planes that
+  // don't exist on the frame - a crash, not a clean error - so reject it here
+  if (frame->ch_layout.nb_channels != avctx->ch_layout.nb_channels) {
+    return AVERROR(EINVAL);
+  }
+
+  // Sample format mismatch (e.g. planar vs interleaved) misinterprets the buffer layout
+  if (frame->format != avctx->sample_fmt) {
+    return AVERROR(EINVAL);
+  }
+
+  return 0;
 }
 
 Napi::Value CodecContext::ParametersToContext(const Napi::CallbackInfo& info) {
@@ -361,6 +397,8 @@ void CodecContext::SetExtraData(const Napi::CallbackInfo& info, const Napi::Valu
   // Allocate and copy new extra data
   ctx->extradata = static_cast<uint8_t*>(av_mallocz(size + AV_INPUT_BUFFER_PADDING_SIZE));
   if (!ctx->extradata) {
+    // Keep size consistent with the NULL pointer - FFmpeg reads extradata_size bytes
+    ctx->extradata_size = 0;
     Napi::Error::New(env, "Failed to allocate extra data").ThrowAsJavaScriptException();
     return;
   }
@@ -735,7 +773,11 @@ void CodecContext::SetChannelLayout(const Napi::CallbackInfo& info, const Napi::
   
   Napi::Object obj = value.As<Napi::Object>();
   AVCodecContext* ctx = context_;
-  
+
+  // Free any custom channel map the previous layout may own before overwriting
+  av_channel_layout_uninit(&ctx->ch_layout);
+  memset(&ctx->ch_layout, 0, sizeof(AVChannelLayout));
+
   if (obj.Has("nbChannels")) {
     ctx->ch_layout.nb_channels = obj.Get("nbChannels").As<Napi::Number>().Int32Value();
   }

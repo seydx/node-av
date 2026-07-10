@@ -37,19 +37,24 @@ Napi::Value CodecContext::Open2Sync(const Napi::CallbackInfo& info) {
   if (info.Length() > 1 && !info[1].IsNull() && !info[1].IsUndefined()) {
     Napi::Object dictObj = info[1].As<Napi::Object>();
     Dictionary* dict = UnwrapNativeObject<Dictionary>(env, dictObj, "Dictionary");
-    if (dict) {
-      options = dict->Get();
+    if (!dict) {
+      Napi::TypeError::New(env, "Invalid Dictionary object").ThrowAsJavaScriptException();
+      return env.Undefined();
+    }
+    if (dict->Get()) {
+      // Work on a copy; avcodec_open2 frees/replaces the passed dict (see Open2Async)
+      av_dict_copy(&options, dict->Get(), 0);
     }
   }
-  
+
   // Call avcodec_open2 synchronously
   int ret = avcodec_open2(context_, codec, options ? &options : nullptr);
-  
+
   if (ret >= 0) {
     is_open_ = true;
   }
-  
-  // Clean up options if modified
+
+  // Free our copy (holds any unconsumed options)
   if (options) {
     av_dict_free(&options);
   }
@@ -68,6 +73,10 @@ Napi::Value CodecContext::SendPacketSync(const Napi::CallbackInfo& info) {
   Packet* packet = nullptr;
   if (info.Length() > 0 && !info[0].IsNull() && !info[0].IsUndefined()) {
     packet = UnwrapNativeObject<Packet>(env, info[0], "Packet");
+    if (!packet) {
+      Napi::TypeError::New(env, "Invalid packet object").ThrowAsJavaScriptException();
+      return env.Undefined();
+    }
   }
 
   // Direct synchronous call
@@ -118,10 +127,20 @@ Napi::Value CodecContext::SendFrameSync(const Napi::CallbackInfo& info) {
   Frame* frame = nullptr;
   if (info.Length() > 0 && !info[0].IsNull() && !info[0].IsUndefined()) {
     frame = UnwrapNativeObject<Frame>(env, info[0], "Frame");
+    if (!frame) {
+      Napi::TypeError::New(env, "Invalid frame object").ThrowAsJavaScriptException();
+      return env.Undefined();
+    }
+  }
+
+  // Guard against mismatched audio frames (see CodecContext::ValidateAudioFrame)
+  int ret = ValidateAudioFrame(context_, frame ? frame->Get() : nullptr);
+  if (ret < 0) {
+    return Napi::Number::New(env, ret);
   }
 
   // Direct synchronous call
-  int ret = avcodec_send_frame(context_, frame ? frame->Get() : nullptr);
+  ret = avcodec_send_frame(context_, frame ? frame->Get() : nullptr);
 
   return Napi::Number::New(env, ret);
 }
