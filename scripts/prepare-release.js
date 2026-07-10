@@ -137,15 +137,17 @@ console.log(`Bumping version from ${currentVersion} to ${newVersion}`);
 packageJson.version = newVersion;
 
 // Update the platform binary packages (@seydx/node-av-*) to match the main
-// package version. Ignore third-party optional deps.
+// package version. Exact pin (no range): a lockfile-less install must never
+// pair an old main package with newer native binaries (esbuild/sharp do the
+// same). Ignore third-party optional deps.
 const optionalDeps = packageJson.optionalDependencies;
 for (const dep in optionalDeps) {
   if (dep.startsWith('@seydx/node-av-')) {
-    optionalDeps[dep] = `^${newVersion}`;
+    optionalDeps[dep] = newVersion;
   }
 }
 
-console.log('Updated platform package versions to ^' + newVersion);
+console.log('Updated platform package versions to ' + newVersion);
 
 // Write updated package.json
 writeFileSync(packagePath, JSON.stringify(packageJson, null, 2) + '\n');
