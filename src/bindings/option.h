@@ -10,6 +10,7 @@ namespace ffmpeg {
 
 class AVOptionWrapper : public Napi::ObjectWrap<AVOptionWrapper> {
 public:
+  static thread_local Napi::FunctionReference constructor;
   static Napi::Object Init(Napi::Env env, Napi::Object exports);
   AVOptionWrapper(const Napi::CallbackInfo& info);
   ~AVOptionWrapper();
@@ -30,6 +31,7 @@ public:
   static Napi::Value Find2(const Napi::CallbackInfo& info);
   static Napi::Value Get(const Napi::CallbackInfo& info);
   static Napi::Value GetInt(const Napi::CallbackInfo& info);
+  static Napi::Value GetInt64(const Napi::CallbackInfo& info);
   static Napi::Value GetDouble(const Napi::CallbackInfo& info);
   static Napi::Value GetRational(const Napi::CallbackInfo& info);
   static Napi::Value GetPixelFormat(const Napi::CallbackInfo& info);
@@ -55,7 +57,6 @@ public:
   static Napi::Value Show(const Napi::CallbackInfo& info);
 
 private:
-  static thread_local Napi::FunctionReference constructor;
   const ::AVOption* option_;
   
   // Helper to extract void* from Native objects

@@ -28,6 +28,7 @@ Napi::Object AVOptionWrapper::Init(Napi::Env env, Napi::Object exports) {
     StaticMethod<&AVOptionWrapper::Find2>("find2"),
     StaticMethod<&AVOptionWrapper::Get>("get"),
     StaticMethod<&AVOptionWrapper::GetInt>("getInt"),
+    StaticMethod<&AVOptionWrapper::GetInt64>("getInt64"),
     StaticMethod<&AVOptionWrapper::GetDouble>("getDouble"),
     StaticMethod<&AVOptionWrapper::GetRational>("getRational"),
     StaticMethod<&AVOptionWrapper::GetPixelFormat>("getPixelFormat"),
@@ -460,12 +461,44 @@ Napi::Value AVOptionWrapper::GetInt(const Napi::CallbackInfo& info) {
   
   int64_t out_val;
   int ret = av_opt_get_int(obj, name.c_str(), search_flags, &out_val);
-  
+
   if (ret < 0) {
     return env.Null();
   }
-  
+
   return Napi::Number::New(env, static_cast<double>(out_val));
+}
+
+Napi::Value AVOptionWrapper::GetInt64(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+  if (info.Length() < 2) {
+    Napi::TypeError::New(env, "Missing required arguments: object, name").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  void* obj = GetNativePointer(info[0]);
+  if (!obj) {
+    Napi::TypeError::New(env, "Invalid native object").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  std::string name = info[1].As<Napi::String>().Utf8Value();
+  int search_flags = 0;
+
+  if (info.Length() >= 3 && info[2].IsNumber()) {
+    search_flags = info[2].As<Napi::Number>().Int32Value();
+  }
+
+  int64_t out_val;
+  int ret = av_opt_get_int(obj, name.c_str(), search_flags, &out_val);
+
+  if (ret < 0) {
+    return env.Null();
+  }
+
+  // BigInt keeps full int64 precision - Number truncates above 2^53
+  return Napi::BigInt::New(env, out_val);
 }
 
 Napi::Value AVOptionWrapper::GetDouble(const Napi::CallbackInfo& info) {

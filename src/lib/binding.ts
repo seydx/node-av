@@ -170,6 +170,7 @@ interface NativeOptionStatic {
   // Getters
   get(obj: OptionCapableObject, name: string, searchFlags?: AVOptionSearchFlags): string | null;
   getInt(obj: OptionCapableObject, name: string, searchFlags?: AVOptionSearchFlags): number | null;
+  getInt64(obj: OptionCapableObject, name: string, searchFlags?: AVOptionSearchFlags): bigint | null;
   getDouble(obj: OptionCapableObject, name: string, searchFlags?: AVOptionSearchFlags): number | null;
   getRational(obj: OptionCapableObject, name: string, searchFlags?: AVOptionSearchFlags): IRational | null;
   getPixelFormat(obj: OptionCapableObject, name: string, searchFlags?: AVOptionSearchFlags): AVPixelFormat | null;

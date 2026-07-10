@@ -405,6 +405,35 @@ export class Option {
   }
 
   /**
+   * Get 64-bit integer option value.
+   *
+   * Returns a bigint to keep full int64 precision - getInt goes through a
+   * double and truncates values above 2^53.
+   *
+   * Direct mapping to av_opt_get_int().
+   *
+   * @param obj - Object to query
+   *
+   * @param name - Option name
+   *
+   * @param searchFlags - Search flags
+   *
+   * @returns Option value as bigint, or null
+   *
+   * @example
+   * ```typescript
+   * // Get maximum interleave delta
+   * const delta = Option.getInt64(formatContext, 'max_interleave_delta', AV_OPT_SEARCH_CHILDREN);
+   * console.log('Max interleave delta:', delta); // 10000000n
+   * ```
+   *
+   * @see {@link getInt} For 32-bit safe integer options
+   */
+  static getInt64(obj: OptionCapableObject, name: string, searchFlags: AVOptionSearchFlags = AVFLAG_NONE): bigint | null {
+    return bindings.Option.getInt64(obj, name, searchFlags);
+  }
+
+  /**
    * Get double option value.
    *
    * Direct mapping to av_opt_get_double().
@@ -1075,7 +1104,8 @@ export class OptionMember<T extends OptionCapableObject> {
    *
    * @param value - Option value
    *
-   * @param type - Option type (defaults to AV_OPT_TYPE_STRING)
+   * @param type - Option type; when omitted, the option's declared type is
+   *   looked up via av_opt_find and the value converted accordingly
    *
    * @param searchFlags - Search flags (default: AV_OPT_SEARCH_CHILDREN)
    *
@@ -1089,7 +1119,7 @@ export class OptionMember<T extends OptionCapableObject> {
    * import { FFmpegError } from 'node-av';
    * import { AV_OPT_TYPE_STRING, AV_OPT_TYPE_INT64, AV_OPT_TYPE_RATIONAL, AV_OPT_TYPE_PIXEL_FMT } from 'node-av/constants';
    *
-   * // String options (default)
+   * // Untyped - the option's declared type is inferred
    * let ret = obj.setOption('preset', 'fast');
    * FFmpegError.throwIfError(ret, 'set preset');
    *
@@ -1111,17 +1141,16 @@ export class OptionMember<T extends OptionCapableObject> {
    * FFmpegError.throwIfError(ret, 'set pixel format');
    * ```
    */
-  setOption(name: string, value: any, type: AVOptionType = AV_OPT_TYPE_STRING, searchFlags: AVOptionSearchFlags = AV_OPT_SEARCH_CHILDREN): number {
+  setOption(name: string, value: any, type?: AVOptionType, searchFlags: AVOptionSearchFlags = AV_OPT_SEARCH_CHILDREN): number {
     if (value === undefined || value === null) {
       return 0;
     }
 
-    // Do we need to infer type? FFmpeg can handle unknown options
+    // No explicit type: look up the option's declared type and convert the value
+    // (a default of AV_OPT_TYPE_STRING here would make this branch unreachable)
     if (type === undefined) {
       return this.setUnknownOption(name, value);
     }
-
-    // searchFlags ??= AV_OPT_SEARCH_CHILDREN;
 
     switch (type) {
       case AV_OPT_TYPE_STRING:
@@ -1328,9 +1357,8 @@ export class OptionMember<T extends OptionCapableObject> {
 
       case AV_OPT_TYPE_INT64:
       case AV_OPT_TYPE_UINT64:
-        // For INT64/UINT64, we should return bigint for proper precision
-        const int64Val = Option.getInt(this.native, name, searchFlags);
-        return int64Val !== null ? BigInt(int64Val) : null;
+        // getInt64 returns bigint natively - getInt would truncate above 2^53
+        return Option.getInt64(this.native, name, searchFlags);
 
       case AV_OPT_TYPE_BOOL:
         const val = Option.getInt(this.native, name, searchFlags);
@@ -1424,6 +1452,13 @@ export class OptionMember<T extends OptionCapableObject> {
   private setUnknownOption(name: string, value: string | number | boolean | bigint | object | null | undefined): number {
     if (value === undefined || value === null) {
       return 0;
+    }
+
+    // Strings always go through av_opt_set: FFmpeg parses them for every option
+    // type (flag names like '+frag_keyframe', named constants, rationals) -
+    // per-type conversion like parseInt would silently mangle them
+    if (typeof value === 'string') {
+      return this.setOption(name, value, AV_OPT_TYPE_STRING);
     }
 
     // Try to find the option to get its type
@@ -1570,10 +1605,6 @@ export class OptionMember<T extends OptionCapableObject> {
             return this.setOption(name, value !== 0, AV_OPT_TYPE_BOOL);
           } else if (typeof value === 'bigint') {
             return this.setOption(name, value !== 0n, AV_OPT_TYPE_BOOL);
-          } else if (typeof value === 'string') {
-            // Parse string as boolean (1/true/yes/on = true, everything else = false)
-            const str = value.toLowerCase();
-            return this.setOption(name, str === '1' || str === 'true' || str === 'yes' || str === 'on', AV_OPT_TYPE_BOOL);
           } else {
             return FFmpegError.AVERROR(PosixError.EINVAL);
           }
@@ -1670,10 +1701,6 @@ export class OptionMember<T extends OptionCapableObject> {
               value.map((v) => (typeof v === 'number' ? v : Number(v))),
               AV_OPT_TYPE_BINARY_INT_ARRAY,
             );
-          } else if (typeof value === 'string') {
-            // Parse comma-separated values "1,2,3" → [1, 2, 3]
-            const arr = value.split(',').map((s) => parseInt(s.trim(), 10));
-            return this.setOption(name, arr, AV_OPT_TYPE_BINARY_INT_ARRAY);
           } else if (typeof value === 'number') {
             // Single number → single-element array
             return this.setOption(name, [value], AV_OPT_TYPE_BINARY_INT_ARRAY);
