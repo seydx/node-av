@@ -49,6 +49,12 @@ SoftwareResampleContext::~SoftwareResampleContext() {
 Napi::Value SoftwareResampleContext::Alloc(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
+  // Replacing the context frees the old one - wait for in-flight async
+  // operations first
+  if (ctx_ && !GuardAsyncOps(env, async_ops_, "SoftwareResampleContext")) {
+    return env.Undefined();
+  }
+
   swr_free(&ctx_);
 
   SwrContext* new_ctx = swr_alloc();
@@ -118,7 +124,13 @@ Napi::Value SoftwareResampleContext::AllocSetOpts2(const Napi::CallbackInfo& inf
   
   int inSampleFmt = info[4].As<Napi::Number>().Int32Value();
   int inSampleRate = info[5].As<Napi::Number>().Int32Value();
-  
+
+  // Replacing the context frees the old one - wait for in-flight async
+  // operations first
+  if (ctx_ && !GuardAsyncOps(env, async_ops_, "SoftwareResampleContext")) {
+    return Napi::Number::New(env, AVERROR(EINVAL));
+  }
+
   swr_free(&ctx_);
 
   // Allocate and set options
@@ -151,19 +163,30 @@ Napi::Value SoftwareResampleContext::Init(const Napi::CallbackInfo& info) {
 Napi::Value SoftwareResampleContext::Free(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
-  swr_free(&ctx_);
+  if (ctx_) {
+    // Freeing while a worker still converts on the threadpool would be a
+    // use-after-free; wait bounded, then error instead of crashing
+    if (!GuardAsyncOps(env, async_ops_, "SoftwareResampleContext")) {
+      return env.Undefined();
+    }
+    swr_free(&ctx_);
+  }
 
   return env.Undefined();
 }
 
 Napi::Value SoftwareResampleContext::Close(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
-  
+
   SwrContext* ctx = Get();
   if (ctx) {
+    // swr_close releases internal buffers a worker may still be using
+    if (!GuardAsyncOps(env, async_ops_, "SoftwareResampleContext")) {
+      return env.Undefined();
+    }
     swr_close(ctx);
   }
-  
+
   return env.Undefined();
 }
 

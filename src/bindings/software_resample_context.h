@@ -3,6 +3,7 @@
 
 #include <napi.h>
 #include "common.h"
+#include "promise_worker.h"
 
 extern "C" {
 #include <libswresample/swresample.h>
@@ -14,6 +15,7 @@ namespace ffmpeg {
 
 class SoftwareResampleContext : public Napi::ObjectWrap<SoftwareResampleContext> {
 public:
+  static thread_local Napi::FunctionReference constructor;
   static Napi::Object Init(Napi::Env env, Napi::Object exports);
   SoftwareResampleContext(const Napi::CallbackInfo& info);
   ~SoftwareResampleContext();
@@ -22,11 +24,13 @@ public:
 
 private:
   friend class AVOptionWrapper;
-  friend class SwrConvertWorker;
 
-  static thread_local Napi::FunctionReference constructor;
 
   SwrContext* ctx_ = nullptr;
+
+  // In-flight threadpool operations (convert); free/close/replace paths wait
+  // on this so they cannot free ctx_ under a worker.
+  AsyncOpCounter async_ops_;
 
   Napi::Value Alloc(const Napi::CallbackInfo& info);
   Napi::Value AllocSetOpts2(const Napi::CallbackInfo& info);
