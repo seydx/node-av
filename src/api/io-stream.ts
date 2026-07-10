@@ -1,7 +1,7 @@
-import { once } from 'node:events';
 import { Readable } from 'node:stream';
 
 import { AVSEEK_CUR, AVSEEK_END, AVSEEK_SET, AVSEEK_SIZE } from '../constants/constants.js';
+import { AVERROR_EIO } from '../lib/error.js';
 import { IOContext } from '../lib/index.js';
 import { IO_BUFFER_SIZE, MAX_PACKET_SIZE } from './constants.js';
 
@@ -349,6 +349,7 @@ export class IOStream {
     let totalBuffered = 0;
     let streamEnded = false;
     let streamError: Error | null = null;
+    let ioFreed = false;
     let pendingResolve: (() => void) | null = null;
 
     const wakeUp = () => {
@@ -386,13 +387,13 @@ export class IOStream {
     ioContext.allocContextWithCallbacks(
       bufferSize,
       0, // read mode
-      async (size: number): Promise<Buffer | null> => {
+      async (size: number): Promise<Buffer | null | number> => {
         // Pull-based: read from stream on demand. Return as soon as *any* data is
         // available rather than waiting for the full `size` — FFmpeg's AVIO handles
         // short reads and calls back for more. Blocking until the whole AVIO buffer
         // (often 64 KiB) is filled would stall probing on realtime sources that
         // deliver data slowly, where only the first few KiB are needed up front.
-        while (totalBuffered === 0 && !streamEnded && !streamError && !stream.destroyed) {
+        while (totalBuffered === 0 && !ioFreed && !streamEnded && !streamError && !stream.destroyed) {
           // Try to read available data first
           let chunk: Buffer | null;
           while ((chunk = stream.read() as Buffer | null) !== null) {
@@ -412,9 +413,21 @@ export class IOStream {
           });
         }
 
-        // No data available — EOF, remove listeners
+        // I/O context was freed while this read was in flight — treat as EOF,
+        // the result has no consumer anymore.
+        if (ioFreed) {
+          return null;
+        }
+
+        // No data available — stream is done, remove listeners
         if (totalBuffered === 0) {
           removeListeners();
+          // A stream error must surface as a read error, not clean EOF —
+          // the demuxer treats null as regular end-of-file, which would make
+          // a broken source indistinguishable from a finished one.
+          if (streamError) {
+            return AVERROR_EIO;
+          }
           return null;
         }
 
@@ -434,6 +447,19 @@ export class IOStream {
       undefined, // no write
       undefined, // no seek
     );
+
+    // The demuxer frees the I/O context on close - that is the only signal we
+    // get that consumption stopped (possibly before EOF). Hook it so listeners
+    // and buffered chunks don't stay attached to the caller's stream forever.
+    const nativeFree = ioContext.freeContext.bind(ioContext);
+    ioContext.freeContext = () => {
+      ioFreed = true;
+      removeListeners();
+      chunks = [];
+      totalBuffered = 0;
+      wakeUp(); // release a read parked on an empty buffer
+      nativeFree();
+    };
 
     return ioContext;
   }
@@ -461,11 +487,43 @@ export class IOStream {
       1, // write mode
       undefined, // no read
       async (buffer: Buffer): Promise<number> => {
+        // Fail fast on a dead stream - a thrown error is surfaced to FFmpeg
+        // as a write error (AVERROR(EIO)) by the native layer, so the muxer
+        // write rejects instead of silently feeding a destroyed stream.
+        if (stream.destroyed || stream.writableEnded) {
+          throw stream.errored ?? new Error('Writable stream was destroyed or ended during muxing');
+        }
+
         // Copy buffer — FFmpeg reuses the internal buffer after callback returns
         const copy = Buffer.from(buffer);
         if (!stream.write(copy)) {
-          // Backpressure: wait for drain
-          await once(stream, 'drain');
+          // Backpressure: wait for drain, but never park unconditionally -
+          // 'drain' never fires on a stream that errors or is destroyed while
+          // we wait, which would hang the muxer forever. Race it against
+          // 'error'/'close' and clean up all listeners on whichever settles.
+          await new Promise<void>((resolve, reject) => {
+            const settle = (err?: Error) => {
+              stream.off('drain', onDrain);
+              stream.off('error', onError);
+              stream.off('close', onClose);
+              if (err) {
+                reject(err);
+              } else {
+                resolve();
+              }
+            };
+            const onDrain = () => settle();
+            const onError = (err: Error) => settle(err);
+            const onClose = () => settle(new Error('Writable stream closed before draining'));
+            stream.on('drain', onDrain);
+            stream.on('error', onError);
+            stream.on('close', onClose);
+            // Destroyed between write() and listener registration - 'close'
+            // may already have fired, so it would never wake us up.
+            if (stream.destroyed) {
+              settle(stream.errored ?? new Error('Writable stream destroyed before draining'));
+            }
+          });
         }
         return copy.length;
       },
