@@ -58,8 +58,11 @@ Napi::Value Fifo::Alloc(const Napi::CallbackInfo& info) {
     return env.Undefined();
   }
 
-  // Free old fifo if exists
+  // Free old fifo if exists - wait for in-flight async operations first
   if (fifo_) {
+    if (!GuardAsyncOps(env, async_ops_, "Fifo")) {
+      return env.Undefined();
+    }
     av_fifo_freep2(&fifo_);
   }
 
@@ -85,6 +88,11 @@ Napi::Value Fifo::Free(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
   if (fifo_) {
+    // Freeing while a worker still uses the fifo on the threadpool would be a
+    // use-after-free; wait bounded, then error instead of crashing
+    if (!GuardAsyncOps(env, async_ops_, "Fifo")) {
+      return env.Undefined();
+    }
     av_fifo_freep2(&fifo_);
   }
 

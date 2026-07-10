@@ -62,6 +62,12 @@ FilterGraph::~FilterGraph() {
 Napi::Value FilterGraph::Alloc(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
+  // Replacing the graph frees the old one - wait for in-flight async
+  // operations first
+  if (graph_ && !GuardAsyncOps(env, async_ops_, "FilterGraph")) {
+    return env.Undefined();
+  }
+
   avfilter_graph_free(&graph_);
 
   graph_ = avfilter_graph_alloc();
@@ -78,6 +84,14 @@ Napi::Value FilterGraph::Alloc(const Napi::CallbackInfo& info) {
 Napi::Value FilterGraph::Free(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
+  if (graph_ || unowned_graph_) {
+    // Freeing (or detaching) while a config/requestOldest worker still uses
+    // the graph on the threadpool would be a use-after-free; wait bounded,
+    // then error instead of crashing
+    if (!GuardAsyncOps(env, async_ops_, "FilterGraph")) {
+      return env.Undefined();
+    }
+  }
   avfilter_graph_free(&graph_);
   unowned_graph_ = nullptr;
 

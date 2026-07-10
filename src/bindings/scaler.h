@@ -2,6 +2,7 @@
 
 #include <napi.h>
 #include <unordered_map>
+#include "promise_worker.h"
 
 extern "C" {
 #include <libavutil/frame.h>
@@ -24,7 +25,13 @@ public:
   Scaler& operator=(const Scaler&) = delete;
 
 private:
+  friend class ScalerProcessWorker;
+
   int flags_;  // sws scaling flags (e.g. SWS_BILINEAR)
+
+  // In-flight threadpool operations (process); close() waits on this so it
+  // cannot free the pooled frames/contexts under a worker.
+  AsyncOpCounter async_ops_;
 
   struct FrameConfig {
     int width;
