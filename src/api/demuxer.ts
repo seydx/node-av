@@ -11,6 +11,8 @@ import {
   AV_ROUND_PASS_MINMAX,
   AV_TIME_BASE,
   AV_TIME_BASE_Q,
+  AVERROR_EOF,
+  AVERROR_EXIT,
   AVFLAG_NONE,
   AVFMT_FLAG_CUSTOM_IO,
   AVFMT_FLAG_NONBLOCK,
@@ -38,6 +40,10 @@ import type { AVMediaType, AVPixelFormat, AVSampleFormat, AVSeekFlag, AVSeekWhen
 import type { Stream } from '../lib/stream.js';
 import type { IRational } from '../lib/types.js';
 import type { IOInputCallbacks } from './io-stream.js';
+
+// Scratch buffer for Atomics.wait() - gives packetsSync a blocking sleep for
+// EAGAIN retries (mirrors FFmpeg CLI's av_usleep()) without spinning the CPU.
+const SYNC_SLEEP_SIGNAL = new Int32Array(new SharedArrayBuffer(4));
 
 /**
  * Per-stream timestamp processing state.
@@ -359,9 +365,10 @@ export class Demuxer implements AsyncDisposable, Disposable {
   private demuxThread: Promise<void> | null = null;
   private packetQueues = new Map<number | 'all', Packet[]>(); // streamIndex or 'all' -> queue
   private packetQueueConsumers = new Map<number | 'all', number>(); // active consumer count per queue key
-  private queueResolvers = new Map<number | 'all', () => void>(); // Promise resolvers for waiting consumers
+  private queueResolvers = new Map<number | 'all', (() => void)[]>(); // Promise resolvers for waiting consumers (multiple per key)
   private demuxThreadActive = false;
   private demuxEof = false;
+  private lastError: FFmpegError | null = null; // read error that ended the demux loop (null = clean EOF)
   private signal?: AbortSignal;
   private signalCleanup?: () => void;
 
@@ -1681,6 +1688,9 @@ export class Demuxer implements AsyncDisposable, Disposable {
    *
    * @yields {Packet} Demuxed packets (must be freed by caller)
    *
+   * @throws {FFmpegError} If reading fails with an error other than EOF (e.g. I/O failure
+   * or a dropped network source) - only a real end-of-file ends the stream cleanly
+   *
    * @throws {Error} If packet cloning fails
    *
    * @example
@@ -1740,8 +1750,6 @@ export class Demuxer implements AsyncDisposable, Disposable {
     // Always start demux thread (handles single and multiple generators)
     this.startDemuxThread();
 
-    let aborted = false;
-
     try {
       let hasSeenKeyframe = !this.options.startWithKeyframe;
 
@@ -1750,7 +1758,6 @@ export class Demuxer implements AsyncDisposable, Disposable {
 
       while (!this.isClosed) {
         if (this.signal?.aborted) {
-          aborted = true;
           break;
         }
 
@@ -1759,31 +1766,49 @@ export class Demuxer implements AsyncDisposable, Disposable {
 
         // If queue is empty, wait for next packet
         if (!packet) {
-          // Check for EOF first
+          // Queue drained - check for end of stream. Buffered packets always
+          // drain before EOF/error is honored, so successfully read data is
+          // never dropped.
           if (this.demuxEof) {
+            // The read loop ended with a real error (not EOF): propagate it
+            // instead of ending the stream silently - a dead live source must
+            // be distinguishable from a finished file.
+            if (this.lastError) {
+              throw this.lastError;
+            }
             break; // End of stream
           }
 
-          // Create promise and register resolver
+          // Create promise and register resolver. Multiple consumers may wait
+          // on the same queue key concurrently, so resolvers are collected per
+          // key - a single slot would be overwritten by the second consumer,
+          // parking the first one forever (whole-demuxer deadlock).
           const { promise, resolve } = Promise.withResolvers<void>();
-          this.queueResolvers.set(queueKey, resolve);
+          const resolvers = this.queueResolvers.get(queueKey);
+          if (resolvers) {
+            resolvers.push(resolve);
+          } else {
+            this.queueResolvers.set(queueKey, [resolve]);
+          }
 
           // Wait for demux thread to add packet
           await promise;
 
           // Check for abort after wakeup
           if (this.signal?.aborted) {
-            aborted = true;
-            break;
-          }
-
-          // Check again after wakeup
-          if (this.demuxEof) {
             break;
           }
 
           packet = queue.shift();
           if (!packet) {
+            // Woken without a packet for us - either EOF/error or another
+            // consumer grabbed it. Loop back and re-evaluate.
+            if (this.demuxEof) {
+              if (this.lastError) {
+                throw this.lastError;
+              }
+              break;
+            }
             continue;
           }
         }
@@ -1830,15 +1855,14 @@ export class Demuxer implements AsyncDisposable, Disposable {
       if (this.activeGenerators === 0) {
         await this.stopDemuxThread();
       }
-
-      if (!aborted) {
-        yield null; // Signal EOF
-      }
     }
 
-    // Throw after generator cleanup — only reachable when aborted
-    // (when not aborted, yield null in finally already terminated the generator)
+    // Only reached when the loop ended naturally (EOF, abort, close). A consumer
+    // break resumes inside the finally above and completes the generator there -
+    // yielding from the finally would suspend forever inside iterator.return(),
+    // violating the iterator protocol.
     this.signal?.throwIfAborted();
+    yield null; // Signal EOF
   }
 
   /**
@@ -1854,6 +1878,9 @@ export class Demuxer implements AsyncDisposable, Disposable {
    * @param index - Optional stream index to filter
    *
    * @yields {Packet} Demuxed packets (must be freed by caller)
+   *
+   * @throws {FFmpegError} If reading fails with an error other than EOF (e.g. I/O failure
+   * or a dropped network source) - only a real end-of-file ends the stream cleanly
    *
    * @throws {Error} If packet cloning fails
    *
@@ -1886,6 +1913,16 @@ export class Demuxer implements AsyncDisposable, Disposable {
     while (!this.isClosed) {
       const ret = this.formatContext.readFrameSync(packet);
       if (ret < 0) {
+        // No data available yet (live device capture) - blocking retry
+        if (ret === AVERROR_EAGAIN) {
+          Atomics.wait(SYNC_SLEEP_SIGNAL, 0, 0, 10);
+          continue;
+        }
+        // Real read errors propagate; end-of-file and a deliberate
+        // interrupt() (AVERROR_EXIT) end cleanly
+        if (!FFmpegError.is(ret, AVERROR_EOF) && !FFmpegError.is(ret, AVERROR_EXIT)) {
+          throw new FFmpegError(ret);
+        }
         break;
       }
 
@@ -2066,8 +2103,10 @@ export class Demuxer implements AsyncDisposable, Disposable {
     this.formatContext.interrupt();
     // Signal EOF to consumers and wake any generator parked on an empty queue.
     this.demuxEof = true;
-    for (const resolve of this.queueResolvers.values()) {
-      resolve();
+    for (const resolvers of this.queueResolvers.values()) {
+      for (const resolve of resolvers) {
+        resolve();
+      }
     }
     this.queueResolvers.clear();
   }
@@ -2120,10 +2159,21 @@ export class Demuxer implements AsyncDisposable, Disposable {
             await new Promise((resolve) => setTimeout(resolve, 10));
             continue;
           }
-          // Actual end of stream - notify all waiting consumers
+          // Anything but a genuine end-of-file is a real read error (I/O
+          // failure, dropped network source, ...). Store it so consumers throw
+          // instead of seeing a clean EOF - matching FFmpeg CLI, where a read
+          // error ends processing with a failure, not a normal finish.
+          // AVERROR_EXIT is exempt: it is how interrupt() aborts a blocking
+          // read on purpose (pipeline stop/teardown), not a source failure.
+          if (!FFmpegError.is(ret, AVERROR_EOF) && !FFmpegError.is(ret, AVERROR_EXIT)) {
+            this.lastError = new FFmpegError(ret);
+          }
+          // End of stream (or error) - notify all waiting consumers
           this.demuxEof = true;
-          for (const resolve of this.queueResolvers.values()) {
-            resolve();
+          for (const resolvers of this.queueResolvers.values()) {
+            for (const resolve of resolvers) {
+              resolve();
+            }
           }
           this.queueResolvers.clear();
           break;
@@ -2219,10 +2269,14 @@ export class Demuxer implements AsyncDisposable, Disposable {
             throw new Error('Failed to clone packet in demux thread (out of memory)');
           }
           target.queue.push(clone);
-          const resolver = this.queueResolvers.get(target.key);
-          if (resolver) {
-            resolver();
+          // Wake every consumer waiting on this key - only one gets the packet,
+          // the others re-park, but a lost wakeup would deadlock them.
+          const resolvers = this.queueResolvers.get(target.key);
+          if (resolvers) {
             this.queueResolvers.delete(target.key);
+            for (const resolve of resolvers) {
+              resolve();
+            }
           }
         }
 
@@ -2243,8 +2297,10 @@ export class Demuxer implements AsyncDisposable, Disposable {
     this.demuxEof = true;
 
     // Wake up any waiting generators
-    for (const resolve of this.queueResolvers.values()) {
-      resolve();
+    for (const resolvers of this.queueResolvers.values()) {
+      for (const resolve of resolvers) {
+        resolve();
+      }
     }
     this.queueResolvers.clear();
 
@@ -2576,8 +2632,10 @@ export class Demuxer implements AsyncDisposable, Disposable {
 
     // Wake up all waiting generators BEFORE closing format context
     // This ensures generators can exit cleanly even if readFrame() is blocking
-    for (const resolve of this.queueResolvers.values()) {
-      resolve();
+    for (const resolvers of this.queueResolvers.values()) {
+      for (const resolve of resolvers) {
+        resolve();
+      }
     }
     this.queueResolvers.clear();
 
