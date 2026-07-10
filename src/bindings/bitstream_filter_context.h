@@ -3,6 +3,7 @@
 
 #include <napi.h>
 #include "common.h"
+#include "promise_worker.h"
 
 extern "C" {
 #include <libavcodec/bsf.h>
@@ -13,6 +14,7 @@ namespace ffmpeg {
 
 class BitStreamFilterContext : public Napi::ObjectWrap<BitStreamFilterContext> {
 public:
+  static thread_local Napi::FunctionReference constructor;
   static Napi::Object Init(Napi::Env env, Napi::Object exports);
   BitStreamFilterContext(const Napi::CallbackInfo& info);
   ~BitStreamFilterContext();
@@ -21,13 +23,10 @@ public:
 
 private:
   friend class AVOptionWrapper;
-  friend class BSFSendPacketWorker;
-  friend class BSFReceivePacketWorker;
-
-  static thread_local Napi::FunctionReference constructor;
 
   AVBSFContext* context_ = nullptr;
   bool is_initialized_ = false;
+  AsyncOpCounter async_ops_;
 
   Napi::Value Alloc(const Napi::CallbackInfo& info);
   Napi::Value Init(const Napi::CallbackInfo& info);

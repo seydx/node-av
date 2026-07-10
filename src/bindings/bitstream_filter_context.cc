@@ -95,6 +95,15 @@ Napi::Value BitStreamFilterContext::Init(const Napi::CallbackInfo& info) {
 
 Napi::Value BitStreamFilterContext::Free(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
+
+  if (context_) {
+    // Freeing while a worker still uses the context on the threadpool would be
+    // a use-after-free; wait bounded, then error instead of crashing
+    if (!GuardAsyncOps(env, async_ops_, "BitStreamFilterContext")) {
+      return env.Undefined();
+    }
+  }
+
   av_bsf_free(&context_);
   is_initialized_ = false;
   return env.Undefined();
