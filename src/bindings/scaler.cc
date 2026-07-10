@@ -165,6 +165,12 @@ int Scaler::RunJob(const ScaleJob& job, uint8_t* dst) {
 }
 
 Napi::Value Scaler::Close(const Napi::CallbackInfo& info) {
+  // Freeing the pooled frames/contexts while a process() job still uses them
+  // on the threadpool would be a use-after-free; wait bounded, then error
+  // instead of crashing
+  if (!GuardAsyncOps(info.Env(), async_ops_, "Scaler")) {
+    return info.Env().Undefined();
+  }
   CleanupFrames();
   CleanupSwsContexts();
   return info.Env().Undefined();
