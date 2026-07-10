@@ -3,6 +3,7 @@
 
 #include <napi.h>
 #include <memory>
+#include <string>
 
 // Fix for glibc > 2.31 compatibility
 // These _finite functions were removed but FFmpeg might still reference them
@@ -76,15 +77,19 @@ T* UnwrapNativeObject(const Napi::Env& env, const Napi::Value& value, const char
   if (!value.IsObject()) {
     return nullptr;
   }
-  
+
   Napi::Object obj = value.As<Napi::Object>();
-  
-  // Try to unwrap directly - if it fails, it's not the right type
-  try {
-    return Napi::ObjectWrap<T>::Unwrap(obj);
-  } catch (...) {
+
+  // napi_unwrap returns the wrapped pointer for ANY ObjectWrap instance regardless
+  // of its class, so an instanceof check is required before reinterpreting it as T.
+  // Deliberately does not throw: callers throw their own TypeError on nullptr, and a
+  // second ThrowAsJavaScriptException while one is pending is fatal with
+  // NAPI_DISABLE_CPP_EXCEPTIONS.
+  if (T::constructor.IsEmpty() || !obj.InstanceOf(T::constructor.Value())) {
     return nullptr;
   }
+
+  return Napi::ObjectWrap<T>::Unwrap(obj);
 }
 
 } // namespace ffmpeg
