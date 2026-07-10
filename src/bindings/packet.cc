@@ -303,10 +303,14 @@ Napi::Value Packet::NewSideData(const Napi::CallbackInfo& info) {
   
   SyncExternalMemory(env);
 
-  // Return as Buffer that references the side data (not a copy)
-  // Note: The buffer lifetime is tied to the packet
-  return Napi::Buffer<uint8_t>::NewOrCopy(env, data, size, [](Napi::Env, uint8_t*) {
-    // No-op finalizer since the data is owned by the packet
+  // Return as Buffer that references the side data (not a copy). Packet side
+  // data is plain av_malloc memory (no AVBufferRef to pin), so pin the JS
+  // wrapper instead: keeping the Packet object alive while the view exists
+  // stops GC from freeing the backing memory under it. Explicit free()/unref()/
+  // freeSideData() still invalidates the view - the caller opted into that.
+  auto* owner = new Napi::ObjectReference(Napi::Persistent(info.This().As<Napi::Object>()));
+  return Napi::Buffer<uint8_t>::NewOrCopy(env, data, size, [owner](Napi::Env, uint8_t*) {
+    delete owner;
   });
 }
 
@@ -471,19 +475,38 @@ void Packet::SetData(const Napi::CallbackInfo& info, const Napi::Value& value) {
     return;
   }
   
+  // Assigning data maps to AVPacket->data only, but both av_packet_unref() and
+  // av_new_packet() reset every field to its default - preserve the timing/
+  // stream metadata across the payload swap so assignment order doesn't matter.
+  const int64_t pts = packet_->pts;
+  const int64_t dts = packet_->dts;
+  const int64_t duration = packet_->duration;
+  const int64_t pos = packet_->pos;
+  const int stream_index = packet_->stream_index;
+  const int flags = packet_->flags;
+  const AVRational time_base = packet_->time_base;
+
   if (value.IsNull() || value.IsUndefined()) {
-    // Clear data (and reconcile the external-memory report / cached payload,
-    // which the early return would otherwise leave stale).
+    // Clear the payload (and side data), keep the metadata; also reconcile the
+    // external-memory report / cached payload, which the early return would
+    // otherwise leave stale.
     av_packet_unref(packet_);
+    packet_->pts = pts;
+    packet_->dts = dts;
+    packet_->duration = duration;
+    packet_->pos = pos;
+    packet_->stream_index = stream_index;
+    packet_->flags = flags;
+    packet_->time_base = time_base;
     SyncExternalMemory(env);
     return;
   }
-  
+
   if (!value.IsBuffer()) {
     Napi::TypeError::New(env, "Data must be a Buffer").ThrowAsJavaScriptException();
     return;
   }
-  
+
   Napi::Buffer<uint8_t> buffer = value.As<Napi::Buffer<uint8_t>>();
   size_t size = buffer.Length();
 
@@ -494,11 +517,23 @@ void Packet::SetData(const Napi::CallbackInfo& info, const Napi::Value& value) {
 
   // Allocate new buffer for packet
   int ret = av_new_packet(packet_, size);
+
+  // Restore the saved metadata regardless of the allocation outcome (both
+  // calls above wiped it).
+  packet_->pts = pts;
+  packet_->dts = dts;
+  packet_->duration = duration;
+  packet_->pos = pos;
+  packet_->stream_index = stream_index;
+  packet_->flags = flags;
+  packet_->time_base = time_base;
+
   if (ret < 0) {
+    SyncExternalMemory(env);
     Napi::Error::New(env, "Failed to allocate packet data").ThrowAsJavaScriptException();
     return;
   }
-  
+
   // Copy data
   memcpy(packet_->data, buffer.Data(), size);
 
