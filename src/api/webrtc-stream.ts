@@ -262,7 +262,11 @@ export class WebRTCStream {
     this.stopping = true;
     try {
       await this.stream.stop();
-      this.pc?.close();
+      try {
+        await this.pc?.close();
+      } catch {
+        // Peer connection may already be closed.
+      }
       this.videoTrack = null;
       this.audioTrack = null;
       this.pc = null;
@@ -337,6 +341,8 @@ export class WebRTCStream {
    * processes the remote SDP offer, and generates a local SDP answer.
    * Also configures ICE candidate handling via `onIceCandidate` callback in options.
    * Must be called before {@link start}.
+   * Calling it again renegotiates: the previous peer connection is closed and
+   * replaced by a new one built from the new offer, while streaming continues.
    *
    * @param offerSdp - SDP offer string from remote WebRTC peer
    *
@@ -360,6 +366,23 @@ export class WebRTCStream {
    * ```
    */
   async setOffer(offerSdp: string): Promise<string> {
+    // Renegotiation: dispose any previous peer connection first. Left alive, its
+    // connectionstatechange handler would later report 'failed'/'closed' and tear
+    // down the new session via stop(). Buffered candidates belong to the old ICE
+    // session, so drop them too.
+    if (this.pc) {
+      const oldPc = this.pc;
+      this.pc = null;
+      this.videoTrack = null;
+      this.audioTrack = null;
+      this.pendingIceCandidates = [];
+      try {
+        await oldPc.close();
+      } catch {
+        // Old connection may already be gone - proceed with the new one.
+      }
+    }
+
     const codecs = this.getCodecs();
 
     const videoConfig: any = codecs.video ?? {
@@ -392,29 +415,37 @@ export class WebRTCStream {
       ],
     };
 
-    this.pc = new RTCPeerConnection({
+    const pc = new RTCPeerConnection({
       codecs: codecParams,
       iceServers: this.options.iceServers,
     });
+    this.pc = pc;
 
     // Tear down when the peer goes away. werift verifies ICE consent (RFC 7675)
     // and reports 'failed' once the browser disconnects (tab closed/reloaded) -
     // without this, the pipeline would keep encoding into the void forever.
-    this.pc.connectionStateChange.subscribe((state) => {
+    pc.connectionStateChange.subscribe((state) => {
+      // Ignore stale events from a connection that was replaced by a newer
+      // setOffer() - they must not tear down the current session.
+      if (this.pc !== pc) {
+        return;
+      }
       if ((state === 'failed' || state === 'closed') && !this.stopping) {
-        void this.stop();
+        this.stop().catch(() => {
+          // Best-effort teardown - errors already surface via onClose(error).
+        });
       }
     });
 
     // Setup ICE candidate handling
-    this.pc.onIceCandidate.subscribe((candidate) => {
+    pc.onIceCandidate.subscribe((candidate) => {
       if (candidate?.candidate && this.options.onIceCandidate) {
         this.options.onIceCandidate(candidate.candidate);
       }
     });
 
     // Setup tracks
-    this.pc.onRemoteTransceiverAdded.subscribe(async (transceiver) => {
+    pc.onRemoteTransceiverAdded.subscribe(async (transceiver) => {
       if (transceiver.kind === 'video') {
         this.videoTrack = new MediaStreamTrack({ kind: 'video' });
         transceiver.sender.replaceTrack(this.videoTrack);
@@ -450,14 +481,14 @@ export class WebRTCStream {
     });
 
     // Set remote description and create answer
-    await this.pc.setRemoteDescription(new RTCSessionDescription(offerSdp, 'offer'));
+    await pc.setRemoteDescription(new RTCSessionDescription(offerSdp, 'offer'));
 
     // The sender transmits with the FIRST negotiated codec, and browsers offer
     // several H264 variants (packetization-mode=1 and =0). FFmpeg's RTP payloader
     // fragments large NALs (FU-A), which is invalid under packetization-mode=0 -
     // if that entry happened to be first, the receiver would silently discard
     // every fragmented (key)frame. Prefer a packetization-mode=1 H264 entry.
-    for (const transceiver of this.pc.getTransceivers()) {
+    for (const transceiver of pc.getTransceivers()) {
       if (transceiver.kind !== 'video') {
         continue;
       }
@@ -468,13 +499,15 @@ export class WebRTCStream {
       });
     }
 
-    const answer = await this.pc.createAnswer();
-    this.pc.setLocalDescription(answer);
+    const answer = await pc.createAnswer();
+    // Must be awaited: localDescription is only complete afterwards, and an
+    // un-awaited rejection would otherwise be unhandled.
+    await pc.setLocalDescription(answer);
 
     // Apply any buffered ICE candidates now that remote description is set
     if (this.pendingIceCandidates.length > 0) {
       for (const candidate of this.pendingIceCandidates) {
-        this.pc.addIceCandidate(new RTCIceCandidate({ candidate }));
+        pc.addIceCandidate(new RTCIceCandidate({ candidate }));
       }
       this.pendingIceCandidates = [];
     }
@@ -484,7 +517,7 @@ export class WebRTCStream {
     // before setOffer() (e.g. to have the input open for codec detection) is fine.
     await this.start();
 
-    return this.pc.localDescription?.sdp ?? '';
+    return pc.localDescription?.sdp ?? '';
   }
 
   /**
