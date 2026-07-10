@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 
-import { chmodSync, createWriteStream, mkdirSync, rmSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { chmodSync, createReadStream, createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { rename } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, extname, resolve } from 'node:path';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import { Open } from 'unzipper';
 
@@ -30,6 +33,9 @@ const releasesUrl = 'https://api.github.com/repos/seydx/node-av/releases';
 const releaseDownloadBase = 'https://github.com/seydx/node-av/releases/download';
 const pJson = __require('../../package.json');
 const ffmpegVersion = `v${FFMPEG_VERSION}`;
+
+// Number of retries per download URL (in addition to the initial attempt).
+const DOWNLOAD_RETRIES = 2;
 
 const binaries: FFMPEG_BINARIES = {
   darwin: {
@@ -70,12 +76,60 @@ const ffmpegBinaryPath = resolve(__dirname, '../../binary');
 
 const ffmpegFilePath = resolve(ffmpegBinaryPath, filename);
 const ffmpegExtractedFilePath = ffmpegPath();
+const versionMarkerPath = resolve(ffmpegBinaryPath, '.ffmpeg-version');
+
+if (existsSync(ffmpegExtractedFilePath) && existsSync(versionMarkerPath)) {
+  try {
+    if (readFileSync(versionMarkerPath, 'utf8').trim() === filename) {
+      console.log(`FFmpeg ${ffmpegVersion} already installed, skipping download`);
+      process.exit(0);
+    }
+  } catch {
+    // Unreadable marker - fall through and re-download
+  }
+}
 
 const isZipUrl = (url: string): boolean => {
   const pathArray = new URL(url).pathname.split('/');
   const fileName = pathArray[pathArray.length - 1];
 
   return fileName !== undefined && extname(fileName) === '.zip';
+};
+
+const sha256OfFile = async (path: string): Promise<string> => {
+  const hash = createHash('sha256');
+  await pipeline(createReadStream(path), hash);
+  return hash.digest('hex');
+};
+
+const fetchExpectedSha256 = async (url: string): Promise<string | null> => {
+  try {
+    const sumsUrl = new URL(url);
+    const parts = sumsUrl.pathname.split('/');
+    parts[parts.length - 1] = 'SHA256SUMS';
+    sumsUrl.pathname = parts.join('/');
+
+    const response = await fetch(sumsUrl);
+    if (!response.ok) {
+      return null;
+    }
+
+    const text = await response.text();
+    for (const line of text.split('\n')) {
+      // sha256sum format: "<hex>  <filename>" (binary mode prefixes "*")
+      const match = /^([0-9a-fA-F]{64})\s+\*?(.+)$/.exec(line.trim());
+      if (!match) {
+        continue;
+      }
+      if (match[2] === filename) {
+        return match[1].toLowerCase();
+      }
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
 };
 
 const downloadFile = async (url: string): Promise<void> => {
@@ -97,40 +151,46 @@ const downloadFile = async (url: string): Promise<void> => {
   const contentLength = response.headers.get('content-length');
   let downloaded = 0;
 
-  const writeStream = createWriteStream(ffmpegFilePath);
+  const body = Readable.fromWeb(response.body);
 
-  // Convert ReadableStream to Node.js stream and track progress
-  const reader = response.body.getReader();
+  if (!process.env.CI && contentLength) {
+    body.on('data', (chunk: Buffer) => {
+      downloaded += chunk.length;
+      const percent = Math.round((downloaded / parseInt(contentLength)) * 100);
+      process.stdout.write(`\r${percent}%`);
+    });
+  }
 
   try {
-    while (true) {
-      const { done, value } = await reader.read();
-
-      if (done) break;
-
-      downloaded += value.length;
-
-      // Show progress if we have content length and not in CI
-      if (!process.env.CI && contentLength) {
-        const percent = Math.round((downloaded / parseInt(contentLength)) * 100);
-        process.stdout.write(`\r${percent}%`);
-      }
-
-      writeStream.write(value);
-    }
+    await pipeline(body, createWriteStream(ffmpegFilePath));
 
     if (!process.env.CI && contentLength) {
       process.stdout.write('\r');
     }
-  } finally {
-    reader.releaseLock();
-    writeStream.end();
+  } catch (downloadError) {
+    try {
+      rmSync(ffmpegFilePath);
+    } catch {
+      // Ignore cleanup errors
+    }
+    throw downloadError;
+  }
 
-    // Wait for write stream to finish
-    await new Promise<void>((resolve, reject) => {
-      writeStream.on('finish', resolve);
-      writeStream.on('error', reject);
-    });
+  const expectedSha256 = await fetchExpectedSha256(url);
+  if (expectedSha256) {
+    const actualSha256 = await sha256OfFile(ffmpegFilePath);
+    if (actualSha256 !== expectedSha256) {
+      console.warn(`Warning: SHA256 mismatch for ${filename} (expected ${expectedSha256}, got ${actualSha256}); aborting extraction.`);
+      try {
+        rmSync(ffmpegFilePath);
+      } catch {
+        // Ignore cleanup errors
+      }
+      throw new Error(`SHA256 checksum mismatch for ${filename}`);
+    }
+    console.log('SHA256 checksum verified');
+  } else {
+    console.log('No SHA256SUMS found for this release, skipping checksum verification');
   }
 
   if (isZipUrl(url)) {
@@ -164,6 +224,23 @@ const downloadFile = async (url: string): Promise<void> => {
   }
 };
 
+const downloadFileWithRetries = async (url: string): Promise<void> => {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await downloadFile(url);
+      return;
+    } catch (error) {
+      if (attempt >= DOWNLOAD_RETRIES) {
+        throw error;
+      }
+
+      const delayMs = 1000 * (attempt + 1);
+      console.warn(`Download failed (${error instanceof Error ? error.message : error}); retrying in ${delayMs}ms (${attempt + 1}/${DOWNLOAD_RETRIES})...`);
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+};
+
 const getReleaseAssets = async (version: string): Promise<{ assets: string[]; files: string[] }> => {
   const url = `${releasesUrl}/tags/v${version}`;
   console.log(`Fetching release info from ${url}...`);
@@ -189,7 +266,7 @@ const downloadFFmpeg = async (): Promise<void> => {
   const directUrl = `${releaseDownloadBase}/v${pJson.version}/${filename}`;
 
   try {
-    await downloadFile(directUrl);
+    await downloadFileWithRetries(directUrl);
   } catch (directError) {
     console.warn(`Direct download failed (${directError instanceof Error ? directError.message : directError}); trying the release API...`);
 
@@ -200,13 +277,15 @@ const downloadFFmpeg = async (): Promise<void> => {
       throw new Error(`No ffmpeg binary found for architecture (${sysPlatform} / ${arch})`);
     }
 
-    await downloadFile(apiUrl);
+    await downloadFileWithRetries(apiUrl);
   }
 
   if (sysPlatform === 'linux' || sysPlatform === 'darwin') {
     console.log(`Making ${ffmpegExtractedFilePath} executable...`);
     chmodSync(ffmpegExtractedFilePath, 0o755);
   }
+
+  writeFileSync(versionMarkerPath, `${filename}\n`);
 
   console.log('Done!');
 };
