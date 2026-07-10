@@ -181,6 +181,14 @@ Napi::Value FilterContext::Unlink(const Napi::CallbackInfo& info) {
 Napi::Value FilterContext::Free(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
+  if (ctx_ || unowned_ctx_) {
+    // Freeing (or detaching) while a buffersrc/buffersink worker still uses
+    // the context on the threadpool would be a use-after-free; wait bounded,
+    // then error instead of crashing
+    if (!GuardAsyncOps(env, async_ops_, "FilterContext")) {
+      return env.Undefined();
+    }
+  }
   if (ctx_) {
     avfilter_free(ctx_);
     ctx_ = nullptr;
@@ -281,7 +289,7 @@ Napi::Value FilterContext::BuffersrcParametersSet(const Napi::CallbackInfo& info
   if (params.Has("hwFramesCtx")) {
     Napi::Value hwFramesCtxValue = params.Get("hwFramesCtx");
     if (hwFramesCtxValue.IsObject() && !hwFramesCtxValue.IsNull()) {
-      HardwareFramesContext* hwFramesCtx = Napi::ObjectWrap<HardwareFramesContext>::Unwrap(hwFramesCtxValue.As<Napi::Object>());
+      HardwareFramesContext* hwFramesCtx = UnwrapNativeObject<HardwareFramesContext>(env, hwFramesCtxValue, "HardwareFramesContext");
       if (hwFramesCtx && hwFramesCtx->Get()) {
         par->hw_frames_ctx = av_buffer_ref(hwFramesCtx->Get());
       }
@@ -631,7 +639,7 @@ void FilterContext::SetHwDeviceCtx(const Napi::CallbackInfo& info, const Napi::V
     }
   } else if (value.IsObject()) {
     // Expect a HardwareDeviceContext object
-    HardwareDeviceContext* hwDeviceCtx = Napi::ObjectWrap<HardwareDeviceContext>::Unwrap(value.As<Napi::Object>());
+    HardwareDeviceContext* hwDeviceCtx = UnwrapNativeObject<HardwareDeviceContext>(env, value, "HardwareDeviceContext");
     if (hwDeviceCtx) {
       AVBufferRef* deviceRef = hwDeviceCtx->Get();
       if (deviceRef) {

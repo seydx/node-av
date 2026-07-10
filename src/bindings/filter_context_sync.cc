@@ -21,6 +21,10 @@ Napi::Value FilterContext::BuffersrcAddFrameSync(const Napi::CallbackInfo& info)
   Frame* frame = nullptr;
   if (!info[0].IsNull() && !info[0].IsUndefined()) {
     frame = UnwrapNativeObject<Frame>(env, info[0], "Frame");
+    if (!frame) {
+      Napi::TypeError::New(env, "Invalid frame object").ThrowAsJavaScriptException();
+      return Napi::Number::New(env, AVERROR(EINVAL));
+    }
   }
 
   // Optional flags parameter (defaults to 0 = AV_BUFFERSRC_FLAG_NONE)
@@ -49,6 +53,10 @@ Napi::Value FilterContext::BuffersinkGetFrameSync(const Napi::CallbackInfo& info
   }
 
   Frame* frame = UnwrapNativeObject<Frame>(env, info[0], "Frame");
+  if (!frame || !frame->Get()) {
+    Napi::TypeError::New(env, "Invalid frame object").ThrowAsJavaScriptException();
+    return Napi::Number::New(env, AVERROR(EINVAL));
+  }
 
   // Direct synchronous call
   int ret = av_buffersink_get_frame(ctx, frame->Get());

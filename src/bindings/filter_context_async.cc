@@ -27,6 +27,12 @@ public:
     if (frame && frameVal.IsObject()) {
       frame_ref_.Reset(frameVal.As<Napi::Object>(), 1);
     }
+    // Mark the context and the frame busy so free()/unref() waits instead of
+    // pulling memory out from under the operation (see promise_worker.h)
+    ctx_->async_ops_.Begin();
+    if (frame_) {
+      frame_->async_ops_.Begin();
+    }
   }
 
   ~FCBuffersrcAddFrameWorker() {
@@ -38,10 +44,12 @@ public:
     // Null checks to prevent use-after-free crashes
     if (!ctx_ || !ctx_->Get()) {
       ret_ = AVERROR(EINVAL);
-      return;
+    } else {
+      ret_ = av_buffersrc_add_frame_flags(ctx_->Get(), frame_ ? frame_->Get() : nullptr, flags_);
     }
-
-    ret_ = av_buffersrc_add_frame_flags(ctx_->Get(), frame_ ? frame_->Get() : nullptr, flags_);
+    // Release before OnOK so a GuardAsyncOps() wait on the main thread can
+    // proceed even though the OnOK callback is still queued behind it
+    EndOps();
   }
 
   void OnOK() override {
@@ -49,6 +57,7 @@ public:
   }
 
   void OnError(const Napi::Error& e) override {
+    EndOps();  // Execute may have been skipped
     deferred_.Reject(e.Value());
   }
 
@@ -57,12 +66,24 @@ public:
   }
 
 private:
+  void EndOps() {
+    if (ops_ended_) {
+      return;
+    }
+    ops_ended_ = true;
+    ctx_->async_ops_.End();
+    if (frame_) {
+      frame_->async_ops_.End();
+    }
+  }
+
   Napi::ObjectReference ctx_ref_;
   Napi::ObjectReference frame_ref_;
   FilterContext* ctx_;
   Frame* frame_;
   int flags_;
   int ret_;
+  bool ops_ended_ = false;
   Napi::Promise::Deferred deferred_;
 };
 
@@ -78,6 +99,10 @@ public:
     // Hold references to prevent GC during async operation
     ctx_ref_.Reset(ctxObj, 1);
     frame_ref_.Reset(frameObj, 1);
+    // Mark the context and the frame busy so free()/unref() waits instead of
+    // pulling memory out from under the operation (see promise_worker.h)
+    ctx_->async_ops_.Begin();
+    frame_->async_ops_.Begin();
   }
 
   ~FCBuffersinkGetFrameWorker() {
@@ -87,22 +112,20 @@ public:
 
   void Execute() override {
     // Null checks to prevent use-after-free crashes
-    if (!ctx_ || !ctx_->Get()) {
+    if (!ctx_ || !ctx_->Get() || !frame_ || !frame_->Get()) {
       ret_ = AVERROR(EINVAL);
-      return;
+    } else {
+      ret_ = av_buffersink_get_frame(ctx_->Get(), frame_->Get());
     }
-
-    if (!frame_ || !frame_->Get()) {
-      ret_ = AVERROR(EINVAL);
-      return;
-    }
-
-    ret_ = av_buffersink_get_frame(ctx_->Get(), frame_->Get());
+    // Release before OnOK so a GuardAsyncOps() wait on the main thread can
+    // proceed even though the OnOK callback is still queued behind it
+    EndOps();
   }
 
   void OnOK() override {
     // buffersink filled the frame's buffers on the worker thread; reconcile V8
-    // accounting now that we are back on the JS thread.
+    // accounting now that we are back on the JS thread. Safe even if the frame
+    // was freed after EndOps(): SyncExternalMemory handles a null AVFrame.
     if (ret_ >= 0) {
       frame_->SyncExternalMemory(Env());
     }
@@ -110,6 +133,7 @@ public:
   }
 
   void OnError(const Napi::Error& e) override {
+    EndOps();  // Execute may have been skipped
     deferred_.Reject(e.Value());
   }
 
@@ -118,11 +142,21 @@ public:
   }
 
 private:
+  void EndOps() {
+    if (ops_ended_) {
+      return;
+    }
+    ops_ended_ = true;
+    ctx_->async_ops_.End();
+    frame_->async_ops_.End();
+  }
+
   Napi::ObjectReference ctx_ref_;
   Napi::ObjectReference frame_ref_;
   FilterContext* ctx_;
   Frame* frame_;
   int ret_;
+  bool ops_ended_ = false;
   Napi::Promise::Deferred deferred_;
 };
 
@@ -134,6 +168,12 @@ Napi::Value FilterContext::BuffersrcAddFrameAsync(const Napi::CallbackInfo& info
   if (!info[0].IsNull() && !info[0].IsUndefined()) {
     frameVal = info[0];
     frame = UnwrapNativeObject<Frame>(env, info[0], "Frame");
+    if (!frame) {
+      // Must not queue a worker with a pending exception - creating the
+      // promise deferred fails and leaves it in an invalid state
+      Napi::TypeError::New(env, "Invalid frame object").ThrowAsJavaScriptException();
+      return env.Null();
+    }
   }
 
   // Optional flags parameter (defaults to 0 = AV_BUFFERSRC_FLAG_NONE)
@@ -158,6 +198,12 @@ Napi::Value FilterContext::BuffersinkGetFrameAsync(const Napi::CallbackInfo& inf
 
   Napi::Object frameObj = info[0].As<Napi::Object>();
   Frame* frame = UnwrapNativeObject<Frame>(env, info[0], "Frame");
+  if (!frame) {
+    // Must not queue a worker with a pending exception - creating the
+    // promise deferred fails and leaves it in an invalid state
+    Napi::TypeError::New(env, "Invalid frame object").ThrowAsJavaScriptException();
+    return env.Null();
+  }
 
   Napi::Object thisObj = info.This().As<Napi::Object>();
   auto* worker = new FCBuffersinkGetFrameWorker(env, thisObj, this, frameObj, frame);
