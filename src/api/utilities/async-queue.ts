@@ -90,6 +90,9 @@ export class AsyncQueue<T> {
    * Sends an item to the queue.
    *
    * If the queue is full, this method blocks (awaits) until space is available.
+   * If the queue was closed cleanly, the item is not enqueued but is passed to
+   * the disposeItem callback (if any) so owned native resources don't leak on
+   * teardown races.
    * If the queue was closed with an error, throws that error.
    *
    * @param item Item to send
@@ -110,6 +113,9 @@ export class AsyncQueue<T> {
     }
 
     if (this.closed) {
+      // Queue ownership was offered but can't be taken - dispose instead of
+      // silently dropping, or the item leaks when the consumer already left.
+      this.disposeItem?.(item);
       return;
     }
 
@@ -124,6 +130,8 @@ export class AsyncQueue<T> {
     }
 
     if (this.closed) {
+      // Closed while waiting for space - same as above
+      this.disposeItem?.(item);
       return;
     }
 
