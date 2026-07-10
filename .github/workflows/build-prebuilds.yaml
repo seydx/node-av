@@ -8,6 +8,7 @@ env:
   CACHE_VERSION_WINDOWS: "v18"
   CACHE_VERSION_LINUX: "v33"
   CACHE_VERSION_MACOS: "v17"
+  FFMPEG_MSVC_PREBUILT_TAG: "autobuild-2026-06-23-01-10"
   # JELLYFIN_FFMPEG_HASH: "5cd65f8388fbcd2f87088d3b10fe53fc5ea81ed5"
 
 on:
@@ -29,18 +30,39 @@ on:
     paths:
       - "src/**"
       - "test/**"
+      - "scripts/**"
       - "externals/jellyfin-ffmpeg/**"
       - ".github/workflows/build-prebuilds.yaml"
+      - "binding.gyp"
       - "binding-jellyfin.gyp"
+      - "binding-msvc.gyp"
+      - "package.json"
   pull_request:
     paths:
       - "src/**"
       - "test/**"
+      - "scripts/**"
       - "externals/jellyfin-ffmpeg/**"
       - ".github/workflows/build-prebuilds.yaml"
+      - "binding.gyp"
       - "binding-jellyfin.gyp"
+      - "binding-msvc.gyp"
+      - "package.json"
 
 jobs:
+  check_gyp:
+    name: "Check gyp consistency"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Check gyp files are in sync
+        run: node scripts/check-gyp-sync.js
+
   build_windows_mingw:
     name: "Windows MinGW ${{ matrix.os.arch }}"
     runs-on: ${{ matrix.os.runner }}
@@ -123,9 +145,6 @@ jobs:
             C:\ffmpeg-cache-${{ matrix.os.arch }}
             externals/jellyfin-ffmpeg/config*.h
           key: ffmpeg-windows-${{ matrix.os.arch }}-${{ env.CACHE_VERSION_WINDOWS }}-${{ steps.ffmpeg-hash.outputs.hash }}
-          restore-keys: |
-            ffmpeg-windows-${{ matrix.os.arch }}-${{ env.CACHE_VERSION_WINDOWS }}-${{ steps.ffmpeg-hash.outputs.hash }}
-            ffmpeg-windows-${{ matrix.os.arch }}-${{ env.CACHE_VERSION_WINDOWS }}-
 
       - name: Copy cache to MSYS2 location
         if: steps.cache-ffmpeg.outputs.cache-hit == 'true'
@@ -394,7 +413,6 @@ jobs:
             runner: windows-11-arm
     env:
       SDK_VER: 10.0.22621.0
-      FFMPEG_MSVC_PREBUILT_URL: "https://api.github.com/repos/seydx/ffmpeg-msvc-prebuilt/releases/latest"
     steps:
       - uses: actions/checkout@v7
         with:
@@ -419,6 +437,8 @@ jobs:
 
       - name: Download FFmpeg MSVC Prebuilt
         shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Determine architecture suffix
           if [ "${{ matrix.os.arch }}" = "x64" ]; then
@@ -427,11 +447,12 @@ jobs:
             ARCH_SUFFIX="arm64"
           fi
 
-          # Get latest release info
-          RELEASE_URL="${{ env.FFMPEG_MSVC_PREBUILT_URL }}"
+          # Get pinned release info instead of releases/latest, so builds are
+          # reproducible (see FFMPEG_MSVC_PREBUILT_TAG at the workflow top).
+          RELEASE_URL="https://api.github.com/repos/seydx/ffmpeg-msvc-prebuilt/releases/tags/${FFMPEG_MSVC_PREBUILT_TAG}"
 
           # Find the correct asset URL
-          ASSET_URL=$(curl -s "$RELEASE_URL" | \
+          ASSET_URL=$(curl -s -H "Authorization: Bearer ${GITHUB_TOKEN}" "$RELEASE_URL" | \
             grep "browser_download_url.*ffmpeg.*gpl-${ARCH_SUFFIX}-static.zip" | \
             cut -d '"' -f 4)
 
@@ -443,7 +464,7 @@ jobs:
           echo "Downloading FFmpeg MSVC prebuilt: $ASSET_URL"
 
           # Download and extract to project root
-          curl -L "$ASSET_URL" -o ffmpeg-msvc-prebuilt.zip
+          curl -L -H "Authorization: Bearer ${GITHUB_TOKEN}" "$ASSET_URL" -o ffmpeg-msvc-prebuilt.zip
 
           # Extract ZIP contents directly into ffmpeg-msvc directory
           unzip -q ffmpeg-msvc-prebuilt.zip -d ffmpeg-msvc
@@ -603,9 +624,6 @@ jobs:
             /opt/ffbuild/prefix
             externals/jellyfin-ffmpeg/config*.h
           key: ffmpeg-linux-${{ matrix.arch }}-${{ env.CACHE_VERSION_LINUX }}-${{ steps.ffmpeg-hash.outputs.hash }}
-          restore-keys: |
-            ffmpeg-linux-${{ matrix.arch }}-${{ env.CACHE_VERSION_LINUX }}-${{ steps.ffmpeg-hash.outputs.hash }}
-            ffmpeg-linux-${{ matrix.arch }}-${{ env.CACHE_VERSION_LINUX }}-
 
       - name: Build FFmpeg
         id: build-ffmpeg
@@ -1031,6 +1049,20 @@ jobs:
         env:
           AV_FROM_SOURCE: 1
         run: npm run test:all
+
+      - name: Run Tests
+        if: matrix.arch == 'x64'
+        run: |
+          NODE_VERSION=$(node -p "process.version")
+          curl -fsSL "https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}-darwin-x64.tar.gz" -o /tmp/node-x64.tar.gz
+          mkdir -p /tmp/node-x64
+          tar -xzf /tmp/node-x64.tar.gz -C /tmp/node-x64 --strip-components=1
+
+          /tmp/node-x64/bin/node -p "process.arch" | grep -qx "x64"
+          /tmp/node-x64/bin/node -e "
+            process.dlopen(module, require('path').resolve('binary/node-av.node'));
+            console.log('x64 addon loaded under Rosetta, exports:', Object.keys(module.exports).length);
+          "
 
       - name: Upload Prebuild
         if: always()
