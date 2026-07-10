@@ -192,6 +192,11 @@ export class Packet implements Disposable, NativeWrapper<NativePacket> {
    * Contains the compressed audio/video data.
    * May be null for packets signaling special conditions.
    *
+   * Assigning a Buffer replaces the payload with a copy of it; assigning null
+   * clears the payload. Either assignment drops any attached side data but
+   * preserves the packet's metadata (pts, dts, duration, pos, streamIndex,
+   * flags, timeBase), so assignment order does not matter.
+   *
    * Direct mapping to AVPacket->data.
    */
   get data(): Buffer | null {

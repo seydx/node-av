@@ -555,12 +555,13 @@ export interface NativeFormatContext extends AsyncDisposable {
   closeInput(): Promise<void>;
   closeInputSync(): void;
   findStreamInfo(options: NativeDictionary[] | null): Promise<number>;
-  findStreamInfoSync(options: NativeDictionary | null): number;
+  findStreamInfoSync(options: NativeDictionary[] | null): number;
   readFrame(pkt: NativePacket): Promise<number>;
   readFrameSync(pkt: NativePacket): number;
   seekFrame(streamIndex: number, timestamp: bigint, flags: AVSeekFlag): Promise<number>;
   seekFrameSync(streamIndex: number, timestamp: bigint, flags: AVSeekFlag): number;
   seekFile(streamIndex: number, minTs: bigint, ts: bigint, maxTs: bigint, flags: AVSeekFlag): Promise<number>;
+  seekFileSync(streamIndex: number, minTs: bigint, ts: bigint, maxTs: bigint, flags: AVSeekFlag): number;
   openOutput(): Promise<number>;
   openOutputSync(): number;
   closeOutput(): Promise<void>;
@@ -588,8 +589,6 @@ export interface NativeFormatContext extends AsyncDisposable {
   sendRTSPPacket(streamIndex: number, rtpData: Buffer): Promise<number>;
   sendRTSPPacketSync(streamIndex: number, rtpData: Buffer): number;
   interrupt(): void;
-
-  [Symbol.dispose](): void;
 }
 
 /**
