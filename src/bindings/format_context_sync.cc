@@ -64,6 +64,10 @@ Napi::Value FormatContext::WriteFrameSync(const Napi::CallbackInfo& info) {
   Packet* packet = nullptr;
   if (info.Length() > 0 && !info[0].IsNull() && !info[0].IsUndefined()) {
     packet = UnwrapNativeObject<Packet>(env, info[0], "Packet");
+    if (!packet) {
+      Napi::TypeError::New(env, "Invalid packet object").ThrowAsJavaScriptException();
+      return env.Undefined();
+    }
   }
 
   // Direct synchronous call to av_write_frame
@@ -83,6 +87,10 @@ Napi::Value FormatContext::InterleavedWriteFrameSync(const Napi::CallbackInfo& i
   Packet* packet = nullptr;
   if (info.Length() > 0 && !info[0].IsNull() && !info[0].IsUndefined()) {
     packet = UnwrapNativeObject<Packet>(env, info[0], "Packet");
+    if (!packet) {
+      Napi::TypeError::New(env, "Invalid packet object").ThrowAsJavaScriptException();
+      return env.Undefined();
+    }
   }
 
   // Direct synchronous call to av_interleaved_write_frame
@@ -93,6 +101,12 @@ Napi::Value FormatContext::InterleavedWriteFrameSync(const Napi::CallbackInfo& i
 
 Napi::Value FormatContext::OpenInputSync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
+
+  // avformat_open_input() frees a pre-allocated context (custom I/O) on
+  // failure - wait for in-flight async operations that may still use it
+  if (ctx_ && !GuardAsyncOps(env, async_ops_, "FormatContext")) {
+    return env.Undefined();
+  }
 
   std::string url;
   AVInputFormat* fmt = nullptr;
@@ -106,17 +120,21 @@ Napi::Value FormatContext::OpenInputSync(const Napi::CallbackInfo& info) {
   // Parse format argument
   if (info.Length() > 1 && !info[1].IsNull() && !info[1].IsUndefined()) {
     InputFormat* inputFormat = UnwrapNativeObject<InputFormat>(env, info[1], "InputFormat");
-    if (inputFormat) {
-      fmt = const_cast<AVInputFormat*>(inputFormat->Get());
+    if (!inputFormat) {
+      Napi::TypeError::New(env, "Invalid InputFormat object").ThrowAsJavaScriptException();
+      return env.Undefined();
     }
+    fmt = const_cast<AVInputFormat*>(inputFormat->Get());
   }
 
   // Parse options argument
   if (info.Length() > 2 && !info[2].IsNull() && !info[2].IsUndefined()) {
     Dictionary* dict = UnwrapNativeObject<Dictionary>(env, info[2], "Dictionary");
-    if (dict) {
-      av_dict_copy(&options, dict->Get(), 0);
+    if (!dict) {
+      Napi::TypeError::New(env, "Invalid Dictionary object").ThrowAsJavaScriptException();
+      return env.Undefined();
     }
+    av_dict_copy(&options, dict->Get(), 0);
   }
 
   // If we already have a context (e.g., for custom I/O), preserve it
@@ -150,23 +168,17 @@ Napi::Value FormatContext::FindStreamInfoSync(const Napi::CallbackInfo& info) {
     return Napi::Number::New(env, AVERROR(EINVAL));
   }
 
-  AVDictionary* options = nullptr;
-
-  // Parse options argument
-  if (info.Length() > 0 && !info[0].IsNull() && !info[0].IsUndefined()) {
-    Dictionary* dict = UnwrapNativeObject<Dictionary>(env, info[0], "Dictionary");
-    if (dict) {
-      av_dict_copy(&options, dict->Get(), 0);
-    }
+  // Build the per-stream options array (see BuildStreamOptions for the FFmpeg contract)
+  std::vector<AVDictionary*> options;
+  if (!BuildStreamOptions(env, info.Length() > 0 ? info[0] : env.Null(), ctx_->nb_streams, options)) {
+    return env.Undefined();
   }
 
   // Direct synchronous call
-  int ret = avformat_find_stream_info(ctx_, options ? &options : nullptr);
+  int ret = avformat_find_stream_info(ctx_, options.empty() ? nullptr : options.data());
 
-  // Clean up options if any remain
-  if (options) {
-    av_dict_free(&options);
-  }
+  // Clean up the dictionary copies
+  FreeStreamOptions(options);
 
   return Napi::Number::New(env, ret);
 }
@@ -195,6 +207,32 @@ Napi::Value FormatContext::SeekFrameSync(const Napi::CallbackInfo& info) {
   return Napi::Number::New(env, ret);
 }
 
+Napi::Value FormatContext::SeekFileSync(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+  if (!ctx_) {
+    Napi::Error::New(env, "FormatContext not initialized").ThrowAsJavaScriptException();
+    return Napi::Number::New(env, AVERROR(EINVAL));
+  }
+
+  if (info.Length() < 5) {
+    Napi::TypeError::New(env, "stream_index, min_ts, ts, max_ts, and flags required").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+
+  int stream_index = info[0].As<Napi::Number>().Int32Value();
+  bool lossless;
+  int64_t min_ts = info[1].As<Napi::BigInt>().Int64Value(&lossless);
+  int64_t ts = info[2].As<Napi::BigInt>().Int64Value(&lossless);
+  int64_t max_ts = info[3].As<Napi::BigInt>().Int64Value(&lossless);
+  int flags = info[4].As<Napi::Number>().Int32Value();
+
+  // Direct synchronous call
+  int ret = avformat_seek_file(ctx_, stream_index, min_ts, ts, max_ts, flags);
+
+  return Napi::Number::New(env, ret);
+}
+
 Napi::Value FormatContext::WriteHeaderSync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
@@ -213,9 +251,11 @@ Napi::Value FormatContext::WriteHeaderSync(const Napi::CallbackInfo& info) {
   // Parse options argument
   if (info.Length() > 0 && !info[0].IsNull() && !info[0].IsUndefined()) {
     Dictionary* dict = UnwrapNativeObject<Dictionary>(env, info[0], "Dictionary");
-    if (dict) {
-      av_dict_copy(&options, dict->Get(), 0);
+    if (!dict) {
+      Napi::TypeError::New(env, "Invalid Dictionary object").ThrowAsJavaScriptException();
+      return env.Undefined();
     }
+    av_dict_copy(&options, dict->Get(), 0);
   }
 
   // Direct synchronous call
@@ -263,13 +303,20 @@ Napi::Value FormatContext::CloseInputSync(const Napi::CallbackInfo& info) {
   // Request interrupt to cancel any pending av_read_frame()
   FormatContext::RequestInterrupt();
 
+  // Wait for in-flight async workers before freeing (use-after-free guard).
+  // The interrupt above unblocks readers stuck in blocking I/O so they can
+  // release the counter.
+  if (!GuardAsyncOps(env, async_ops_, "FormatContext")) {
+    return env.Undefined();
+  }
+
   // Now wait a short time for any in-flight av_read_frame() to return with error
   int wait_count = 0;
   while (active_read_operations_.load() > 0) {
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
     // Timeout after 1 second
-    if (wait_count > 100) {
+    if (wait_count++ > 100) {
       break;
     }
   }
@@ -296,6 +343,7 @@ Napi::Value FormatContext::CloseInputSync(const Napi::CallbackInfo& info) {
     }
     // Use avformat_free_context to free the allocated context
     avformat_free_context(ctx_);
+    ctx_ = nullptr;
   }
 
   is_output_ = false;
@@ -360,6 +408,12 @@ Napi::Value FormatContext::CloseOutputSync(const Napi::CallbackInfo& info) {
 
   // Check if format needs a file
   if (ctx_->oformat && (ctx_->oformat->flags & AVFMT_NOFILE)) {
+    return env.Undefined();
+  }
+
+  // avio_closep() frees the AVIOContext that in-flight async writes may still
+  // be using on the threadpool - wait for them first (use-after-free guard)
+  if (!GuardAsyncOps(env, async_ops_, "FormatContext")) {
     return env.Undefined();
   }
 

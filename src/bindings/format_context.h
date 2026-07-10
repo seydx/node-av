@@ -5,7 +5,9 @@
 #include <atomic>
 #include <mutex>
 #include <memory>
+#include <vector>
 #include "common.h"
+#include "promise_worker.h"
 
 extern "C" {
 #include <libavformat/avformat.h>
@@ -96,6 +98,7 @@ namespace ffmpeg {
 
 class FormatContext : public Napi::ObjectWrap<FormatContext> {
 public:
+  static thread_local Napi::FunctionReference constructor;
   static Napi::Object Init(Napi::Env env, Napi::Object exports);
   FormatContext(const Napi::CallbackInfo& info);
   ~FormatContext();
@@ -106,23 +109,6 @@ public:
 
 private:
   friend class AVOptionWrapper;
-  friend class FCOpenInputWorker;
-  friend class FCFindStreamInfoWorker;
-  friend class FCReadFrameWorker;
-  friend class FCSeekFrameWorker;
-  friend class FCSeekFileWorker;
-  friend class FCWriteHeaderWorker;
-  friend class FCWriteFrameWorker;
-  friend class FCInterleavedWriteFrameWorker;
-  friend class FCWriteTrailerWorker;
-  friend class FCOpenOutputWorker;
-  friend class FCCloseOutputWorker;
-  friend class FCCloseInputWorker;
-  friend class FCDisposeWorker;
-  friend class FCFlushWorker;
-  friend class FCSendRTSPPacketWorker;
-
-  static thread_local Napi::FunctionReference constructor;
 
   AVFormatContext* ctx_ = nullptr;
   bool is_output_ = false;
@@ -145,6 +131,7 @@ private:
   Napi::Value SeekFrameAsync(const Napi::CallbackInfo& info);
   Napi::Value SeekFrameSync(const Napi::CallbackInfo& info);
   Napi::Value SeekFileAsync(const Napi::CallbackInfo& info);
+  Napi::Value SeekFileSync(const Napi::CallbackInfo& info);
   Napi::Value WriteHeaderAsync(const Napi::CallbackInfo& info);
   Napi::Value WriteHeaderSync(const Napi::CallbackInfo& info);
   Napi::Value WriteFrameAsync(const Napi::CallbackInfo& info);
@@ -208,13 +195,26 @@ private:
 
   void SetPb(const Napi::CallbackInfo& info, const Napi::Value& value);
 
+  // Shared helpers for the per-stream options array required by
+  // avformat_find_stream_info() (used by both sync and async variants)
+  static bool BuildStreamOptions(Napi::Env env, const Napi::Value& value, unsigned int nb_streams, std::vector<AVDictionary*>& out);
+  static void FreeStreamOptions(std::vector<AVDictionary*>& options);
+
   // Interrupt callback mechanism for cancelling blocking operations
   static int InterruptCallback(void* opaque);
   void RequestInterrupt();
   std::atomic<bool> interrupt_requested_{false};
 
-  // Track active read operations to prevent closing while reading
+  // Track active read operations to prevent closing while reading. This is
+  // NOT redundant with async_ops_: a reader blocked inside av_read_frame()
+  // can only be aborted via the interrupt callback, which the close paths
+  // trigger before waiting on this counter.
   std::atomic<int> active_read_operations_{0};
+
+  // Counts queued/running async workers on this wrapper. Free/close paths
+  // wait on it (GuardAsyncOps) so they cannot free the AVFormatContext while
+  // a threadpool operation still uses it.
+  AsyncOpCounter async_ops_;
 };
 
 } // namespace ffmpeg

@@ -34,6 +34,7 @@ Napi::Object FormatContext::Init(Napi::Env env, Napi::Object exports) {
     InstanceMethod<&FormatContext::SeekFrameAsync>("seekFrame"),
     InstanceMethod<&FormatContext::SeekFrameSync>("seekFrameSync"),
     InstanceMethod<&FormatContext::SeekFileAsync>("seekFile"),
+    InstanceMethod<&FormatContext::SeekFileSync>("seekFileSync"),
     InstanceMethod<&FormatContext::WriteHeaderAsync>("writeHeader"),
     InstanceMethod<&FormatContext::WriteHeaderSync>("writeHeaderSync"),
     InstanceMethod<&FormatContext::WriteFrameAsync>("writeFrame"),
@@ -195,6 +196,14 @@ Napi::Value FormatContext::FreeContext(const Napi::CallbackInfo& info) {
 
   if (!ctx_) {
     // Already freed
+    return env.Undefined();
+  }
+
+  // Freeing while a worker still uses the context on the threadpool would be
+  // a use-after-free; wait bounded, then error instead of crashing. Blocked
+  // readers are not interrupted here - freeContext() has no abort semantics,
+  // use closeInput()/interrupt() for that.
+  if (!GuardAsyncOps(env, async_ops_, "FormatContext")) {
     return env.Undefined();
   }
 
@@ -964,19 +973,49 @@ void FormatContext::SetMaxStreams(const Napi::CallbackInfo& info, const Napi::Va
   }
 }
 
-Napi::Value FormatContext::DisposeAsync(const Napi::CallbackInfo& info) {
-  // Determine if this is an input or output context and call appropriate async close
-  if (is_output_) {
-    return CloseOutputAsync(info);
-  } else if (ctx_) {
-    return CloseInputAsync(info);
-  } else {
-    // Already freed, return resolved promise
-    Napi::Env env = info.Env();
-    auto deferred = Napi::Promise::Deferred::New(env);
-    deferred.Resolve(env.Undefined());
-    return deferred.Promise();
+// Builds the per-stream options array required by avformat_find_stream_info().
+// FFmpeg's contract is "an ic.nb_streams long array" of AVDictionary* — passing a
+// single dictionary would make FFmpeg read options[1..] out of bounds on
+// multi-stream input. Each provided Dictionary is copied via av_dict_copy() so
+// FFmpeg consumes the copies and the JS wrapper dictionaries are never freed;
+// missing or extra entries stay nullptr. Returns false with a pending TypeError
+// if value is neither null/undefined nor an array.
+bool FormatContext::BuildStreamOptions(Napi::Env env, const Napi::Value& value, unsigned int nb_streams, std::vector<AVDictionary*>& out) {
+  out.assign(nb_streams, nullptr);
+
+  if (value.IsNull() || value.IsUndefined()) {
+    return true;
   }
+
+  if (!value.IsArray()) {
+    Napi::TypeError::New(env, "options must be an array of Dictionary or null").ThrowAsJavaScriptException();
+    return false;
+  }
+
+  Napi::Array arr = value.As<Napi::Array>();
+  uint32_t count = arr.Length() < nb_streams ? arr.Length() : nb_streams;
+  for (uint32_t i = 0; i < count; i++) {
+    Napi::Value item = arr.Get(i);
+    if (item.IsNull() || item.IsUndefined()) {
+      continue;
+    }
+    Dictionary* dict = UnwrapNativeObject<Dictionary>(env, item, "Dictionary");
+    if (dict && dict->Get()) {
+      av_dict_copy(&out[i], dict->Get(), 0);
+    }
+  }
+
+  return true;
+}
+
+// Frees the dictionary copies created by BuildStreamOptions
+void FormatContext::FreeStreamOptions(std::vector<AVDictionary*>& options) {
+  for (auto& dict : options) {
+    if (dict) {
+      av_dict_free(&dict);
+    }
+  }
+  options.clear();
 }
 
 int FormatContext::InterruptCallback(void* opaque) {
