@@ -6,7 +6,6 @@ import { Codec } from '../lib/codec.js';
 import { Rational } from '../lib/rational.js';
 import { avChannelLayoutDefault } from '../lib/utilities.js';
 import { MAX_PACKET_SIZE } from './constants.js';
-import { pickSupportedLayout, pickSupportedRate, pickSupportedSampleFormat } from './utilities/codec-format.js';
 import { Decoder } from './decoder.js';
 import { Demuxer } from './demuxer.js';
 import { Encoder } from './encoder.js';
@@ -15,6 +14,7 @@ import { FilterAPI } from './filter.js';
 import { HardwareContext } from './hardware.js';
 import { Muxer } from './muxer.js';
 import { pipeline } from './pipeline.js';
+import { pickSupportedLayout, pickSupportedRate, pickSupportedSampleFormat } from './utilities/codec-format.js';
 
 import type { AVCodecID, AVHWDeviceType, AVSampleFormat, FFAudioEncoder, FFHWDeviceType, FFVideoEncoder } from '../constants/index.js';
 import type { Frame } from '../lib/frame.js';
@@ -212,6 +212,7 @@ export class RTPStream {
   private supportedVideoCodecs: Set<AVCodecID | FFVideoEncoder>;
   private supportedAudioCodecs: Set<AVCodecID | FFAudioEncoder>;
   private videoKeyframeRequested = false;
+  private abortHandler?: () => void;
 
   /**
    * @param input - Media input URL or pre-opened Demuxer
@@ -268,7 +269,7 @@ export class RTPStream {
         ssrc: options.video?.ssrc,
         payloadType: options.video?.payloadType,
         mtu: options.video?.mtu ?? MAX_PACKET_SIZE,
-        fps: options.video?.fps ?? 20,
+        fps: options.video?.fps,
         width: options.video?.width,
         height: options.video?.height,
         encoderOptions: options.video?.encoderOptions ?? {},
@@ -451,7 +452,16 @@ export class RTPStream {
     }
 
     this.signal?.throwIfAborted();
-    this.signal?.addEventListener('abort', () => this.stop(), { once: true });
+    if (this.signal && !this.abortHandler) {
+      // Stop on abort. Keep a reference so stop() can detach the listener again,
+      // otherwise restarts would stack one listener per start(). Errors from the
+      // async stop() are swallowed here; they already surface via onClose(error).
+      this.abortHandler = () => {
+        this.abortHandler = undefined;
+        this.stop().catch(() => {});
+      };
+      this.signal.addEventListener('abort', this.abortHandler, { once: true });
+    }
 
     // Frame-source path: encode pre-composited frames directly (no demuxer/decoder).
     if (this.source) {
@@ -550,15 +560,8 @@ export class RTPStream {
       });
     }
 
-    // Calculate video timestamp increment from the input stream fps (or option override)
-    const videoStreamFps = videoStream ? videoStream.avgFrameRate.num / videoStream.avgFrameRate.den : 20;
-    let fps = this.options.video.fps ?? videoStreamFps;
-    if (!isFinite(fps) || fps <= 0 || isNaN(fps)) {
-      fps = 20; // Default to 20 FPS if invalid
-    }
-
     // Setup video output
-    this.videoOutput = await this.createVideoOutput(fps);
+    this.videoOutput = await this.createVideoOutput();
 
     // Setup audio if available and needs transcoding
     if (audioStream && !this.isAudioCodecSupported(audioStream.codecpar.codecId)) {
@@ -718,7 +721,7 @@ export class RTPStream {
         },
       });
 
-      this.videoOutput = await this.createVideoOutput(fps);
+      this.videoOutput = await this.createVideoOutput();
       controls.push(pipeline(this.wrapVideoSource(source.video), this.videoEncoder, this.videoOutput, opts));
     }
 
@@ -769,21 +772,19 @@ export class RTPStream {
   /**
    * Create the RTP video output muxer.
    *
-   * Rewrites RTP sequence numbers (continuous) and timestamps (90 kHz, advanced
-   * per frame at `fps`) in the write callback, then forwards each packet to
-   * `onVideoPacket`. Uses `this.input` when present (demuxer path) and no input
-   * for the frame-source path.
-   *
-   * @param fps - Frame rate used for the RTP timestamp increment
+   * Rewrites RTP sequence numbers (continuous) and rebases the PTS-derived
+   * timestamps (90 kHz) onto a random initial value in the write callback, then
+   * forwards each packet to `onVideoPacket`. Uses `this.input` when present
+   * (demuxer path) and no input for the frame-source path.
    *
    * @returns The configured video muxer
    *
    * @internal
    */
-  private async createVideoOutput(fps: number): Promise<Muxer> {
+  private async createVideoOutput(): Promise<Muxer> {
     let videoSequenceNumber = Math.floor(Math.random() * 0xffff);
-    let videoTimestamp = Math.floor(Math.random() * 0xffffffff) >>> 0; // unsigned 32-bit
-    const videoTimestampIncrement = 90000 / fps;
+    const videoTimestampBase = Math.floor(Math.random() * 0xffffffff) >>> 0; // unsigned 32-bit
+    let videoTimestampOffset: number | undefined;
 
     const videoMuxerOptions: Record<string, string | number> = {};
     if (this.options.video.ssrc !== undefined) {
@@ -807,12 +808,14 @@ export class RTPStream {
           rtpPacket.header.sequenceNumber = videoSequenceNumber;
           videoSequenceNumber = (videoSequenceNumber + 1) & 0xffff; // Wrap at 16-bit
 
-          // Fix timestamp - calculate based on FPS. All packets in the same frame
-          // share a timestamp (marker=false); advance only when the frame ends.
-          rtpPacket.header.timestamp = videoTimestamp;
-          if (rtpPacket.header.marker) {
-            videoTimestamp = (videoTimestamp + videoTimestampIncrement) >>> 0; // Unsigned 32-bit wrap
-          }
+          // Rebase the timestamp onto our own random initial value. FFmpeg's RTP
+          // muxer derives it from the packet PTS in the 90 kHz clock (plus its own
+          // random base), so the deltas carry the real presentation times -
+          // including B-frame reordering and VFR cadence. Only the base is swapped;
+          // modular uint32 arithmetic keeps wrap-around intact, and packets of the
+          // same frame keep sharing a timestamp.
+          videoTimestampOffset ??= (videoTimestampBase - rtpPacket.header.timestamp) >>> 0;
+          rtpPacket.header.timestamp = (rtpPacket.header.timestamp + videoTimestampOffset) >>> 0;
 
           this.options.onVideoPacket(rtpPacket);
           return buffer.length;
@@ -952,6 +955,13 @@ export class RTPStream {
   async stop(): Promise<void> {
     // Allow a fresh start() after stopping.
     this.startPromise = undefined;
+
+    // Detach the abort listener so it cannot fire for a torn-down session and
+    // does not accumulate across start()/stop() cycles.
+    if (this.abortHandler) {
+      this.signal?.removeEventListener('abort', this.abortHandler);
+      this.abortHandler = undefined;
+    }
 
     // Stop pipeline if running and wait for completion. pipeline.stop() interrupts
     // the source demuxer's read (frame-source pipelines unwind via iterator.return
