@@ -51,6 +51,9 @@ public:
   }
 
   void OnOK() override {
+    if (!CanCallIntoJs(Env())) {
+      return;
+    }
     // The transfer allocated the destination frame's buffers on the worker
     // thread; reconcile V8 accounting now that we are back on the JS thread.
     // Safe even if the frame was freed after EndOps(): SyncExternalMemory
@@ -63,6 +66,9 @@ public:
 
   void OnError(const Napi::Error& e) override {
     EndOps();  // Execute may have been skipped
+    if (!CanCallIntoJs(Env())) {
+      return;
+    }
     deferred_.Reject(e.Value());
   }
 

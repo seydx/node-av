@@ -53,11 +53,17 @@ public:
   }
 
   void OnOK() override {
+    if (!CanCallIntoJs(Env())) {
+      return;
+    }
     deferred_.Resolve(Napi::Number::New(Env(), ret_));
   }
 
   void OnError(const Napi::Error& e) override {
     EndOps();  // Execute may have been skipped
+    if (!CanCallIntoJs(Env())) {
+      return;
+    }
     deferred_.Reject(e.Value());
   }
 
@@ -123,6 +129,9 @@ public:
   }
 
   void OnOK() override {
+    if (!CanCallIntoJs(Env())) {
+      return;
+    }
     // buffersink filled the frame's buffers on the worker thread; reconcile V8
     // accounting now that we are back on the JS thread. Safe even if the frame
     // was freed after EndOps(): SyncExternalMemory handles a null AVFrame.
@@ -134,6 +143,9 @@ public:
 
   void OnError(const Napi::Error& e) override {
     EndOps();  // Execute may have been skipped
+    if (!CanCallIntoJs(Env())) {
+      return;
+    }
     deferred_.Reject(e.Value());
   }
 

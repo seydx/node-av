@@ -50,6 +50,9 @@ public:
   }
 
   void OnOK() override {
+    if (!CanCallIntoJs(Env())) {
+      return;
+    }
     if (ret_ < 0) {
       char errbuf[AV_ERROR_MAX_STRING_SIZE];
       av_strerror(ret_, errbuf, sizeof(errbuf));
@@ -61,6 +64,9 @@ public:
 
   void OnError(const Napi::Error& e) override {
     EndOps();  // Execute may have been skipped
+    if (!CanCallIntoJs(Env())) {
+      return;
+    }
     deferred_.Reject(e.Value());
   }
 

@@ -65,6 +65,9 @@ public:
   }
 
   void OnOK() override {
+    if (!CanCallIntoJs(Env())) {
+      return;
+    }
     Napi::Env env = Env();
 
     if (ret_ < 0) {
@@ -92,6 +95,9 @@ public:
     if (ops_) {
       ops_->End();
       ops_ = nullptr;
+    }
+    if (!CanCallIntoJs(Env())) {
+      return;
     }
     deferred_.Reject(e.Value());
   }

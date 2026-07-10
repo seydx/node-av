@@ -1,4 +1,5 @@
 #include "device.h"
+#include "common.h"
 
 namespace ffmpeg {
 
@@ -36,10 +37,16 @@ void ListDevicesWorker::Execute() {
 
 void ListDevicesWorker::OnOK() {
   Napi::Env env = Env();
+  if (!CanCallIntoJs(env)) {
+    return;
+  }
   deferred_.Resolve(DevicesToJS(env, devices_));
 }
 
 void ListDevicesWorker::OnError(const Napi::Error& error) {
+  if (!CanCallIntoJs(Env())) {
+    return;
+  }
   deferred_.Reject(error.Value());
 }
 
@@ -82,10 +89,16 @@ void ListDeviceModesWorker::Execute() {
 
 void ListDeviceModesWorker::OnOK() {
   Napi::Env env = Env();
+  if (!CanCallIntoJs(env)) {
+    return;
+  }
   deferred_.Resolve(DeviceModesToJS(env, modes_));
 }
 
 void ListDeviceModesWorker::OnError(const Napi::Error& error) {
+  if (!CanCallIntoJs(Env())) {
+    return;
+  }
   deferred_.Reject(error.Value());
 }
 
@@ -133,10 +146,16 @@ void ListAudioDeviceModesWorker::Execute() {
 
 void ListAudioDeviceModesWorker::OnOK() {
   Napi::Env env = Env();
+  if (!CanCallIntoJs(env)) {
+    return;
+  }
   deferred_.Resolve(AudioDeviceModesToJS(env, modes_));
 }
 
 void ListAudioDeviceModesWorker::OnError(const Napi::Error& error) {
+  if (!CanCallIntoJs(Env())) {
+    return;
+  }
   deferred_.Reject(error.Value());
 }
 

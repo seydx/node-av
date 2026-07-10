@@ -10,6 +10,8 @@
 #include <utility>
 #include <vector>
 
+#include "common.h"
+
 namespace ffmpeg {
 
 class AsyncOpCounter {
@@ -85,6 +87,12 @@ public:
 
   void OnOK() override {
     Napi::Env env = Env();
+    // Bail out after worker.terminate(): the env still drains pending
+    // completions but can no longer run JS - resolving would escalate a failed
+    // napi call to a process-fatal abort (see CanCallIntoJs)
+    if (!CanCallIntoJs(env)) {
+      return;
+    }
     deferred_.Resolve(resolve_ ? resolve_(env, result_) : Napi::Number::New(env, result_));
   }
 
@@ -92,6 +100,9 @@ public:
     if (ops_) {
       ops_->End();
       ops_ = nullptr;
+    }
+    if (!CanCallIntoJs(Env())) {
+      return;
     }
     deferred_.Reject(error.Value());
   }

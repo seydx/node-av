@@ -53,6 +53,9 @@ public:
   void OnOK() override {
     // Clean up callbacks on the main thread after closep succeeds
     ctx_->CleanupCallbacks();
+    if (!CanCallIntoJs(Env())) {
+      return;
+    }
     deferred_.Resolve(Napi::Number::New(Env(), ret_));
   }
 
@@ -60,6 +63,9 @@ public:
     if (ops_) {
       ops_->End();
       ops_ = nullptr;
+    }
+    if (!CanCallIntoJs(Env())) {
+      return;
     }
     deferred_.Reject(e.Value());
   }
