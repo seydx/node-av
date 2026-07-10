@@ -283,6 +283,8 @@ export class Decoder implements Disposable {
   private codec: Codec;
   private frame: Frame;
   private stream: Stream;
+  private readonly streamIndex: number;
+  private readonly streamFramerate: Rational;
   private initialized = true;
   private isClosed = false;
   private options: DecoderOptions;
@@ -334,6 +336,8 @@ export class Decoder implements Disposable {
     this.codecContext = codecContext;
     this.codec = codec;
     this.stream = stream;
+    this.streamIndex = stream.index;
+    this.streamFramerate = stream.avgFrameRate ?? stream.rFrameRate;
     this.options = options;
     this.frame = new Frame();
     this.frame.alloc();
@@ -867,7 +871,7 @@ export class Decoder implements Disposable {
       return;
     }
 
-    if (packet.streamIndex !== this.stream.index) {
+    if (packet.streamIndex !== this.streamIndex) {
       return;
     }
 
@@ -958,7 +962,7 @@ export class Decoder implements Disposable {
       return;
     }
 
-    if (packet.streamIndex !== this.stream.index) {
+    if (packet.streamIndex !== this.streamIndex) {
       return;
     }
 
@@ -1795,6 +1799,9 @@ export class Decoder implements Disposable {
    * Returns the underlying stream being decoded.
    * Provides access to stream metadata and parameters.
    *
+   * Borrowed: the stream is owned by the demuxer's format context and must not
+   * be read after that demuxer is closed.
+   *
    * @returns Stream object
    *
    * @internal
@@ -1851,7 +1858,7 @@ export class Decoder implements Disposable {
         if (!packet) break;
 
         // Skip packets for other streams
-        if (packet.streamIndex !== this.stream.index) {
+        if (packet.streamIndex !== this.streamIndex) {
           continue;
         }
 
@@ -2007,7 +2014,7 @@ export class Decoder implements Disposable {
     }
 
     // Try stream framerate
-    const streamFramerate = this.stream.avgFrameRate ?? this.stream.rFrameRate;
+    const streamFramerate = this.streamFramerate;
     if (streamFramerate && streamFramerate.num > 0 && streamFramerate.den > 0) {
       const d = avRescaleQ(1, avInvQ(streamFramerate), frame.timeBase);
       if (d > 0n) {
