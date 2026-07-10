@@ -73,9 +73,6 @@ import type { ChannelLayout } from './types.js';
  * @see {@link CodecParameters} For stream parameters
  */
 export class CodecContext extends OptionMember<NativeCodecContext> implements Disposable, NativeWrapper<NativeCodecContext> {
-  private _hwDeviceCtx?: HardwareDeviceContext; // Cache for hardware device context wrapper
-  private _hwFramesCtx?: HardwareFramesContext; // Cache for hardware frames context wrapper
-
   constructor() {
     super(new bindings.CodecContext());
   }
@@ -730,29 +727,20 @@ export class CodecContext extends OptionMember<NativeCodecContext> implements Di
    * Direct mapping to AVCodecContext->hw_device_ctx.
    */
   get hwDeviceCtx(): HardwareDeviceContext | null {
+    // Not cached: the native getter returns a fresh object per access, so an
+    // identity-based cache can never hit
     const native = this.native.hwDeviceCtx;
     if (!native) {
-      // Clear cache if native is null
-      this._hwDeviceCtx = undefined;
       return null;
     }
 
-    // Return cached wrapper if available and still valid
-    if (this._hwDeviceCtx && (this._hwDeviceCtx as any).native === native) {
-      return this._hwDeviceCtx;
-    }
-
-    // Create and cache new wrapper
     const device = Object.create(HardwareDeviceContext.prototype) as HardwareDeviceContext;
     (device as any).native = native;
-    this._hwDeviceCtx = device;
     return device;
   }
 
   set hwDeviceCtx(value: HardwareDeviceContext | null) {
     this.native.hwDeviceCtx = value?.getNative() ?? null;
-    // Clear cache when setting new value
-    this._hwDeviceCtx = undefined;
   }
 
   /**
@@ -779,29 +767,20 @@ export class CodecContext extends OptionMember<NativeCodecContext> implements Di
    * Direct mapping to AVCodecContext->hw_frames_ctx.
    */
   get hwFramesCtx(): HardwareFramesContext | null {
+    // Not cached: the native getter returns a fresh object per access, so an
+    // identity-based cache can never hit
     const native = this.native.hwFramesCtx;
     if (!native) {
-      // Clear cache if native is null
-      this._hwFramesCtx = undefined;
       return null;
     }
 
-    // Return cached wrapper if available and still valid
-    if (this._hwFramesCtx && (this._hwFramesCtx as any).native === native) {
-      return this._hwFramesCtx;
-    }
-
-    // Create and cache new wrapper
     const frames = Object.create(HardwareFramesContext.prototype) as HardwareFramesContext;
     (frames as any).native = native;
-    this._hwFramesCtx = frames;
     return frames;
   }
 
   set hwFramesCtx(value: HardwareFramesContext | null) {
     this.native.hwFramesCtx = value?.getNative() ?? null;
-    // Clear cache when setting new value
-    this._hwFramesCtx = undefined;
   }
 
   /**
