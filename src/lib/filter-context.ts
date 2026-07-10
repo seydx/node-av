@@ -46,8 +46,6 @@ import type { ChannelLayout, IRational } from './types.js';
  * @see {@link Filter} For filter descriptors
  */
 export class FilterContext extends OptionMember<NativeFilterContext> implements Disposable, NativeWrapper<NativeFilterContext> {
-  private _hwDeviceCtx?: HardwareDeviceContext; // Cache for hardware device context wrapper
-
   /**
    * @param native - The native filter context instance
    *
@@ -127,29 +125,20 @@ export class FilterContext extends OptionMember<NativeFilterContext> implements 
    * Direct mapping to AVFilterContext->hw_device_ctx.
    */
   get hwDeviceCtx(): HardwareDeviceContext | null {
+    // Not cached: the native getter returns a fresh object per access, so an
+    // identity-based cache can never hit
     const native = this.native.hwDeviceCtx;
     if (!native) {
-      // Clear cache if native is null
-      this._hwDeviceCtx = undefined;
       return null;
     }
 
-    // Return cached wrapper if available and still valid
-    if (this._hwDeviceCtx && (this._hwDeviceCtx as any).native === native) {
-      return this._hwDeviceCtx;
-    }
-
-    // Create and cache new wrapper
     const device = Object.create(HardwareDeviceContext.prototype) as HardwareDeviceContext;
     (device as any).native = native;
-    this._hwDeviceCtx = device;
     return device;
   }
 
   set hwDeviceCtx(value: HardwareDeviceContext | null) {
     this.native.hwDeviceCtx = value?.getNative() ?? null;
-    // Clear cache when setting new value
-    this._hwDeviceCtx = undefined;
   }
 
   /**
