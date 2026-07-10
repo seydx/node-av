@@ -67,6 +67,8 @@ export interface PipelineControl {
   /**
    * Promise that resolves when the pipeline completes.
    * Resolves when all processing is finished or the pipeline is stopped.
+   * Rejects when processing fails - e.g. the input errors mid-stream (a dead
+   * network source reads as an error, not as end-of-file) or a stage throws.
    */
   readonly completion: Promise<void>;
 
@@ -1738,19 +1740,37 @@ async function runNamedPipelineAsync<K extends StreamName>(
     await Promise.all(promises);
     await output.close();
   } else {
-    // Multiple outputs - write each stream to its output
+    // Multiple outputs - write each stream to its output. Group consumers by
+    // Muxer so each output is closed exactly once, after ALL streams feeding
+    // it are done - closing writes the trailer, without which containers like
+    // MP4 are left unreadable. Shared outputs (two streams into one Muxer)
+    // therefore must not be closed per stream.
     const outputs = output;
-    const promises: Promise<void>[] = [];
+    const outputConsumers = new Map<Muxer, Promise<void>[]>();
 
     for (const [streamName, stream] of Object.entries(processedStreams) as [StreamName, AsyncIterable<Packet>][]) {
       const streamOutput = (outputs as any)[streamName] as Muxer | undefined;
       const metadata = streamMetadata[streamName];
       if (streamOutput && metadata) {
-        promises.push(consumeNamedStream(stream, streamOutput, metadata, shouldStop, tracker));
+        const consumer = consumeNamedStream(stream, streamOutput, metadata, shouldStop, tracker);
+        const consumers = outputConsumers.get(streamOutput);
+        if (consumers) {
+          consumers.push(consumer);
+        } else {
+          outputConsumers.set(streamOutput, [consumer]);
+        }
       }
     }
 
-    await Promise.all(promises);
+    // Finalize each output once its streams complete. A failing consumer
+    // rejects its output group and propagates to the completion promise
+    // (matching the single-output branch, which also skips close() on error).
+    await Promise.all(
+      [...outputConsumers].map(async ([muxer, consumers]) => {
+        await Promise.all(consumers);
+        await muxer.close();
+      }),
+    );
   }
 }
 
@@ -2006,7 +2026,8 @@ async function consumeNamedStream(
     }
   }
 
-  // Note: Output is closed by the caller after all streams finish
+  // Note: Output is closed by runNamedPipelineAsync once every stream feeding
+  // it has finished (shared outputs are closed exactly once).
 }
 
 // ============================================================================
