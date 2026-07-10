@@ -373,6 +373,7 @@ export class Muxer implements AsyncDisposable, Disposable {
   private containerMetadataCopied = false; // Track if container metadata has been copied
   private writeQueue?: AsyncQueue<WriteJob>; // Optional async queue for serialized writes
   private writeWorkerPromise?: Promise<void>; // Background worker promise
+  private writeWorkerError?: Error; // First error from the write worker - poisons subsequent writes and close()
   private signal?: AbortSignal;
 
   /**
@@ -1220,6 +1221,11 @@ export class Muxer implements AsyncDisposable, Disposable {
   async writePacket(packet: Packet | null | undefined, streamIndex: number): Promise<void> {
     this.signal?.throwIfAborted();
 
+    // A previous background write failed - surface it instead of buffering more packets
+    if (this.writeWorkerError) {
+      throw this.writeWorkerError;
+    }
+
     if (this.isClosed) {
       throw new Error('Muxer is closed');
     }
@@ -1432,11 +1438,7 @@ export class Muxer implements AsyncDisposable, Disposable {
     if (!this.headerWritten) {
       this.headerWritePromise ??= (async () => {
         this.startWriteWorker();
-        this.setupSyncQueues();
-        this.updateDefaultDisposition();
-        this.copyContainerMetadata();
-
-        this.options.configure?.(this.formatContext);
+        this.prepareHeaderWrite();
 
         const ret = await this.formatContext.writeHeader();
         FFmpegError.throwIfError(ret, 'Failed to write header');
@@ -1784,12 +1786,7 @@ export class Muxer implements AsyncDisposable, Disposable {
 
     // Automatically write header if not written yet
     if (!this.headerWritten) {
-      this.setupSyncQueues();
-      this.updateDefaultDisposition();
-      this.copyContainerMetadata();
-
-      applyContextOptions(this.formatContext, this.options.context);
-      this.options.configure?.(this.formatContext);
+      this.prepareHeaderWrite();
 
       const ret = this.formatContext.writeHeaderSync();
       FFmpegError.throwIfError(ret, 'Failed to write header');
@@ -1872,6 +1869,8 @@ export class Muxer implements AsyncDisposable, Disposable {
    * }
    * ```
    *
+   * @throws {Error} If a background write failed and was not yet observed by the caller (resources are still released; a second close() is a no-op)
+   *
    * @see {@link Symbol.asyncDispose} For automatic cleanup
    */
   async close(): Promise<void> {
@@ -1881,10 +1880,18 @@ export class Muxer implements AsyncDisposable, Disposable {
 
     this.isClosed = true;
 
-    // Close write queue and wait for worker to finish
+    // Close write queue and wait for worker to finish.
+    // The worker catches its own errors, but guard the await anyway so a
+    // failed worker can never abort cleanup - resources below must always
+    // be freed even after a write failure.
     if (this.writeQueue) {
       this.writeQueue.close();
-      await this.writeWorkerPromise;
+      try {
+        await this.writeWorkerPromise;
+      } catch (error) {
+        this.writeWorkerError ??= error instanceof Error ? error : new Error(String(error));
+      }
+      this.writeQueue.clear(); // Free any job packet the worker never consumed
     }
 
     // Free PreMuxQueue packets
@@ -1950,6 +1957,12 @@ export class Muxer implements AsyncDisposable, Disposable {
       } catch {
         // Ignore errors
       }
+    }
+
+    // Surface a background write failure the caller may not have observed yet.
+    // Thrown only after all resources are freed - a second close() is a no-op.
+    if (this.writeWorkerError) {
+      throw this.writeWorkerError;
     }
   }
 
@@ -2058,6 +2071,24 @@ export class Muxer implements AsyncDisposable, Disposable {
    */
   getFormatContext(): FormatContext {
     return this.formatContext;
+  }
+
+  /**
+   * Apply shared pre-header setup for writePacket and writePacketSync.
+   *
+   * Configures sync queues, dispositions and container metadata, then applies
+   * user-provided context options and the configure callback. Must run
+   * immediately before writing the header so both variants stay in sync.
+   *
+   * @internal
+   */
+  private prepareHeaderWrite(): void {
+    this.setupSyncQueues();
+    this.updateDefaultDisposition();
+    this.copyContainerMetadata();
+
+    applyContextOptions(this.formatContext, this.options.context);
+    this.options.configure?.(this.formatContext);
   }
 
   /**
@@ -2353,8 +2384,15 @@ export class Muxer implements AsyncDisposable, Disposable {
    */
   private async write(pkt: Packet, streamInfo: StreamDescription, streamIndex: number): Promise<void> {
     if (this.writeQueue) {
-      // Use async queue for serialized writes
-      await this.writeQueue.send({ pkt, streamInfo, streamIndex });
+      // Use async queue for serialized writes.
+      // If the worker died with a write error, the queue is poisoned and send()
+      // rethrows that error - free the clone since it never reaches the worker.
+      try {
+        await this.writeQueue.send({ pkt, streamInfo, streamIndex });
+      } catch (error) {
+        pkt.free();
+        throw error;
+      }
     } else {
       // Direct write without serialization
       await this.writeInternal(pkt, streamInfo, streamIndex);
@@ -2400,13 +2438,24 @@ export class Muxer implements AsyncDisposable, Disposable {
       return;
     }
 
-    this.writeQueue ??= new AsyncQueue<WriteJob>(1); // size=1 for strict serialization
+    this.writeQueue ??= new AsyncQueue<WriteJob>(1, (job) => job.pkt.free()); // size=1 for strict serialization
 
     this.writeWorkerPromise ??= (async () => {
-      while (true) {
-        const job = await this.writeQueue!.receive();
-        if (!job) break; // Queue closed
-        await this.writeInternal(job.pkt, job.streamInfo, job.streamIndex);
+      try {
+        while (true) {
+          const job = await this.writeQueue!.receive();
+          if (!job) break; // Queue closed
+          await this.writeInternal(job.pkt, job.streamInfo, job.streamIndex);
+        }
+      } catch (error) {
+        // A write failure kills the worker. Without propagation the next send()
+        // would block forever on a queue nobody drains (pipeline deadlock), so
+        // store the error and poison the queue: pending and future send() calls
+        // throw it instead of hanging. close() surfaces it after cleanup.
+        const err = error instanceof Error ? error : new Error(String(error));
+        this.writeWorkerError = err;
+        this.writeQueue?.closeWithError(err);
+        this.writeQueue?.clear(); // Free any job packet still buffered
       }
     })();
   }
