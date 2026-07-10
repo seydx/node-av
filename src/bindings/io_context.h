@@ -6,6 +6,7 @@
 #include <atomic>
 #include <thread>
 #include "common.h"
+#include "promise_worker.h"
 
 extern "C" {
 #include <libavformat/avio.h>
@@ -63,17 +64,11 @@ public:
 private:
   friend class AVOptionWrapper;
   friend class FormatContext;
-  friend class IOOpen2Worker;
   friend class InputFormatProbeBufferWorker;
   friend class IOClosepWorker;
-  friend class IOReadWorker;
-  friend class IOWriteWorker;
-  friend class IOSeekWorker;
-  friend class IOSizeWorker;
-  friend class IOFlushWorker;
-  friend class IOSkipWorker;
 
   AVIOContext* ctx_ = nullptr;
+  AsyncOpCounter async_ops_;
   // Custom I/O callback support
   struct CallbackData {
     IOContext* io_context;
@@ -93,10 +88,12 @@ private:
   };
   
   std::unique_ptr<CallbackData> callback_data_;
-  uint8_t* buffer_ = nullptr;  // Buffer for custom I/O
-  
+
   // Helper to clean up callbacks
   void CleanupCallbacks();
+
+  // Callback-aware async-op guard for free/close/replace paths
+  bool GuardOps(Napi::Env env);
   
   // Static callback functions for FFmpeg
   static int ReadPacket(void* opaque, uint8_t* buf, int buf_size);

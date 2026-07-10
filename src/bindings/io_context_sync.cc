@@ -12,6 +12,12 @@ Napi::Value IOContext::Open2Sync(const Napi::CallbackInfo& info) {
     return env.Undefined();
   }
 
+  // Opening over an existing context would leak it (mirrors open2)
+  if (ctx_) {
+    Napi::Error::New(env, "IOContext already initialized").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+
   std::string url = info[0].As<Napi::String>().Utf8Value();
   int flags = AVIO_FLAG_READ;
   if (info.Length() >= 2 && info[1].IsNumber()) {
@@ -118,6 +124,11 @@ Napi::Value IOContext::ClosepSync(const Napi::CallbackInfo& info) {
   AVIOContext* ctx = Get();
   if (!ctx) {
     return Napi::Number::New(env, 0);
+  }
+
+  // Closing while an async op still uses the context would be a use-after-free
+  if (!GuardOps(env)) {
+    return env.Undefined();
   }
 
   // Mark callbacks as inactive

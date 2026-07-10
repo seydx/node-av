@@ -53,8 +53,7 @@ Napi::Object IOContext::Init(Napi::Env env, Napi::Object exports) {
 
 IOContext::IOContext(const Napi::CallbackInfo& info)
   : Napi::ObjectWrap<IOContext>(info),
-    ctx_(nullptr),
-    buffer_(nullptr) {
+    ctx_(nullptr) {
   // Constructor does nothing - user must call allocContext() or open2()
 }
 
@@ -72,9 +71,8 @@ IOContext::~IOContext() {
   //   #endif
   // }
   
-  // Clear pointers without freeing
+  // Clear pointer without freeing
   ctx_ = nullptr;
-  buffer_ = nullptr;
 }
 
 int IOContext::ReadPacket(void* opaque, uint8_t* buf, int buf_size) {
@@ -374,6 +372,23 @@ int64_t IOContext::Seek(void* opaque, int64_t offset, int whence) {
   return future.get();
 }
 
+bool IOContext::GuardOps(Napi::Env env) {
+  if (async_ops_.Active() == 0) {
+    return true;
+  }
+  // Callback-backed contexts: an in-flight operation may be parked in a
+  // ThreadSafeFunction BlockingCall that needs THIS (main) thread's event
+  // loop to run the JS callback. Waiting here would block the event loop and
+  // guarantee the timeout - fail fast with a defined error instead.
+  if (callback_data_) {
+    Napi::Error::New(env, "IOContext is busy: async operations still in flight - await them before freeing").ThrowAsJavaScriptException();
+    return false;
+  }
+  // File/URL-backed contexts complete on the threadpool without the main
+  // thread - a bounded wait is safe here.
+  return GuardAsyncOps(env, async_ops_, "IOContext");
+}
+
 void IOContext::CleanupCallbacks() {
   if (callback_data_ && callback_data_->active) {
     callback_data_->active = false;
@@ -409,7 +424,13 @@ Napi::Value IOContext::AllocContext(const Napi::CallbackInfo& info) {
     Napi::Error::New(env, "IOContext already allocated").ThrowAsJavaScriptException();
     return env.Undefined();
   }
-  
+
+  // Replacing the context frees ctx_->buffer + context below - wait for
+  // in-flight async operations (e.g. a racing open2) first
+  if (!GuardOps(env)) {
+    return env.Undefined();
+  }
+
   int buffer_size = info[0].As<Napi::Number>().Int32Value();
   int write_flag = info[1].As<Napi::Number>().Int32Value();
   
@@ -436,12 +457,13 @@ Napi::Value IOContext::AllocContext(const Napi::CallbackInfo& info) {
     Napi::Error::New(env, "Failed to allocate AVIOContext").ThrowAsJavaScriptException();
     return env.Undefined();
   }
-  
-  // Free old context if exists
+
+  // Free old context if exists (avio_context_free does not free the I/O buffer)
   if (ctx_) {
+    av_free(ctx_->buffer);
     avio_context_free(&ctx_);
   }
-  
+
   ctx_ = new_ctx;
   return env.Undefined();
 }
@@ -460,19 +482,28 @@ Napi::Value IOContext::AllocContextWithCallbacks(const Napi::CallbackInfo& info)
     return env.Undefined();
   }
   
+  // Replacing the context frees ctx_->buffer + context below and releases the
+  // previous callbacks - wait for in-flight async operations first (or error
+  // immediately when one is parked on a callback)
+  if (!GuardOps(env)) {
+    return env.Undefined();
+  }
+
   int buffer_size = info[0].As<Napi::Number>().Int32Value();
   int write_flag = info[1].As<Napi::Number>().Int32Value();
-  
-  // Allocate buffer
-  if (buffer_) {
-    av_free(buffer_);
-  }
-  buffer_ = (uint8_t*)av_malloc(buffer_size);
-  if (!buffer_) {
+
+  // Allocate buffer (ownership passes to the AVIOContext; freed via ctx_->buffer,
+  // never via a stale copy of this pointer - libavformat may replace the buffer)
+  uint8_t* buffer = (uint8_t*)av_malloc(buffer_size);
+  if (!buffer) {
     Napi::Error::New(env, "Failed to allocate buffer").ThrowAsJavaScriptException();
     return env.Undefined();
   }
   
+  // Release previous callbacks before replacing them - leaked ThreadSafeFunctions
+  // keep the event loop alive forever
+  CleanupCallbacks();
+
   // Initialize callback data
   callback_data_ = std::make_unique<CallbackData>();
   callback_data_->io_context = this;
@@ -495,6 +526,9 @@ Napi::Value IOContext::AllocContextWithCallbacks(const Napi::CallbackInfo& info)
       0,  // Unlimited queue
       1   // One thread
     );
+    // Don't hold the event loop open: a context the user never frees must not
+    // prevent process exit; the TSFN stays callable as long as the process runs
+    callback_data_->read_callback.Unref(env);
     callback_data_->read_callback_direct = Napi::Persistent(read_fn);
     callback_data_->has_read_callback = true;
     read_cb = ReadPacket;
@@ -510,6 +544,7 @@ Napi::Value IOContext::AllocContextWithCallbacks(const Napi::CallbackInfo& info)
       0,  // Unlimited queue
       1   // One thread
     );
+    callback_data_->write_callback.Unref(env);
     callback_data_->write_callback_direct = Napi::Persistent(write_fn);
     callback_data_->has_write_callback = true;
     write_cb = WritePacket;
@@ -525,6 +560,7 @@ Napi::Value IOContext::AllocContextWithCallbacks(const Napi::CallbackInfo& info)
       0,  // Unlimited queue
       1   // One thread
     );
+    callback_data_->seek_callback.Unref(env);
     callback_data_->seek_callback_direct = Napi::Persistent(seek_fn);
     callback_data_->has_seek_callback = true;
     seek_cb = Seek;
@@ -532,7 +568,7 @@ Napi::Value IOContext::AllocContextWithCallbacks(const Napi::CallbackInfo& info)
   
   // Create AVIOContext with callbacks
   AVIOContext* new_ctx = avio_alloc_context(
-    buffer_, 
+    buffer,
     buffer_size,
     write_flag,
     callback_data_.get(),  // Pass callback data as opaque
@@ -540,20 +576,20 @@ Napi::Value IOContext::AllocContextWithCallbacks(const Napi::CallbackInfo& info)
     write_cb,
     seek_cb
   );
-  
+
   if (!new_ctx) {
-    av_free(buffer_);
-    buffer_ = nullptr;
+    av_free(buffer);
     callback_data_.reset();
     Napi::Error::New(env, "Failed to allocate AVIOContext with callbacks").ThrowAsJavaScriptException();
     return env.Undefined();
   }
-  
-  // Free old context if exists
+
+  // Free old context if exists (avio_context_free does not free the I/O buffer)
   if (ctx_) {
+    av_free(ctx_->buffer);
     avio_context_free(&ctx_);
   }
-  
+
   ctx_ = new_ctx;
   return env.Undefined();
 }
@@ -561,14 +597,24 @@ Napi::Value IOContext::AllocContextWithCallbacks(const Napi::CallbackInfo& info)
 Napi::Value IOContext::FreeContext(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
+  // Freeing while a worker still uses the context on the threadpool would be
+  // a use-after-free - wait bounded (or error immediately for callback-backed
+  // contexts), then error instead of crashing
+  if (!GuardOps(env)) {
+    return env.Undefined();
+  }
+
   // Clean up callbacks first if they exist
   CleanupCallbacks();
 
   if (ctx_) {
-    // avio_context_free will also free the buffer
+    // avio_context_free() frees only the struct, NOT the I/O buffer (avio.h:
+    // "AVIOContext.buffer ... must be later freed with av_free()"). Free the
+    // current ctx_->buffer pointer - libavformat may have replaced the buffer
+    // originally passed to avio_alloc_context().
+    av_free(ctx_->buffer);
     avio_context_free(&ctx_);
     ctx_ = nullptr;
-    buffer_ = nullptr;  // Buffer was freed by avio_context_free
   }
 
   return env.Undefined();
@@ -701,16 +747,22 @@ Napi::Value IOContext::AsyncDispose(const Napi::CallbackInfo& info) {
     // We need to clean it up with freeContext, not closep
     // For now, we'll do synchronous cleanup and return a resolved promise
     Napi::Env env = info.Env();
-    
+
+    // Freeing while async operations are in flight would be a use-after-free
+    if (!GuardOps(env)) {
+      return env.Undefined();
+    }
+
     // Clean up callbacks
     CleanupCallbacks();
-    
-    // Free the context if it exists
+
+    // Free the context if it exists (avio_context_free does not free the I/O buffer)
     if (ctx_) {
+      av_free(ctx_->buffer);
       avio_context_free(&ctx_);
       ctx_ = nullptr;
     }
-    
+
     // Return resolved promise
     auto deferred = Napi::Promise::Deferred::New(env);
     deferred.Resolve(env.Undefined());
@@ -724,9 +776,16 @@ Napi::Value IOContext::AsyncDispose(const Napi::CallbackInfo& info) {
 Napi::Value IOContext::SyncDispose(const Napi::CallbackInfo& info) {
   if (callback_data_) {
     // Created with allocContextWithCallbacks — use freeContext logic
+    // Freeing while async operations are in flight would be a use-after-free
+    if (!GuardOps(info.Env())) {
+      return info.Env().Undefined();
+    }
+
     CleanupCallbacks();
 
     if (ctx_) {
+      // avio_context_free does not free the I/O buffer
+      av_free(ctx_->buffer);
       avio_context_free(&ctx_);
       ctx_ = nullptr;
     }
