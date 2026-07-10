@@ -851,7 +851,11 @@ jobs:
 
   build_macos:
     name: "macOS ${{ matrix.arch }}"
-    runs-on: macos-latest
+    # Pinned image generation: macos-latest resolves to different images during
+    # GitHub's label rollouts (mixed Xcode sets across the pool), which broke
+    # both the FFmpeg cache key and the XCODE_VERSION pin. Bump together with
+    # XCODE_VERSION when a new image generation is adopted.
+    runs-on: macos-26
     strategy:
       fail-fast: false
       matrix:
@@ -886,9 +890,17 @@ jobs:
 
       - name: Select pinned Xcode
         run: |
-          # Fails loudly when the runner image no longer carries the pinned
-          # version - bump XCODE_VERSION at the top of the workflow deliberately
-          sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app"
+          # The bundle name may carry a patch suffix (Xcode_26.5.0.app), so match
+          # by prefix. Fails loudly when the runner image no longer carries the
+          # pinned version - bump XCODE_VERSION at the top of the workflow
+          # deliberately (that invalidates the FFmpeg cache exactly once).
+          APP=$(ls -d "/Applications/Xcode_${XCODE_VERSION}"*.app 2>/dev/null | grep -iv beta | sort -V | tail -1)
+          if [ -z "$APP" ]; then
+            echo "Pinned Xcode ${XCODE_VERSION} not found on this runner image. Available:"
+            ls -d /Applications/Xcode*.app
+            exit 1
+          fi
+          sudo xcode-select -s "$APP"
           xcodebuild -version
 
       - name: Prepare directories
