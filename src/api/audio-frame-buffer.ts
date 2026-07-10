@@ -1,5 +1,8 @@
+import { AV_SAMPLE_FMT_U8, AV_SAMPLE_FMT_U8P } from '../constants/constants.js';
 import { AudioFifo } from '../lib/audio-fifo.js';
 import { Frame } from '../lib/frame.js';
+import { Rational } from '../lib/rational.js';
+import { avGetBytesPerSample, avSampleFmtIsPlanar } from '../lib/utilities.js';
 
 import type { AVSampleFormat } from '../constants/index.js';
 import type { ChannelLayout } from '../lib/types.js';
@@ -32,11 +35,16 @@ import type { ChannelLayout } from '../lib/types.js';
  *   }
  * }
  *
- * // Flush remaining samples
+ * // Flush remaining samples (final partial frame is padded with silence)
  * let outputFrame;
  * while ((outputFrame = await buffer.pull()) !== null) {
  *   await encoder.encode(outputFrame);
  *   outputFrame.free();
+ * }
+ * const tail = await buffer.pullPartial();
+ * if (tail) {
+ *   await encoder.encode(tail);
+ *   tail.free();
  * }
  * ```
  */
@@ -44,6 +52,8 @@ export class AudioFrameBuffer implements Disposable {
   private fifo: AudioFifo;
   private frame: Frame;
   private frameSize: number;
+  private sampleFormat: AVSampleFormat;
+  private channels: number;
   private nextPts = 0n;
   private firstFramePts: bigint | null = null;
 
@@ -63,12 +73,17 @@ export class AudioFrameBuffer implements Disposable {
   private constructor(fifo: AudioFifo, frameSize: number, sampleFormat: AVSampleFormat, sampleRate: number, channelLayout: ChannelLayout) {
     this.fifo = fifo;
     this.frameSize = frameSize;
+    this.sampleFormat = sampleFormat;
+    this.channels = channelLayout.nbChannels;
     this.frame = new Frame();
     this.frame.alloc();
     this.frame.nbSamples = frameSize;
     this.frame.format = sampleFormat;
     this.frame.sampleRate = sampleRate;
     this.frame.channelLayout = channelLayout;
+    // Output PTS is a running sample counter, so the matching timebase is
+    // 1/sample_rate; pulled frames go to the codec without further rescaling.
+    this.frame.timeBase = new Rational(1, sampleRate);
     this.frame.getBuffer(0); // Allocate buffer once
   }
 
@@ -282,6 +297,130 @@ export class AudioFrameBuffer implements Disposable {
       throw new Error('Failed to clone frame (out of memory)');
     }
     return cloned;
+  }
+
+  /**
+   * Pull the final partial frame from the buffer asynchronously.
+   *
+   * Reads the remaining samples (fewer than frameSize) and pads the tail with
+   * silence so the returned frame still carries exactly frameSize samples.
+   * Intended for end-of-stream flushing only - without it the tail (up to
+   * frameSize - 1 samples) would be dropped. Returns null if the buffer is
+   * empty, or while a complete frame is still available (drain those with
+   * pull() first).
+   *
+   * @returns Silence-padded audio frame with frameSize samples, or null if nothing to drain
+   *
+   * @throws {Error} If frame cloning fails (out of memory)
+   *
+   * @example
+   * ```typescript
+   * // At end of stream, after pull() has returned null
+   * using tail = await buffer.pullPartial();
+   * if (tail) {
+   *   await encoder.encode(tail);
+   * }
+   * ```
+   *
+   * @see {@link pullPartialSync} For synchronous version
+   * @see {@link pull} For pulling complete frames
+   */
+  async pullPartial(): Promise<Frame | null> {
+    const remaining = this.fifo.size;
+    if (remaining <= 0 || remaining >= this.frameSize) {
+      return null;
+    }
+
+    // Update PTS
+    this.frame.pts = this.nextPts;
+
+    // Read the remaining samples into the head of the reusable frame
+    await this.fifo.read(this.frame.data as Buffer | Buffer[], remaining);
+
+    // Pad the tail with silence up to frameSize
+    this.padWithSilence(remaining);
+
+    // Update PTS for next frame
+    this.nextPts += BigInt(this.frameSize);
+
+    // Clone frame for user (like Decoder does)
+    const cloned = this.frame.clone();
+    if (!cloned) {
+      throw new Error('Failed to clone frame (out of memory)');
+    }
+    return cloned;
+  }
+
+  /**
+   * Pull the final partial frame from the buffer synchronously.
+   * Synchronous version of pullPartial.
+   *
+   * Reads the remaining samples (fewer than frameSize) and pads the tail with
+   * silence so the returned frame still carries exactly frameSize samples.
+   * Intended for end-of-stream flushing only. Returns null if the buffer is
+   * empty, or while a complete frame is still available.
+   *
+   * @returns Silence-padded audio frame with frameSize samples, or null if nothing to drain
+   *
+   * @throws {Error} If frame cloning fails (out of memory)
+   *
+   * @example
+   * ```typescript
+   * // At end of stream, after pullSync() has returned null
+   * using tail = buffer.pullPartialSync();
+   * if (tail) {
+   *   encoder.encodeSync(tail);
+   * }
+   * ```
+   *
+   * @see {@link pullPartial} For async version
+   * @see {@link pullSync} For pulling complete frames
+   */
+  pullPartialSync(): Frame | null {
+    const remaining = this.fifo.size;
+    if (remaining <= 0 || remaining >= this.frameSize) {
+      return null;
+    }
+
+    // Update PTS
+    this.frame.pts = this.nextPts;
+
+    // Read the remaining samples into the head of the reusable frame
+    this.fifo.readSync(this.frame.data as Buffer | Buffer[], remaining);
+
+    // Pad the tail with silence up to frameSize
+    this.padWithSilence(remaining);
+
+    // Update PTS for next frame
+    this.nextPts += BigInt(this.frameSize);
+
+    // Clone frame for user
+    const cloned = this.frame.clone();
+    if (!cloned) {
+      throw new Error('Failed to clone frame (out of memory)');
+    }
+    return cloned;
+  }
+
+  /**
+   * Fill the reusable frame's sample range [fromSample, frameSize) with silence.
+   *
+   * Follows av_samples_set_silence() semantics: unsigned 8-bit formats use 0x80
+   * as the silence value, every other format uses 0. Planar frames carry one
+   * channel per plane; packed frames interleave all channels in plane 0.
+   *
+   * @param fromSample - First sample index to silence
+   *
+   * @internal
+   */
+  private padWithSilence(fromSample: number): void {
+    const silence = this.sampleFormat === AV_SAMPLE_FMT_U8 || this.sampleFormat === AV_SAMPLE_FMT_U8P ? 0x80 : 0;
+    const bytesPerSample = avGetBytesPerSample(this.sampleFormat);
+    const stride = avSampleFmtIsPlanar(this.sampleFormat) ? bytesPerSample : bytesPerSample * this.channels;
+    const planes = this.frame.data ?? [];
+    for (const plane of planes) {
+      plane.fill(silence, fromSample * stride, this.frameSize * stride);
+    }
   }
 
   /**
