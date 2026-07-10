@@ -290,11 +290,17 @@ Napi::Value Stream::GetAttachedPic(const Napi::CallbackInfo& info) {
   // Create a Packet wrapper for the attached picture
   Napi::Object packetObj = Packet::constructor.New({});
   Packet* packet = UnwrapNativeObject<Packet>(env, packetObj, "Packet");
-  
-  // The packet constructor already allocates, so we just need to copy
-  int ret = av_packet_ref(packet->Get(), &stream_->attached_pic);
+
+  AVPacket* pkt = av_packet_alloc();
+  if (!packet || !pkt) {
+    av_packet_free(&pkt);
+    Napi::Error::New(env, "Failed to allocate packet (ENOMEM)").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+  packet->packet_ = pkt;
 
   // Refs the attached picture's buffer into the JS packet; reconcile V8.
+  int ret = av_packet_ref(packet->Get(), &stream_->attached_pic);
   if (ret >= 0) {
     packet->SyncExternalMemory(env);
   }
