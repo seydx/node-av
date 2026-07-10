@@ -13,6 +13,7 @@ namespace ffmpeg {
 
 class Dictionary : public Napi::ObjectWrap<Dictionary> {
 public:
+  static thread_local Napi::FunctionReference constructor;
   static Napi::Object Init(Napi::Env env, Napi::Object exports);
   Dictionary(const Napi::CallbackInfo& info);
   ~Dictionary();
@@ -31,7 +32,6 @@ private:
   friend class Stream;
   friend class Frame;
 
-  static thread_local Napi::FunctionReference constructor;
 
   AVDictionary* dict_ = nullptr;
 

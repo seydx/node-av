@@ -17,6 +17,7 @@ class Packet;
 
 class Stream : public Napi::ObjectWrap<Stream> {
 public:
+  static thread_local Napi::FunctionReference constructor;
   static Napi::Object Init(Napi::Env env, Napi::Object exports);
   Stream(const Napi::CallbackInfo& info);
   ~Stream();
@@ -28,7 +29,6 @@ public:
 private:
   friend class FormatContext;
 
-  static thread_local Napi::FunctionReference constructor;
 
   AVStream* stream_ = nullptr;
 

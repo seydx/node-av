@@ -3,6 +3,7 @@
 
 #include <napi.h>
 #include "common.h"
+#include "promise_worker.h"
 
 extern "C" {
 #include <libavfilter/avfilter.h>
@@ -16,6 +17,7 @@ class FilterGraph;
 
 class FilterContext : public Napi::ObjectWrap<FilterContext> {
 public:
+  static thread_local Napi::FunctionReference constructor;
   static Napi::Object Init(Napi::Env env, Napi::Object exports);
   FilterContext(const Napi::CallbackInfo& info);
   ~FilterContext();
@@ -46,10 +48,13 @@ private:
   friend class FCBuffersinkGetFrameWorker;
   friend class AVOptionWrapper;
 
-  static thread_local Napi::FunctionReference constructor;
 
   AVFilterContext* ctx_ = nullptr;
   AVFilterContext* unowned_ctx_ = nullptr;
+
+  // In-flight threadpool operations (buffersrc/buffersink); free() waits on
+  // this so it cannot free ctx_ under a worker.
+  AsyncOpCounter async_ops_;
 
   Napi::Value Init(const Napi::CallbackInfo& info);
   Napi::Value InitStr(const Napi::CallbackInfo& info);

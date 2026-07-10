@@ -11,6 +11,7 @@ namespace ffmpeg {
 
 class FFmpegError : public Napi::ObjectWrap<FFmpegError> {
 public:
+  static thread_local Napi::FunctionReference constructor;
   static Napi::Object Init(Napi::Env env, Napi::Object exports);
   FFmpegError(const Napi::CallbackInfo& info);
   ~FFmpegError() = default;
@@ -19,7 +20,6 @@ public:
   void Set(int code) { code_ = code; }
 
 private:
-  static thread_local Napi::FunctionReference constructor;
 
   int code_ = 0;
 

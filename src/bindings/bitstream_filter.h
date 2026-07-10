@@ -12,6 +12,7 @@ namespace ffmpeg {
 
 class BitStreamFilter : public Napi::ObjectWrap<BitStreamFilter> {
 public:
+  static thread_local Napi::FunctionReference constructor;
   static Napi::Object Init(Napi::Env env, Napi::Object exports);
   BitStreamFilter(const Napi::CallbackInfo& info);
   ~BitStreamFilter();
@@ -23,7 +24,6 @@ public:
   static Napi::Object NewInstance(Napi::Env env, const AVBitStreamFilter* bsf);
 
 private:
-  static thread_local Napi::FunctionReference constructor;
 
   const AVBitStreamFilter* bsf_; // AVBitStreamFilter is const, we don't own it
 

@@ -12,6 +12,7 @@ namespace ffmpeg {
 
 class Packet : public Napi::ObjectWrap<Packet> {
 public:
+  static thread_local Napi::FunctionReference constructor;
   static Napi::Object Init(Napi::Env env, Napi::Object exports);
   Packet(const Napi::CallbackInfo& info);
   ~Packet();
@@ -24,7 +25,6 @@ private:
   friend class Stream;
   friend class SyncQueue;
 
-  static thread_local Napi::FunctionReference constructor;
 
   AVPacket* packet_ = nullptr;
 

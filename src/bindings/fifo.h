@@ -3,6 +3,7 @@
 
 #include <napi.h>
 #include "common.h"
+#include "promise_worker.h"
 
 extern "C" {
 #include <libavutil/fifo.h>
@@ -12,6 +13,7 @@ namespace ffmpeg {
 
 class Fifo : public Napi::ObjectWrap<Fifo> {
 public:
+  static thread_local Napi::FunctionReference constructor;
   static Napi::Object Init(Napi::Env env, Napi::Object exports);
   Fifo(const Napi::CallbackInfo& info);
   ~Fifo();
@@ -19,9 +21,9 @@ public:
   AVFifo* Get() { return fifo_; }
 
 private:
-  static thread_local Napi::FunctionReference constructor;
 
   AVFifo* fifo_ = nullptr;
+  AsyncOpCounter async_ops_;
 
   Napi::Value Alloc(const Napi::CallbackInfo& info);
   Napi::Value Free(const Napi::CallbackInfo& info);

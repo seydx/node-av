@@ -11,6 +11,7 @@ namespace ffmpeg {
 
 class CodecParser : public Napi::ObjectWrap<CodecParser> {
 public:
+  static thread_local Napi::FunctionReference constructor;
   static Napi::Object Init(Napi::Env env, Napi::Object exports);
   
   CodecParser(const Napi::CallbackInfo& info);
@@ -24,7 +25,6 @@ public:
 private:
   friend class Stream;
 
-  static thread_local Napi::FunctionReference constructor;
 
   AVCodecParserContext* parser_ctx_ = nullptr;
   bool owns_parser_ = true;  // Whether we own the parser context

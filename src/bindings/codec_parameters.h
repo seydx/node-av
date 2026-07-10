@@ -12,6 +12,7 @@ namespace ffmpeg {
 
 class CodecParameters : public Napi::ObjectWrap<CodecParameters> {
 public:
+  static thread_local Napi::FunctionReference constructor;
   static Napi::Object Init(Napi::Env env, Napi::Object exports);
   CodecParameters(const Napi::CallbackInfo& info);
   ~CodecParameters();
@@ -33,7 +34,6 @@ private:
   friend class Stream;
   friend class BitStreamFilterContext;
 
-  static thread_local Napi::FunctionReference constructor;
 
   AVCodecParameters* params_ = nullptr;
   bool is_owned_ = true;

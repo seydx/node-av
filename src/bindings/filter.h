@@ -11,6 +11,7 @@ namespace ffmpeg {
 
 class Filter : public Napi::ObjectWrap<Filter> {
 public:
+  static thread_local Napi::FunctionReference constructor;
   static Napi::Object Init(Napi::Env env, Napi::Object exports);
   Filter(const Napi::CallbackInfo& info);
   ~Filter() = default;
@@ -23,7 +24,6 @@ private:
   friend class FilterGraph;
   friend class FilterInOut;
 
-  static thread_local Napi::FunctionReference constructor;
 
   const AVFilter* filter_ = nullptr; // NOT owned - filters are static definitions
 

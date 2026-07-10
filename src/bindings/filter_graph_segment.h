@@ -15,6 +15,7 @@ class FilterGraph;
 
 class FilterGraphSegment : public Napi::ObjectWrap<FilterGraphSegment> {
 public:
+  static thread_local Napi::FunctionReference constructor;
   static Napi::Object Init(Napi::Env env, Napi::Object exports);
   FilterGraphSegment(const Napi::CallbackInfo& info);
   ~FilterGraphSegment();
@@ -29,7 +30,6 @@ public:
 private:
   friend class FilterGraph;
 
-  static thread_local Napi::FunctionReference constructor;
 
   AVFilterGraphSegment* segment_ = nullptr;
 

@@ -15,12 +15,12 @@ namespace ffmpeg {
 
 class Log : public Napi::ObjectWrap<Log> {
 public:
+  static thread_local Napi::FunctionReference constructor;
   static Napi::Object Init(Napi::Env env, Napi::Object exports);
   Log(const Napi::CallbackInfo& info);
   ~Log();
   
 private:
-  static thread_local Napi::FunctionReference constructor;
   static Napi::ThreadSafeFunction tsfn;
   static std::atomic<bool> callback_active;
   static std::atomic<int> callback_max_level;

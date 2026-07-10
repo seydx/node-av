@@ -12,6 +12,7 @@ namespace ffmpeg {
 
 class Codec : public Napi::ObjectWrap<Codec> {
 public:
+  static thread_local Napi::FunctionReference constructor;
   static Napi::Object Init(Napi::Env env, Napi::Object exports);
   Codec(const Napi::CallbackInfo& info);
   ~Codec();
@@ -22,7 +23,6 @@ public:
   static Napi::Object NewInstance(Napi::Env env, AVCodec* codec);
 
 private:
-  static thread_local Napi::FunctionReference constructor;
 
   const AVCodec* codec_; // AVCodec is const, we don't own it
 

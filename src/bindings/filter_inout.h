@@ -15,6 +15,7 @@ class FilterContext;
 
 class FilterInOut : public Napi::ObjectWrap<FilterInOut> {
 public:
+  static thread_local Napi::FunctionReference constructor;
   static Napi::Object Init(Napi::Env env, Napi::Object exports);
   FilterInOut(const Napi::CallbackInfo& info);
   ~FilterInOut();
@@ -47,7 +48,6 @@ public:
 private:
   friend class FilterGraph;
 
-  static thread_local Napi::FunctionReference constructor;
 
   AVFilterInOut* inout_ = nullptr;
   bool is_owned_ = true;

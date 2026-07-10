@@ -11,6 +11,7 @@ namespace ffmpeg {
 
 class OutputFormat : public Napi::ObjectWrap<OutputFormat> {
 public:
+  static thread_local Napi::FunctionReference constructor;
   static Napi::Object Init(Napi::Env env, Napi::Object exports);
   OutputFormat(const Napi::CallbackInfo& info);
   ~OutputFormat() = default;
@@ -22,7 +23,6 @@ public:
 private:
   friend class FormatContext;
 
-  static thread_local Napi::FunctionReference constructor;
 
   const AVOutputFormat* format_ = nullptr;
   

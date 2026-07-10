@@ -3,6 +3,7 @@
 
 #include <napi.h>
 #include "common.h"
+#include "promise_worker.h"
 
 extern "C" {
 #include <libavfilter/avfilter.h>
@@ -18,6 +19,7 @@ class FilterContext;
 
 class FilterGraph : public Napi::ObjectWrap<FilterGraph> {
 public:
+  static thread_local Napi::FunctionReference constructor;
   static Napi::Object Init(Napi::Env env, Napi::Object exports);
   FilterGraph(const Napi::CallbackInfo& info);
   ~FilterGraph();
@@ -39,13 +41,14 @@ public:
 private:
   friend class AVOptionWrapper;
   friend class FilterContext;
-  friend class FGConfigWorker;
-  friend class FGRequestOldestWorker;
 
-  static thread_local Napi::FunctionReference constructor;
 
   AVFilterGraph* graph_ = nullptr;
   AVFilterGraph* unowned_graph_ = nullptr;
+
+  // In-flight threadpool operations (config/requestOldest); free/replace
+  // paths wait on this so they cannot free graph_ under a worker.
+  AsyncOpCounter async_ops_;
 
   Napi::Value Alloc(const Napi::CallbackInfo& info);
   Napi::Value Free(const Napi::CallbackInfo& info);
