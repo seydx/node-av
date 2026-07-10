@@ -7,13 +7,49 @@ import type { Packet } from '../lib/packet.js';
 import type { EncoderOptions } from './encoder.js';
 
 /**
- * Pooled encoder with its monotonic PTS counter.
+ * Minimal promise-chain mutex serializing async critical sections.
+ *
+ * @internal
+ */
+export class Mutex {
+  private tail: Promise<void> = Promise.resolve();
+
+  /**
+   * Run a callback exclusively, after all previously queued callbacks.
+   *
+   * @param fn - Critical section to execute
+   *
+   * @returns The callback's result
+   *
+   * @internal
+   */
+  async run<T>(fn: () => T | Promise<T>): Promise<T> {
+    const prev = this.tail;
+    let release!: () => void;
+    this.tail = new Promise<void>((resolve) => (release = resolve));
+    await prev;
+    try {
+      return await fn();
+    } finally {
+      release();
+    }
+  }
+}
+
+/**
+ * Pooled encoder with its monotonic PTS counter and concurrency state.
  *
  * @internal
  */
 interface PooledEncoder {
   encoder: Encoder;
   nextPts: bigint;
+  /** Serializes encodeAll (send + drain) per encoder. */
+  lock: Mutex;
+  /** In-flight async encodes holding this encoder alive. */
+  refs: number;
+  /** Evicted while in use; closed by the last release instead. */
+  evicted: boolean;
 }
 
 /**
@@ -133,7 +169,9 @@ export class EncoderPool<const C extends FFEncoderCodec | AVCodecID | Codec> imp
    * Encode a frame into a self-contained image buffer.
    *
    * Routes the frame to the encoder matching its dimensions and pixel format,
-   * creating and caching one if necessary.
+   * creating and caching one if necessary. Safe to call concurrently: encodes
+   * on the same key are serialized per encoder, different keys run in parallel,
+   * and eviction never closes an encoder with an encode in flight.
    *
    * @param frame - Frame to encode
    *
@@ -157,6 +195,8 @@ export class EncoderPool<const C extends FFEncoderCodec | AVCodecID | Codec> imp
     if (!pooled) {
       const encoder = await Encoder.create(this.encoderCodec, this.options);
 
+      // A concurrent encode may have created and cached the same entry while we
+      // awaited; prefer the cached one and discard ours.
       pooled = this.touch(key);
       if (pooled) {
         encoder.close();
@@ -165,18 +205,33 @@ export class EncoderPool<const C extends FFEncoderCodec | AVCodecID | Codec> imp
       }
     }
 
-    const savedPts = frame.pts;
-    frame.pts = pooled.nextPts++;
+    // Hold the entry across the awaits below: LRU eviction (and close()) defer
+    // closing an in-use encoder to release(), never mid-encode.
+    const entry = pooled;
+    entry.refs++;
     try {
-      return this.extract(await pooled.encoder.encodeAll(frame), pooled.encoder);
+      // Serialize send + drain per encoder: concurrent encodes on the same key
+      // would otherwise interleave and hand packets to the wrong caller.
+      return await entry.lock.run(async () => {
+        const savedPts = frame.pts;
+        frame.pts = entry.nextPts++;
+        try {
+          return this.extract(await entry.encoder.encodeAll(frame), entry.encoder);
+        } finally {
+          frame.pts = savedPts;
+        }
+      });
     } finally {
-      frame.pts = savedPts;
+      this.release(entry);
     }
   }
 
   /**
    * Encode a frame into a self-contained image buffer synchronously.
    * Synchronous version of encode.
+   *
+   * If the pooled encoder for the frame's key has an async encode in flight,
+   * a throwaway encoder handles this call so the two cannot interleave.
    *
    * @param frame - Frame to encode
    *
@@ -198,6 +253,27 @@ export class EncoderPool<const C extends FFEncoderCodec | AVCodecID | Codec> imp
 
     let pooled = this.touch(key);
     pooled ??= this.set(key, Encoder.createSync(this.encoderCodec, this.options));
+
+    // Sync encodes cannot interleave with each other (they block the event loop),
+    // but they can land between the awaits of an in-flight async encode on the
+    // same pooled encoder. Use a throwaway encoder in that case.
+    if (pooled.refs > 0) {
+      const encoder = Encoder.createSync(this.encoderCodec, this.options);
+      if (this.flags.length > 0) {
+        encoder.setCodecFlags(...this.flags);
+      }
+      try {
+        const savedPts = frame.pts;
+        frame.pts = 0n;
+        try {
+          return this.extract(encoder.encodeAllSync(frame), encoder);
+        } finally {
+          frame.pts = savedPts;
+        }
+      } finally {
+        encoder.close();
+      }
+    }
 
     const savedPts = frame.pts;
     frame.pts = pooled.nextPts++;
@@ -221,8 +297,10 @@ export class EncoderPool<const C extends FFEncoderCodec | AVCodecID | Codec> imp
    * @see {@link Symbol.dispose} For automatic cleanup
    */
   close(): void {
-    for (const { encoder } of this.encoders.values()) {
-      encoder.close();
+    // In-use encoders are retired, not closed: the last in-flight encode closes
+    // them on release, so close() during concurrent encodes never crashes them.
+    for (const pooled of this.encoders.values()) {
+      this.retire(pooled);
     }
     this.encoders.clear();
   }
@@ -277,7 +355,7 @@ export class EncoderPool<const C extends FFEncoderCodec | AVCodecID | Codec> imp
       encoder.setCodecFlags(...this.flags);
     }
 
-    const pooled: PooledEncoder = { encoder, nextPts: 0n };
+    const pooled: PooledEncoder = { encoder, nextPts: 0n, lock: new Mutex(), refs: 0, evicted: false };
     this.encoders.set(key, pooled);
 
     if (this.encoders.size > this.maxSize) {
@@ -285,11 +363,44 @@ export class EncoderPool<const C extends FFEncoderCodec | AVCodecID | Codec> imp
       if (oldestKey !== undefined) {
         const oldest = this.encoders.get(oldestKey);
         this.encoders.delete(oldestKey);
-        oldest?.encoder.close();
+        if (oldest) {
+          this.retire(oldest);
+        }
       }
     }
 
     return pooled;
+  }
+
+  /**
+   * Take an entry out of service, closing it now or on last release.
+   *
+   * An entry with in-flight encodes is only marked; the final {@link release}
+   * closes the encoder once nothing uses it anymore.
+   *
+   * @param pooled - Entry removed from the pool
+   *
+   * @internal
+   */
+  private retire(pooled: PooledEncoder): void {
+    pooled.evicted = true;
+    if (pooled.refs === 0) {
+      pooled.encoder.close();
+    }
+  }
+
+  /**
+   * Drop an in-flight reference, closing the encoder if it was retired meanwhile.
+   *
+   * @param pooled - Entry acquired by {@link encode}
+   *
+   * @internal
+   */
+  private release(pooled: PooledEncoder): void {
+    pooled.refs--;
+    if (pooled.refs === 0 && pooled.evicted) {
+      pooled.encoder.close();
+    }
   }
 
   /**
