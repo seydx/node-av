@@ -1,374 +1,121 @@
 #include "audio_fifo.h"
+#include "promise_worker.h"
 #include <napi.h>
+#include <vector>
 
 extern "C" {
 #include <libavutil/audio_fifo.h>
-#include <libavutil/mem.h>
 }
 
 namespace ffmpeg {
 
-class AudioFifoWriteWorker : public Napi::AsyncWorker {
-public:
-  AudioFifoWriteWorker(Napi::Env env, Napi::Object fifoObj, AVAudioFifo* fifo,
-                       Napi::Value dataVal, void** data,
-                       int nb_channels, int nb_samples)
-    : AsyncWorker(env),
-      fifo_(fifo),
-      nb_samples_(nb_samples),
-      result_(0),
-      deferred_(Napi::Promise::Deferred::New(env)) {
-    // Hold references to prevent GC during async operation
-    fifo_ref_.Reset(fifoObj, 1);
-    if (dataVal.IsArray()) {
-      data_ref_.Reset(dataVal.As<Napi::Object>(), 1);
-    } else if (dataVal.IsBuffer()) {
-      data_ref_.Reset(dataVal.As<Napi::Object>(), 1);
+static std::vector<void*> CollectPlanePointers(const Napi::Value& dataVal) {
+  std::vector<void*> data;
+  if (dataVal.IsArray()) {
+    Napi::Array dataArray = dataVal.As<Napi::Array>();
+    data.resize(dataArray.Length(), nullptr);
+    for (uint32_t i = 0; i < dataArray.Length(); i++) {
+      if (dataArray.Get(i).IsBuffer()) {
+        data[i] = dataArray.Get(i).As<Napi::Buffer<uint8_t>>().Data();
+      }
     }
-    // Copy data pointers
-    data_ = static_cast<void**>(av_malloc(nb_channels * sizeof(void*)));
-    for (int i = 0; i < nb_channels; i++) {
-      data_[i] = data[i];
-    }
+  } else {
+    data.push_back(dataVal.As<Napi::Buffer<uint8_t>>().Data());
   }
-
-  ~AudioFifoWriteWorker() {
-    fifo_ref_.Reset();
-    data_ref_.Reset();
-    if (data_) {
-      av_free(data_);
-    }
-  }
-  
-  void Execute() override {
-    // Null checks to prevent use-after-free crashes
-    if (!fifo_) {
-      result_ = AVERROR(EINVAL);
-      return;
-    }
-
-    result_ = av_audio_fifo_write(fifo_, data_, nb_samples_);
-  }
-  
-  void OnOK() override {
-    deferred_.Resolve(Napi::Number::New(Env(), result_));
-  }
-  
-  void OnError(const Napi::Error& error) override {
-    deferred_.Reject(error.Value());
-  }
-  
-  Napi::Promise GetPromise() { return deferred_.Promise(); }
-
-private:
-  Napi::ObjectReference fifo_ref_;
-  Napi::ObjectReference data_ref_;
-  AVAudioFifo* fifo_;
-  void** data_;
-  int nb_samples_;
-  int result_;
-  Napi::Promise::Deferred deferred_;
-};
-
-class AudioFifoReadWorker : public Napi::AsyncWorker {
-public:
-  AudioFifoReadWorker(Napi::Env env, Napi::Object fifoObj, AVAudioFifo* fifo,
-                      Napi::Value dataVal, void** data,
-                      int nb_channels, int nb_samples)
-    : AsyncWorker(env),
-      fifo_(fifo),
-      nb_samples_(nb_samples),
-      result_(0),
-      deferred_(Napi::Promise::Deferred::New(env)) {
-    // Hold references to prevent GC during async operation
-    fifo_ref_.Reset(fifoObj, 1);
-    if (dataVal.IsArray()) {
-      data_ref_.Reset(dataVal.As<Napi::Object>(), 1);
-    } else if (dataVal.IsBuffer()) {
-      data_ref_.Reset(dataVal.As<Napi::Object>(), 1);
-    }
-    // Copy data pointers
-    data_ = static_cast<void**>(av_malloc(nb_channels * sizeof(void*)));
-    for (int i = 0; i < nb_channels; i++) {
-      data_[i] = data[i];
-    }
-  }
-
-  ~AudioFifoReadWorker() {
-    fifo_ref_.Reset();
-    data_ref_.Reset();
-    if (data_) {
-      av_free(data_);
-    }
-  }
-  
-  void Execute() override {
-    // Null checks to prevent use-after-free crashes
-    if (!fifo_) {
-      result_ = AVERROR(EINVAL);
-      return;
-    }
-
-    result_ = av_audio_fifo_read(fifo_, data_, nb_samples_);
-  }
-  
-  void OnOK() override {
-    deferred_.Resolve(Napi::Number::New(Env(), result_));
-  }
-  
-  void OnError(const Napi::Error& error) override {
-    deferred_.Reject(error.Value());
-  }
-  
-  Napi::Promise GetPromise() { return deferred_.Promise(); }
-
-private:
-  Napi::ObjectReference fifo_ref_;
-  Napi::ObjectReference data_ref_;
-  AVAudioFifo* fifo_;
-  void** data_;
-  int nb_samples_;
-  int result_;
-  Napi::Promise::Deferred deferred_;
-};
-
-class AudioFifoPeekWorker : public Napi::AsyncWorker {
-public:
-  AudioFifoPeekWorker(Napi::Env env, Napi::Object fifoObj, AVAudioFifo* fifo,
-                      Napi::Value dataVal, void** data,
-                      int nb_channels, int nb_samples)
-    : AsyncWorker(env),
-      fifo_(fifo),
-      nb_samples_(nb_samples),
-      result_(0),
-      deferred_(Napi::Promise::Deferred::New(env)) {
-    // Hold references to prevent GC during async operation
-    fifo_ref_.Reset(fifoObj, 1);
-    if (dataVal.IsArray()) {
-      data_ref_.Reset(dataVal.As<Napi::Object>(), 1);
-    } else if (dataVal.IsBuffer()) {
-      data_ref_.Reset(dataVal.As<Napi::Object>(), 1);
-    }
-    // Copy data pointers
-    data_ = static_cast<void**>(av_malloc(nb_channels * sizeof(void*)));
-    for (int i = 0; i < nb_channels; i++) {
-      data_[i] = data[i];
-    }
-  }
-
-  ~AudioFifoPeekWorker() {
-    fifo_ref_.Reset();
-    data_ref_.Reset();
-    if (data_) {
-      av_free(data_);
-    }
-  }
-  
-  void Execute() override {
-    // Null checks to prevent use-after-free crashes
-    if (!fifo_) {
-      result_ = AVERROR(EINVAL);
-      return;
-    }
-
-    result_ = av_audio_fifo_peek(fifo_, data_, nb_samples_);
-  }
-  
-  void OnOK() override {
-    deferred_.Resolve(Napi::Number::New(Env(), result_));
-  }
-  
-  void OnError(const Napi::Error& error) override {
-    deferred_.Reject(error.Value());
-  }
-  
-  Napi::Promise GetPromise() { return deferred_.Promise(); }
-
-private:
-  Napi::ObjectReference fifo_ref_;
-  Napi::ObjectReference data_ref_;
-  AVAudioFifo* fifo_;
-  void** data_;
-  int nb_samples_;
-  int result_;
-  Napi::Promise::Deferred deferred_;
-};
+  return data;
+}
 
 Napi::Value AudioFifo::WriteAsync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
-  
+
   if (!fifo_) {
     Napi::Error::New(env, "AudioFifo not allocated").ThrowAsJavaScriptException();
     return env.Undefined();
   }
-  
+
   if (info.Length() < 2) {
     Napi::TypeError::New(env, "Expected 2 arguments (data, nb_samples)").ThrowAsJavaScriptException();
     return env.Undefined();
   }
-  
+
   int nb_samples = info[1].As<Napi::Number>().Int32Value();
-  
-  // Handle array of buffers (one per channel for planar formats)
-  if (info[0].IsArray()) {
-    Napi::Array dataArray = info[0].As<Napi::Array>();
-    
-    void** data = static_cast<void**>(av_malloc(dataArray.Length() * sizeof(void*)));
-    if (!data) {
-      Napi::Error::New(env, "Out of memory").ThrowAsJavaScriptException();
-      return env.Undefined();
-    }
-    
-    for (uint32_t i = 0; i < dataArray.Length(); i++) {
-      if (dataArray.Get(i).IsBuffer()) {
-        Napi::Buffer<uint8_t> buf = dataArray.Get(i).As<Napi::Buffer<uint8_t>>();
-        data[i] = buf.Data();
-      } else {
-        data[i] = nullptr;
-      }
-    }
 
-    Napi::Object thisObj = info.This().As<Napi::Object>();
-    auto* worker = new AudioFifoWriteWorker(env, thisObj, fifo_, info[0], data, dataArray.Length(), nb_samples);
-    auto promise = worker->GetPromise();
-    worker->Queue();
-
-    av_free(data);
-    return promise;
+  if (!info[0].IsArray() && !info[0].IsBuffer()) {
+    Napi::TypeError::New(env, "Expected Buffer or Array of Buffers").ThrowAsJavaScriptException();
+    return env.Undefined();
   }
-  // Handle single buffer (interleaved format)
-  else if (info[0].IsBuffer()) {
-    Napi::Buffer<uint8_t> buffer = info[0].As<Napi::Buffer<uint8_t>>();
-    void* data[1] = { buffer.Data() };
 
-    Napi::Object thisObj = info.This().As<Napi::Object>();
-    auto* worker = new AudioFifoWriteWorker(env, thisObj, fifo_, info[0], data, 1, nb_samples);
-    auto promise = worker->GetPromise();
-    worker->Queue();
-
-    return promise;
+  if (!ValidateBufferCount(env, info[0].IsArray() ? info[0].As<Napi::Array>().Length() : 1)) {
+    return env.Undefined();
   }
-  
-  Napi::TypeError::New(env, "Expected Buffer or Array of Buffers").ThrowAsJavaScriptException();
-  return env.Undefined();
+
+  AVAudioFifo* fifo = fifo_;
+  return PromiseWorker::Run(env, &async_ops_, {info.This().As<Napi::Object>(), info[0].As<Napi::Object>()},
+                            [fifo, data = CollectPlanePointers(info[0]), nb_samples]() mutable {
+    return av_audio_fifo_write(fifo, data.data(), nb_samples);
+  });
 }
 
 Napi::Value AudioFifo::ReadAsync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
-  
+
   if (!fifo_) {
     Napi::Error::New(env, "AudioFifo not allocated").ThrowAsJavaScriptException();
     return env.Undefined();
   }
-  
+
   if (info.Length() < 2) {
     Napi::TypeError::New(env, "Expected 2 arguments (data, nb_samples)").ThrowAsJavaScriptException();
     return env.Undefined();
   }
-  
+
   int nb_samples = info[1].As<Napi::Number>().Int32Value();
-  
-  // Handle array of buffers (one per channel for planar formats)
-  if (info[0].IsArray()) {
-    Napi::Array dataArray = info[0].As<Napi::Array>();
-    
-    void** data = static_cast<void**>(av_malloc(dataArray.Length() * sizeof(void*)));
-    if (!data) {
-      Napi::Error::New(env, "Out of memory").ThrowAsJavaScriptException();
-      return env.Undefined();
-    }
-    
-    for (uint32_t i = 0; i < dataArray.Length(); i++) {
-      if (dataArray.Get(i).IsBuffer()) {
-        Napi::Buffer<uint8_t> buf = dataArray.Get(i).As<Napi::Buffer<uint8_t>>();
-        data[i] = buf.Data();
-      } else {
-        data[i] = nullptr;
-      }
-    }
 
-    Napi::Object thisObj = info.This().As<Napi::Object>();
-    auto* worker = new AudioFifoReadWorker(env, thisObj, fifo_, info[0], data, dataArray.Length(), nb_samples);
-    auto promise = worker->GetPromise();
-    worker->Queue();
-
-    av_free(data);
-    return promise;
-  }
-  // Handle single buffer (interleaved format)
-  else if (info[0].IsBuffer()) {
-    Napi::Buffer<uint8_t> buffer = info[0].As<Napi::Buffer<uint8_t>>();
-    void* data[1] = { buffer.Data() };
-
-    Napi::Object thisObj = info.This().As<Napi::Object>();
-    auto* worker = new AudioFifoReadWorker(env, thisObj, fifo_, info[0], data, 1, nb_samples);
-    auto promise = worker->GetPromise();
-    worker->Queue();
-
-    return promise;
+  if (!info[0].IsArray() && !info[0].IsBuffer()) {
+    Napi::TypeError::New(env, "Expected Buffer or Array of Buffers").ThrowAsJavaScriptException();
+    return env.Undefined();
   }
 
-  Napi::TypeError::New(env, "Expected Buffer or Array of Buffers").ThrowAsJavaScriptException();
-  return env.Undefined();
+  if (!ValidateBufferCount(env, info[0].IsArray() ? info[0].As<Napi::Array>().Length() : 1)) {
+    return env.Undefined();
+  }
+
+  AVAudioFifo* fifo = fifo_;
+  return PromiseWorker::Run(env, &async_ops_, {info.This().As<Napi::Object>(), info[0].As<Napi::Object>()},
+                            [fifo, data = CollectPlanePointers(info[0]), nb_samples]() mutable {
+    return av_audio_fifo_read(fifo, data.data(), nb_samples);
+  });
 }
 
 Napi::Value AudioFifo::PeekAsync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
-  
+
   if (!fifo_) {
     Napi::Error::New(env, "AudioFifo not allocated").ThrowAsJavaScriptException();
     return env.Undefined();
   }
-  
+
   if (info.Length() < 2) {
     Napi::TypeError::New(env, "Expected 2 arguments (data, nb_samples)").ThrowAsJavaScriptException();
     return env.Undefined();
   }
-  
+
   int nb_samples = info[1].As<Napi::Number>().Int32Value();
-  
-  // Handle array of buffers (one per channel for planar formats)
-  if (info[0].IsArray()) {
-    Napi::Array dataArray = info[0].As<Napi::Array>();
-    
-    void** data = static_cast<void**>(av_malloc(dataArray.Length() * sizeof(void*)));
-    if (!data) {
-      Napi::Error::New(env, "Out of memory").ThrowAsJavaScriptException();
-      return env.Undefined();
-    }
-    
-    for (uint32_t i = 0; i < dataArray.Length(); i++) {
-      if (dataArray.Get(i).IsBuffer()) {
-        Napi::Buffer<uint8_t> buf = dataArray.Get(i).As<Napi::Buffer<uint8_t>>();
-        data[i] = buf.Data();
-      } else {
-        data[i] = nullptr;
-      }
-    }
 
-    Napi::Object thisObj = info.This().As<Napi::Object>();
-    auto* worker = new AudioFifoPeekWorker(env, thisObj, fifo_, info[0], data, dataArray.Length(), nb_samples);
-    auto promise = worker->GetPromise();
-    worker->Queue();
-
-    av_free(data);
-    return promise;
+  if (!info[0].IsArray() && !info[0].IsBuffer()) {
+    Napi::TypeError::New(env, "Expected Buffer or Array of Buffers").ThrowAsJavaScriptException();
+    return env.Undefined();
   }
-  // Handle single buffer (interleaved format)
-  else if (info[0].IsBuffer()) {
-    Napi::Buffer<uint8_t> buffer = info[0].As<Napi::Buffer<uint8_t>>();
-    void* data[1] = { buffer.Data() };
 
-    Napi::Object thisObj = info.This().As<Napi::Object>();
-    auto* worker = new AudioFifoPeekWorker(env, thisObj, fifo_, info[0], data, 1, nb_samples);
-    auto promise = worker->GetPromise();
-    worker->Queue();
-
-    return promise;
+  if (!ValidateBufferCount(env, info[0].IsArray() ? info[0].As<Napi::Array>().Length() : 1)) {
+    return env.Undefined();
   }
-  
-  Napi::TypeError::New(env, "Expected Buffer or Array of Buffers").ThrowAsJavaScriptException();
-  return env.Undefined();
+
+  AVAudioFifo* fifo = fifo_;
+  return PromiseWorker::Run(env, &async_ops_, {info.This().As<Napi::Object>(), info[0].As<Napi::Object>()},
+                            [fifo, data = CollectPlanePointers(info[0]), nb_samples]() mutable {
+    return av_audio_fifo_peek(fifo, data.data(), nb_samples);
+  });
 }
 
 } // namespace ffmpeg

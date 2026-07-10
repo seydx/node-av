@@ -1,6 +1,9 @@
 #include "software_scale_context.h"
 #include "frame.h"
+#include "promise_worker.h"
 #include <napi.h>
+#include <array>
+#include <vector>
 
 extern "C" {
 #include <libswscale/swscale.h>
@@ -22,6 +25,11 @@ public:
     ctx_ref_.Reset(ctxObj, 1);
     dst_ref_.Reset(dstObj, 1);
     src_ref_.Reset(srcObj, 1);
+    // Mark the context and both frames busy so free()/unref() waits instead
+    // of pulling memory out from under the scale (see promise_worker.h)
+    ctx_->async_ops_.Begin();
+    dst_->async_ops_.Begin();
+    src_->async_ops_.Begin();
   }
 
   ~SwsScaleFrameWorker() {
@@ -32,22 +40,21 @@ public:
 
   void Execute() override {
     // Null checks to prevent use-after-free crashes
-    if (!ctx_ || !ctx_->Get()) {
+    if (!ctx_ || !ctx_->Get() || !dst_ || !dst_->Get() || !src_ || !src_->Get()) {
       ret_ = AVERROR(EINVAL);
-      return;
+    } else {
+      ret_ = sws_scale_frame(ctx_->Get(), dst_->Get(), src_->Get());
     }
-
-    if (!dst_ || !dst_->Get() || !src_ || !src_->Get()) {
-      ret_ = AVERROR(EINVAL);
-      return;
-    }
-
-    ret_ = sws_scale_frame(ctx_->Get(), dst_->Get(), src_->Get());
+    // Release before OnOK so a GuardAsyncOps() wait on the main thread can
+    // proceed even though the OnOK callback is still queued behind it
+    EndOps();
   }
 
   void OnOK() override {
     // sws_scale_frame auto-allocated the destination buffers on the worker
     // thread; reconcile V8 accounting now that we are back on the JS thread.
+    // Safe even if the frame was freed after EndOps(): SyncExternalMemory
+    // handles a null AVFrame.
     if (ret_ >= 0) {
       dst_->SyncExternalMemory(Env());
     }
@@ -55,6 +62,7 @@ public:
   }
 
   void OnError(const Napi::Error& e) override {
+    EndOps();  // Execute may have been skipped
     deferred_.Reject(e.Value());
   }
 
@@ -63,6 +71,16 @@ public:
   }
 
 private:
+  void EndOps() {
+    if (ops_ended_) {
+      return;
+    }
+    ops_ended_ = true;
+    ctx_->async_ops_.End();
+    dst_->async_ops_.End();
+    src_->async_ops_.End();
+  }
+
   Napi::ObjectReference ctx_ref_;
   Napi::ObjectReference dst_ref_;
   Napi::ObjectReference src_ref_;
@@ -70,81 +88,7 @@ private:
   Frame* dst_;
   Frame* src_;
   int ret_;
-  Napi::Promise::Deferred deferred_;
-};
-
-class SwsScaleWorker : public Napi::AsyncWorker {
-public:
-  SwsScaleWorker(Napi::Env env, Napi::Object ctxObj, SoftwareScaleContext* ctx,
-                 const uint8_t* const srcSlice[], const int srcStride[],
-                 int srcSliceY, int srcSliceH,
-                 uint8_t* const dst[], const int dstStride[],
-                 std::vector<Napi::Reference<Napi::Value>>&& srcRefs,
-                 std::vector<Napi::Reference<Napi::Value>>&& dstRefs)
-    : Napi::AsyncWorker(env),
-      ctx_(ctx),
-      srcSliceY_(srcSliceY),
-      srcSliceH_(srcSliceH),
-      ret_(0),
-      srcRefs_(std::move(srcRefs)),
-      dstRefs_(std::move(dstRefs)),
-      deferred_(Napi::Promise::Deferred::New(env)) {
-    // Hold reference to context
-    ctx_ref_.Reset(ctxObj, 1);
-
-    // Copy pointers and strides
-    for (int i = 0; i < 4; i++) {
-      srcSlice_[i] = srcSlice[i];
-      srcStride_[i] = srcStride[i];
-      dst_[i] = dst[i];
-      dstStride_[i] = dstStride[i];
-    }
-  }
-
-  ~SwsScaleWorker() {
-    ctx_ref_.Reset();
-    for (auto& ref : srcRefs_) {
-      ref.Reset();
-    }
-    for (auto& ref : dstRefs_) {
-      ref.Reset();
-    }
-  }
-
-  void Execute() override {
-    // Null checks to prevent use-after-free crashes
-    if (!ctx_ || !ctx_->Get()) {
-      ret_ = AVERROR(EINVAL);
-      return;
-    }
-
-    ret_ = sws_scale(ctx_->Get(), srcSlice_, srcStride_, srcSliceY_, srcSliceH_, dst_, dstStride_);
-  }
-
-  void OnOK() override {
-    deferred_.Resolve(Napi::Number::New(Env(), ret_));
-  }
-
-  void OnError(const Napi::Error& e) override {
-    deferred_.Reject(e.Value());
-  }
-
-  Napi::Promise GetPromise() {
-    return deferred_.Promise();
-  }
-
-private:
-  Napi::ObjectReference ctx_ref_;
-  SoftwareScaleContext* ctx_;
-  const uint8_t* srcSlice_[4];
-  int srcStride_[4];
-  int srcSliceY_;
-  int srcSliceH_;
-  uint8_t* dst_[4];
-  int dstStride_[4];
-  int ret_;
-  std::vector<Napi::Reference<Napi::Value>> srcRefs_;
-  std::vector<Napi::Reference<Napi::Value>> dstRefs_;
+  bool ops_ended_ = false;
   Napi::Promise::Deferred deferred_;
 };
 
@@ -163,8 +107,14 @@ Napi::Value SoftwareScaleContext::ScaleFrameAsync(const Napi::CallbackInfo& info
 
   Napi::Object dstObj = info[0].As<Napi::Object>();
   Napi::Object srcObj = info[1].As<Napi::Object>();
-  Frame* dst = Napi::ObjectWrap<Frame>::Unwrap(dstObj);
-  Frame* src = Napi::ObjectWrap<Frame>::Unwrap(srcObj);
+  Frame* dst = UnwrapNativeObject<Frame>(env, info[0], "Frame");
+  Frame* src = UnwrapNativeObject<Frame>(env, info[1], "Frame");
+  if (!dst || !src) {
+    // Must not queue a worker with a pending exception - creating the
+    // promise deferred fails and leaves it in an invalid state
+    Napi::TypeError::New(env, "Invalid frame(s)").ThrowAsJavaScriptException();
+    return env.Null();
+  }
 
   Napi::Object thisObj = info.This().As<Napi::Object>();
   auto* worker = new SwsScaleFrameWorker(env, thisObj, this, dstObj, dst, srcObj, src);
@@ -207,20 +157,18 @@ Napi::Value SoftwareScaleContext::ScaleAsync(const Napi::CallbackInfo& info) {
   Napi::Array dst = info[4].As<Napi::Array>();
   Napi::Array dstStride = info[5].As<Napi::Array>();
 
-  // Prepare source pointers and strides - need persistent references
-  const uint8_t* srcSlicePtr[4] = {nullptr, nullptr, nullptr, nullptr};
-  int srcStrideVal[4] = {0, 0, 0, 0};
+  // Pointers/strides are captured by value into the work function; the JS
+  // buffers themselves stay alive through the worker's pins.
+  std::vector<Napi::Object> pins = {info.This().As<Napi::Object>()};
 
-  // Store persistent references to buffers
-  std::vector<Napi::Reference<Napi::Value>> srcRefs;
+  std::array<const uint8_t*, 4> srcSlicePtr = {nullptr, nullptr, nullptr, nullptr};
+  std::array<int, 4> srcStrideVal = {0, 0, 0, 0};
 
   for (uint32_t i = 0; i < srcSlice.Length() && i < 4; i++) {
     Napi::Value val = srcSlice[i];
     if (val.IsBuffer()) {
-      Napi::Buffer<uint8_t> buf = val.As<Napi::Buffer<uint8_t>>();
-      srcSlicePtr[i] = buf.Data();
-      // Keep reference to buffer
-      srcRefs.push_back(Napi::Persistent(val));
+      srcSlicePtr[i] = val.As<Napi::Buffer<uint8_t>>().Data();
+      pins.push_back(val.As<Napi::Object>());
     }
 
     if (i < srcStride.Length()) {
@@ -229,20 +177,14 @@ Napi::Value SoftwareScaleContext::ScaleAsync(const Napi::CallbackInfo& info) {
     }
   }
 
-  // Prepare destination pointers and strides - need persistent references
-  uint8_t* dstPtr[4] = {nullptr, nullptr, nullptr, nullptr};
-  int dstStrideVal[4] = {0, 0, 0, 0};
-
-  // Store persistent references to buffers
-  std::vector<Napi::Reference<Napi::Value>> dstRefs;
+  std::array<uint8_t*, 4> dstPtr = {nullptr, nullptr, nullptr, nullptr};
+  std::array<int, 4> dstStrideVal = {0, 0, 0, 0};
 
   for (uint32_t i = 0; i < dst.Length() && i < 4; i++) {
     Napi::Value val = dst[i];
     if (val.IsBuffer()) {
-      Napi::Buffer<uint8_t> buf = val.As<Napi::Buffer<uint8_t>>();
-      dstPtr[i] = buf.Data();
-      // Keep reference to buffer
-      dstRefs.push_back(Napi::Persistent(val));
+      dstPtr[i] = val.As<Napi::Buffer<uint8_t>>().Data();
+      pins.push_back(val.As<Napi::Object>());
     }
 
     if (i < dstStride.Length()) {
@@ -251,12 +193,10 @@ Napi::Value SoftwareScaleContext::ScaleAsync(const Napi::CallbackInfo& info) {
     }
   }
 
-  Napi::Object thisObj = info.This().As<Napi::Object>();
-  auto* worker = new SwsScaleWorker(env, thisObj, this, srcSlicePtr, srcStrideVal, srcSliceY, srcSliceH,
-                                    dstPtr, dstStrideVal, std::move(srcRefs), std::move(dstRefs));
-
-  worker->Queue();
-  return worker->GetPromise();
+  return PromiseWorker::Run(env, &async_ops_, std::move(pins),
+                            [ctx, srcSlicePtr, srcStrideVal, srcSliceY, srcSliceH, dstPtr, dstStrideVal]() {
+    return sws_scale(ctx, srcSlicePtr.data(), srcStrideVal.data(), srcSliceY, srcSliceH, dstPtr.data(), dstStrideVal.data());
+  });
 }
 
 } // namespace ffmpeg

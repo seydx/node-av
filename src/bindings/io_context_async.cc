@@ -1,75 +1,26 @@
 #include "io_context.h"
+#include "promise_worker.h"
 #include <napi.h>
+#include <memory>
+#include <vector>
+
+extern "C" {
 #include <libavformat/avio.h>
+}
 
 namespace ffmpeg {
-
-class IOOpen2Worker : public Napi::AsyncWorker {
-public:
-  IOOpen2Worker(Napi::Env env, Napi::Object ctxObj, IOContext* ctx,
-              const std::string& url, int flags)
-    : Napi::AsyncWorker(env),
-      ctx_(ctx),
-      url_(url),
-      flags_(flags),
-      ret_(0),
-      deferred_(Napi::Promise::Deferred::New(env)) {
-    // Hold reference to prevent GC during async operation
-    ctx_ref_.Reset(ctxObj, 1);
-  }
-
-  ~IOOpen2Worker() {
-    ctx_ref_.Reset();
-  }
-
-  void Execute() override {
-    // Null checks to prevent use-after-free crashes
-    if (!ctx_) {
-      ret_ = AVERROR(EINVAL);
-      return;
-    }
-
-    AVIOContext* avio_ctx = nullptr;
-    ret_ = avio_open2(&avio_ctx, url_.c_str(), flags_, nullptr, nullptr);
-    if (ret_ >= 0) {
-      // Free old context if exists
-      if (ctx_->ctx_) {
-        avio_context_free(&ctx_->ctx_);
-      }
-      ctx_->ctx_ = avio_ctx;
-    }
-  }
-
-  void OnOK() override {
-    deferred_.Resolve(Napi::Number::New(Env(), ret_));
-  }
-
-  void OnError(const Napi::Error& e) override {
-    deferred_.Reject(e.Value());
-  }
-
-  Napi::Promise GetPromise() {
-    return deferred_.Promise();
-  }
-
-private:
-  Napi::ObjectReference ctx_ref_;
-  IOContext* ctx_;
-  std::string url_;
-  int flags_;
-  int ret_;
-  Napi::Promise::Deferred deferred_;
-};
 
 class IOClosepWorker : public Napi::AsyncWorker {
 public:
   IOClosepWorker(Napi::Env env, Napi::Object ctxObj, IOContext* ctx)
     : Napi::AsyncWorker(env),
+      ops_(&ctx->async_ops_),
       ctx_(ctx),
       ret_(0),
       deferred_(Napi::Promise::Deferred::New(env)) {
     // Hold reference to prevent GC during async operation
     ctx_ref_.Reset(ctxObj, 1);
+    ops_->Begin();
   }
 
   ~IOClosepWorker() {
@@ -84,11 +35,18 @@ public:
       if (ctx_->callback_data_) {
         ctx_->callback_data_->active = false;
       }
-      
+
       ret_ = avio_closep(&ctx);
       // avio_closep freed the context and set the pointer to NULL
       // Update our internal state
       ctx_->ctx_ = nullptr;
+    }
+    // Release before OnOK: the context is not touched past this point, so a
+    // GuardOps() wait on the main thread can proceed even though the OnOK
+    // callback is still queued behind it
+    if (ops_) {
+      ops_->End();
+      ops_ = nullptr;
     }
   }
 
@@ -99,6 +57,10 @@ public:
   }
 
   void OnError(const Napi::Error& e) override {
+    if (ops_) {
+      ops_->End();
+      ops_ = nullptr;
+    }
     deferred_.Reject(e.Value());
   }
 
@@ -108,461 +70,215 @@ public:
 
 private:
   Napi::ObjectReference ctx_ref_;
+  AsyncOpCounter* ops_;
   IOContext* ctx_;
   int ret_;
   Napi::Promise::Deferred deferred_;
 };
 
-class IOReadWorker : public Napi::AsyncWorker {
-public:
-  IOReadWorker(Napi::Env env, Napi::Object ctxObj, IOContext* ctx, int size)
-    : Napi::AsyncWorker(env),
-      ctx_(ctx),
-      size_(size),
-      bytes_read_(0),
-      deferred_(Napi::Promise::Deferred::New(env)) {
-    // Hold reference to prevent GC during async operation
-    ctx_ref_.Reset(ctxObj, 1);
-    buffer_.resize(size);
-  }
-
-  ~IOReadWorker() {
-    ctx_ref_.Reset();
-  }
-
-  void Execute() override {
-    // Null checks to prevent use-after-free crashes
-    if (!ctx_) {
-      bytes_read_ = AVERROR(EINVAL);
-      return;
-    }
-
-    AVIOContext* ctx = ctx_->Get();
-    if (!ctx) {
-      bytes_read_ = AVERROR(EINVAL);
-      return;
-    }
-
-    bytes_read_ = avio_read(ctx, buffer_.data(), size_);
-  }
-
-  void OnOK() override {
-    if (bytes_read_ < 0) {
-      // Error case - return error code
-      deferred_.Resolve(Napi::Number::New(Env(), bytes_read_));
-    } else {
-      // Success case - return buffer
-      Napi::Buffer<uint8_t> result = Napi::Buffer<uint8_t>::Copy(
-        Env(), buffer_.data(), bytes_read_);
-      deferred_.Resolve(result);
-    }
-  }
-
-  void OnError(const Napi::Error& e) override {
-    deferred_.Reject(e.Value());
-  }
-
-  Napi::Promise GetPromise() {
-    return deferred_.Promise();
-  }
-
-private:
-  Napi::ObjectReference ctx_ref_;
-  IOContext* ctx_;
-  int size_;
-  int bytes_read_;
-  std::vector<uint8_t> buffer_;
-  Napi::Promise::Deferred deferred_;
-};
-
-class IOWriteWorker : public Napi::AsyncWorker {
-public:
-  IOWriteWorker(Napi::Env env, Napi::Object ctxObj, IOContext* ctx,
-              const uint8_t* data, size_t length)
-    : Napi::AsyncWorker(env),
-      ctx_(ctx),
-      deferred_(Napi::Promise::Deferred::New(env)) {
-    // Hold reference to prevent GC during async operation
-    ctx_ref_.Reset(ctxObj, 1);
-    // Copy the data since the buffer might be freed before Execute runs
-    buffer_.assign(data, data + length);
-  }
-
-  ~IOWriteWorker() {
-    ctx_ref_.Reset();
-  }
-
-  void Execute() override {
-    // Null checks to prevent use-after-free crashes
-    if (!ctx_) {
-      return;
-    }
-
-    AVIOContext* ctx = ctx_->Get();
-    if (!ctx) {
-      return;
-    }
-
-    avio_write(ctx, buffer_.data(), buffer_.size());
-  }
-
-  void OnOK() override {
-    deferred_.Resolve(Env().Undefined());
-  }
-
-  void OnError(const Napi::Error& e) override {
-    deferred_.Reject(e.Value());
-  }
-
-  Napi::Promise GetPromise() {
-    return deferred_.Promise();
-  }
-
-private:
-  Napi::ObjectReference ctx_ref_;
-  IOContext* ctx_;
-  std::vector<uint8_t> buffer_;
-  Napi::Promise::Deferred deferred_;
-};
-
-class IOSeekWorker : public Napi::AsyncWorker {
-public:
-  IOSeekWorker(Napi::Env env, Napi::Object ctxObj, IOContext* ctx,
-             int64_t offset, int whence)
-    : Napi::AsyncWorker(env),
-      ctx_(ctx),
-      offset_(offset),
-      whence_(whence),
-      new_pos_(0),
-      deferred_(Napi::Promise::Deferred::New(env)) {
-    // Hold reference to prevent GC during async operation
-    ctx_ref_.Reset(ctxObj, 1);
-  }
-
-  ~IOSeekWorker() {
-    ctx_ref_.Reset();
-  }
-
-  void Execute() override {
-    // Null checks to prevent use-after-free crashes
-    if (!ctx_) {
-      new_pos_ = AVERROR(EINVAL);
-      return;
-    }
-
-    AVIOContext* ctx = ctx_->Get();
-    if (!ctx) {
-      new_pos_ = AVERROR(EINVAL);
-      return;
-    }
-
-    new_pos_ = avio_seek(ctx, offset_, whence_);
-  }
-
-  void OnOK() override {
-    deferred_.Resolve(Napi::BigInt::New(Env(), new_pos_));
-  }
-
-  void OnError(const Napi::Error& e) override {
-    deferred_.Reject(e.Value());
-  }
-
-  Napi::Promise GetPromise() {
-    return deferred_.Promise();
-  }
-
-private:
-  Napi::ObjectReference ctx_ref_;
-  IOContext* ctx_;
-  int64_t offset_;
-  int whence_;
-  int64_t new_pos_;
-  Napi::Promise::Deferred deferred_;
-};
-
-class IOSizeWorker : public Napi::AsyncWorker {
-public:
-  IOSizeWorker(Napi::Env env, Napi::Object ctxObj, IOContext* ctx)
-    : Napi::AsyncWorker(env),
-      ctx_(ctx),
-      size_(0),
-      deferred_(Napi::Promise::Deferred::New(env)) {
-    // Hold reference to prevent GC during async operation
-    ctx_ref_.Reset(ctxObj, 1);
-  }
-
-  ~IOSizeWorker() {
-    ctx_ref_.Reset();
-  }
-
-  void Execute() override {
-    // Null checks to prevent use-after-free crashes
-    if (!ctx_) {
-      size_ = AVERROR(EINVAL);
-      return;
-    }
-
-    AVIOContext* ctx = ctx_->Get();
-    if (!ctx) {
-      size_ = AVERROR(EINVAL);
-      return;
-    }
-
-    size_ = avio_size(ctx);
-  }
-
-  void OnOK() override {
-    deferred_.Resolve(Napi::BigInt::New(Env(), size_));
-  }
-
-  void OnError(const Napi::Error& e) override {
-    deferred_.Reject(e.Value());
-  }
-
-  Napi::Promise GetPromise() {
-    return deferred_.Promise();
-  }
-
-private:
-  Napi::ObjectReference ctx_ref_;
-  IOContext* ctx_;
-  int64_t size_;
-  Napi::Promise::Deferred deferred_;
-};
-
-class IOFlushWorker : public Napi::AsyncWorker {
-public:
-  IOFlushWorker(Napi::Env env, Napi::Object ctxObj, IOContext* ctx)
-    : Napi::AsyncWorker(env),
-      ctx_(ctx),
-      deferred_(Napi::Promise::Deferred::New(env)) {
-    // Hold reference to prevent GC during async operation
-    ctx_ref_.Reset(ctxObj, 1);
-  }
-
-  ~IOFlushWorker() {
-    ctx_ref_.Reset();
-  }
-
-  void Execute() override {
-    // Null checks to prevent use-after-free crashes
-    if (!ctx_) {
-      return;
-    }
-
-    AVIOContext* ctx = ctx_->Get();
-    if (!ctx) {
-      return;
-    }
-
-    avio_flush(ctx);
-  }
-
-  void OnOK() override {
-    deferred_.Resolve(Env().Undefined());
-  }
-
-  void OnError(const Napi::Error& e) override {
-    deferred_.Reject(e.Value());
-  }
-
-  Napi::Promise GetPromise() {
-    return deferred_.Promise();
-  }
-
-private:
-  Napi::ObjectReference ctx_ref_;
-  IOContext* ctx_;
-  Napi::Promise::Deferred deferred_;
-};
-
-class IOSkipWorker : public Napi::AsyncWorker {
-public:
-  IOSkipWorker(Napi::Env env, Napi::Object ctxObj, IOContext* ctx, int64_t offset)
-    : Napi::AsyncWorker(env),
-      ctx_(ctx),
-      offset_(offset),
-      new_pos_(0),
-      deferred_(Napi::Promise::Deferred::New(env)) {
-    // Hold reference to prevent GC during async operation
-    ctx_ref_.Reset(ctxObj, 1);
-  }
-
-  ~IOSkipWorker() {
-    ctx_ref_.Reset();
-  }
-
-  void Execute() override {
-    // Null checks to prevent use-after-free crashes
-    if (!ctx_) {
-      new_pos_ = AVERROR(EINVAL);
-      return;
-    }
-
-    AVIOContext* ctx = ctx_->Get();
-    if (!ctx) {
-      new_pos_ = AVERROR(EINVAL);
-      return;
-    }
-
-    new_pos_ = avio_skip(ctx, offset_);
-  }
-
-  void OnOK() override {
-    deferred_.Resolve(Napi::BigInt::New(Env(), new_pos_));
-  }
-
-  void OnError(const Napi::Error& e) override {
-    deferred_.Reject(e.Value());
-  }
-
-  Napi::Promise GetPromise() {
-    return deferred_.Promise();
-  }
-
-private:
-  Napi::ObjectReference ctx_ref_;
-  IOContext* ctx_;
-  int64_t offset_;
-  int64_t new_pos_;
-  Napi::Promise::Deferred deferred_;
-};
-
 Napi::Value IOContext::Open2Async(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
-  
+
   if (info.Length() < 2) {
     Napi::TypeError::New(env, "Expected 2 arguments (url, flags)")
         .ThrowAsJavaScriptException();
     return env.Undefined();
   }
-  
+
   if (ctx_) {
     Napi::Error::New(env, "IOContext already initialized").ThrowAsJavaScriptException();
     return env.Undefined();
   }
-  
+
   std::string url = info[0].As<Napi::String>().Utf8Value();
   int flags = info[1].As<Napi::Number>().Int32Value();
 
-  Napi::Object thisObj = info.This().As<Napi::Object>();
-  auto* worker = new IOOpen2Worker(env, thisObj, this, url, flags);
-  auto promise = worker->GetPromise();
-  worker->Queue();
-  
-  return promise;
+  // The work fn writes the opened context back into self->ctx_ - safe because
+  // the op counter keeps free/replace paths on the main thread waiting, and
+  // the pin keeps the wrapper alive
+  IOContext* self = this;
+  return PromiseWorker::Run(env, &async_ops_, {info.This().As<Napi::Object>()}, [self, url, flags]() {
+    AVIOContext* avio_ctx = nullptr;
+    int ret = avio_open2(&avio_ctx, url.c_str(), flags, nullptr, nullptr);
+    if (ret >= 0) {
+      // Free old context if exists
+      if (self->ctx_) {
+        avio_context_free(&self->ctx_);
+      }
+      self->ctx_ = avio_ctx;
+    }
+    return ret;
+  });
 }
 
 Napi::Value IOContext::ClosepAsync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
+  // closep frees the AVIOContext - wait for in-flight async operations first
+  // (or error immediately when one is parked on a JS callback)
+  if (!GuardOps(env)) {
+    return env.Undefined();
+  }
+
   Napi::Object thisObj = info.This().As<Napi::Object>();
   auto* worker = new IOClosepWorker(env, thisObj, this);
   auto promise = worker->GetPromise();
   worker->Queue();
-  
+
   return promise;
 }
 
 Napi::Value IOContext::ReadAsync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
-  
+
   if (info.Length() < 1) {
     Napi::TypeError::New(env, "Expected 1 argument (size)")
         .ThrowAsJavaScriptException();
     return env.Undefined();
   }
-  
+
   int size = info[0].As<Napi::Number>().Int32Value();
 
-  Napi::Object thisObj = info.This().As<Napi::Object>();
-  auto* worker = new IOReadWorker(env, thisObj, this, size);
-  auto promise = worker->GetPromise();
-  worker->Queue();
-  
-  return promise;
+  IOContext* self = this;
+  auto buffer = std::make_shared<std::vector<uint8_t>>(static_cast<size_t>(size));
+  return PromiseWorker::Run(
+    env, &async_ops_, {info.This().As<Napi::Object>()},
+    [self, buffer, size]() {
+      // ctx_ is resolved at execute time (not queue time) so a read queued
+      // right after open2() sees the freshly opened context
+      AVIOContext* ctx = self->ctx_;
+      if (!ctx) {
+        return AVERROR(EINVAL);
+      }
+      return avio_read(ctx, buffer->data(), size);
+    },
+    [buffer](Napi::Env env, int ret) -> Napi::Value {
+      if (ret < 0) {
+        // Error case - return error code
+        return Napi::Number::New(env, ret);
+      }
+      // Success case - return buffer
+      return Napi::Buffer<uint8_t>::Copy(env, buffer->data(), ret);
+    });
 }
 
 Napi::Value IOContext::WriteAsync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
-  
+
   if (info.Length() < 1) {
     Napi::TypeError::New(env, "Expected 1 argument (buffer)")
         .ThrowAsJavaScriptException();
     return env.Undefined();
   }
-  
+
   Napi::Buffer<uint8_t> buffer = info[0].As<Napi::Buffer<uint8_t>>();
 
-  Napi::Object thisObj = info.This().As<Napi::Object>();
-  auto* worker = new IOWriteWorker(env, thisObj, this, buffer.Data(), buffer.Length());
-  auto promise = worker->GetPromise();
-  worker->Queue();
-  
-  return promise;
+  // Copy the data since the JS buffer might be detached/freed before the
+  // work runs
+  auto data = std::make_shared<std::vector<uint8_t>>(buffer.Data(), buffer.Data() + buffer.Length());
+
+  IOContext* self = this;
+  return PromiseWorker::Run(
+    env, &async_ops_, {info.This().As<Napi::Object>()},
+    [self, data]() {
+      AVIOContext* ctx = self->ctx_;
+      if (!ctx) {
+        return 0;
+      }
+      avio_write(ctx, data->data(), static_cast<int>(data->size()));
+      return 0;
+    },
+    [](Napi::Env env, int) -> Napi::Value {
+      return env.Undefined();
+    });
 }
 
 Napi::Value IOContext::SeekAsync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
-  
+
   if (info.Length() < 2) {
     Napi::TypeError::New(env, "Expected 2 arguments (offset, whence)")
         .ThrowAsJavaScriptException();
     return env.Undefined();
   }
-  
+
   bool lossless;
   int64_t offset = info[0].As<Napi::BigInt>().Int64Value(&lossless);
   int whence = info[1].As<Napi::Number>().Int32Value();
 
-  Napi::Object thisObj = info.This().As<Napi::Object>();
-  auto* worker = new IOSeekWorker(env, thisObj, this, offset, whence);
-  auto promise = worker->GetPromise();
-  worker->Queue();
-  
-  return promise;
+  IOContext* self = this;
+  auto new_pos = std::make_shared<int64_t>(0);
+  return PromiseWorker::Run(
+    env, &async_ops_, {info.This().As<Napi::Object>()},
+    [self, new_pos, offset, whence]() {
+      AVIOContext* ctx = self->ctx_;
+      *new_pos = ctx ? avio_seek(ctx, offset, whence) : AVERROR(EINVAL);
+      return 0;
+    },
+    [new_pos](Napi::Env env, int) -> Napi::Value {
+      return Napi::BigInt::New(env, *new_pos);
+    });
 }
 
 Napi::Value IOContext::SizeAsync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
-  Napi::Object thisObj = info.This().As<Napi::Object>();
-  auto* worker = new IOSizeWorker(env, thisObj, this);
-  auto promise = worker->GetPromise();
-  worker->Queue();
-  
-  return promise;
+  IOContext* self = this;
+  auto size = std::make_shared<int64_t>(0);
+  return PromiseWorker::Run(
+    env, &async_ops_, {info.This().As<Napi::Object>()},
+    [self, size]() {
+      AVIOContext* ctx = self->ctx_;
+      *size = ctx ? avio_size(ctx) : AVERROR(EINVAL);
+      return 0;
+    },
+    [size](Napi::Env env, int) -> Napi::Value {
+      return Napi::BigInt::New(env, *size);
+    });
 }
 
 Napi::Value IOContext::FlushAsync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
-  Napi::Object thisObj = info.This().As<Napi::Object>();
-  auto* worker = new IOFlushWorker(env, thisObj, this);
-  auto promise = worker->GetPromise();
-  worker->Queue();
-  
-  return promise;
+  IOContext* self = this;
+  return PromiseWorker::Run(
+    env, &async_ops_, {info.This().As<Napi::Object>()},
+    [self]() {
+      AVIOContext* ctx = self->ctx_;
+      if (ctx) {
+        avio_flush(ctx);
+      }
+      return 0;
+    },
+    [](Napi::Env env, int) -> Napi::Value {
+      return env.Undefined();
+    });
 }
 
 Napi::Value IOContext::SkipAsync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
-  
+
   if (info.Length() < 1) {
     Napi::TypeError::New(env, "Expected 1 argument (offset)")
         .ThrowAsJavaScriptException();
     return env.Undefined();
   }
-  
+
   bool lossless;
   int64_t offset = info[0].As<Napi::BigInt>().Int64Value(&lossless);
 
-  Napi::Object thisObj = info.This().As<Napi::Object>();
-  auto* worker = new IOSkipWorker(env, thisObj, this, offset);
-  auto promise = worker->GetPromise();
-  worker->Queue();
-  
-  return promise;
+  IOContext* self = this;
+  auto new_pos = std::make_shared<int64_t>(0);
+  return PromiseWorker::Run(
+    env, &async_ops_, {info.This().As<Napi::Object>()},
+    [self, new_pos, offset]() {
+      AVIOContext* ctx = self->ctx_;
+      *new_pos = ctx ? avio_skip(ctx, offset) : AVERROR(EINVAL);
+      return 0;
+    },
+    [new_pos](Napi::Env env, int) -> Napi::Value {
+      return Napi::BigInt::New(env, *new_pos);
+    });
 }
 
 } // namespace ffmpeg

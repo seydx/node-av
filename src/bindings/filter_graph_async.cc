@@ -1,4 +1,5 @@
 #include "filter_graph.h"
+#include "promise_worker.h"
 #include <napi.h>
 
 extern "C" {
@@ -6,94 +7,6 @@ extern "C" {
 }
 
 namespace ffmpeg {
-
-class FGConfigWorker : public Napi::AsyncWorker {
-public:
-  FGConfigWorker(Napi::Env env, Napi::Object graphObj, FilterGraph* graph)
-    : Napi::AsyncWorker(env),
-      graph_(graph),
-      ret_(0),
-      deferred_(Napi::Promise::Deferred::New(env)) {
-    // Hold reference to prevent GC during async operation
-    graph_ref_.Reset(graphObj, 1);
-  }
-
-  ~FGConfigWorker() {
-    graph_ref_.Reset();
-  }
-
-  void Execute() override {
-    // Null checks to prevent use-after-free crashes
-    if (!graph_ || !graph_->Get()) {
-      ret_ = AVERROR(EINVAL);
-      return;
-    }
-
-    ret_ = avfilter_graph_config(graph_->Get(), nullptr);
-  }
-
-  void OnOK() override {
-    deferred_.Resolve(Napi::Number::New(Env(), ret_));
-  }
-
-  void OnError(const Napi::Error& e) override {
-    deferred_.Reject(e.Value());
-  }
-
-  Napi::Promise GetPromise() {
-    return deferred_.Promise();
-  }
-
-private:
-  Napi::ObjectReference graph_ref_;
-  FilterGraph* graph_;
-  int ret_;
-  Napi::Promise::Deferred deferred_;
-};
-
-class FGRequestOldestWorker : public Napi::AsyncWorker {
-public:
-  FGRequestOldestWorker(Napi::Env env, Napi::Object graphObj, FilterGraph* graph)
-    : Napi::AsyncWorker(env),
-      graph_(graph),
-      ret_(0),
-      deferred_(Napi::Promise::Deferred::New(env)) {
-    // Hold reference to prevent GC during async operation
-    graph_ref_.Reset(graphObj, 1);
-  }
-
-  ~FGRequestOldestWorker() {
-    graph_ref_.Reset();
-  }
-
-  void Execute() override {
-    // Null checks to prevent use-after-free crashes
-    if (!graph_ || !graph_->Get()) {
-      ret_ = AVERROR(EINVAL);
-      return;
-    }
-
-    ret_ = avfilter_graph_request_oldest(graph_->Get());
-  }
-
-  void OnOK() override {
-    deferred_.Resolve(Napi::Number::New(Env(), ret_));
-  }
-
-  void OnError(const Napi::Error& e) override {
-    deferred_.Reject(e.Value());
-  }
-
-  Napi::Promise GetPromise() {
-    return deferred_.Promise();
-  }
-
-private:
-  Napi::ObjectReference graph_ref_;
-  FilterGraph* graph_;
-  int ret_;
-  Napi::Promise::Deferred deferred_;
-};
 
 Napi::Value FilterGraph::ConfigAsync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
@@ -103,10 +16,10 @@ Napi::Value FilterGraph::ConfigAsync(const Napi::CallbackInfo& info) {
     return env.Null();
   }
 
-  Napi::Object thisObj = info.This().As<Napi::Object>();
-  auto* worker = new FGConfigWorker(env, thisObj, this);
-  worker->Queue();
-  return worker->GetPromise();
+  AVFilterGraph* graph = graph_;
+  return PromiseWorker::Run(env, &async_ops_, {info.This().As<Napi::Object>()}, [graph]() {
+    return avfilter_graph_config(graph, nullptr);
+  });
 }
 
 Napi::Value FilterGraph::RequestOldestAsync(const Napi::CallbackInfo& info) {
@@ -117,10 +30,10 @@ Napi::Value FilterGraph::RequestOldestAsync(const Napi::CallbackInfo& info) {
     return env.Null();
   }
 
-  Napi::Object thisObj = info.This().As<Napi::Object>();
-  auto* worker = new FGRequestOldestWorker(env, thisObj, this);
-  worker->Queue();
-  return worker->GetPromise();
+  AVFilterGraph* graph = graph_;
+  return PromiseWorker::Run(env, &async_ops_, {info.This().As<Napi::Object>()}, [graph]() {
+    return avfilter_graph_request_oldest(graph);
+  });
 }
 
 } // namespace ffmpeg
