@@ -14,24 +14,19 @@ namespace ffmpeg {
 
 class HardwareDeviceContext : public Napi::ObjectWrap<HardwareDeviceContext> {
 public:
+  static thread_local Napi::FunctionReference constructor;
   static Napi::Object Init(Napi::Env env, Napi::Object exports);
   HardwareDeviceContext(const Napi::CallbackInfo& info);
   ~HardwareDeviceContext();
 
   AVBufferRef* Get() {
-    return device_ref_ ? device_ref_ : unowned_ref_;
+    return device_ref_;
   }
   void SetOwned(AVBufferRef* ref) {
     av_buffer_unref(&device_ref_);
     device_ref_ = ref;
-    unowned_ref_ = nullptr;
   }
-  void SetUnowned(AVBufferRef* ref) {
-    av_buffer_unref(&device_ref_);
-    device_ref_ = nullptr;
-    unowned_ref_ = ref;
-  }
-  
+
   // Static factory
   static Napi::Value Wrap(Napi::Env env, AVBufferRef* device_ref);
   
@@ -40,11 +35,11 @@ private:
   friend class CodecContext;
   friend class FilterContext;
 
-  static thread_local Napi::FunctionReference constructor;
   
-  // Resources
+  // Always this wrapper's own reference (av_buffer_ref), never a borrowed
+  // pointer: Wrap() takes its own ref so the JS object stays valid even after
+  // the owner (frame/codec/frames context) drops the underlying context.
   AVBufferRef* device_ref_ = nullptr;
-  AVBufferRef* unowned_ref_ = nullptr;
 
   static Napi::Value GetTypeName(const Napi::CallbackInfo& info);
   static Napi::Value IterateTypes(const Napi::CallbackInfo& info);

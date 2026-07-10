@@ -34,8 +34,8 @@ Napi::Object HardwareDeviceContext::Init(Napi::Env env, Napi::Object exports) {
   return exports;
 }
 
-HardwareDeviceContext::HardwareDeviceContext(const Napi::CallbackInfo& info) 
-  : Napi::ObjectWrap<HardwareDeviceContext>(info), unowned_ref_(nullptr) {
+HardwareDeviceContext::HardwareDeviceContext(const Napi::CallbackInfo& info)
+  : Napi::ObjectWrap<HardwareDeviceContext>(info) {
   // Constructor does nothing - user must call alloc() or create()
 }
 
@@ -47,10 +47,20 @@ Napi::Value HardwareDeviceContext::Wrap(Napi::Env env, AVBufferRef* device_ref) 
   if (!device_ref) {
     return env.Null();
   }
-  
+
+  // Take our own reference on the context: the owner (frame/codec/frames
+  // context) can drop its ref at any time, and a borrowed pointer would leave
+  // the wrapper dereferencing freed memory. The destructor/free() unref
+  // exactly this ref.
+  AVBufferRef* ref = av_buffer_ref(device_ref);
+  if (!ref) {
+    Napi::Error::New(env, "Failed to reference hardware device context (ENOMEM)").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
   Napi::Object obj = constructor.New({});
   HardwareDeviceContext* ctx = Napi::ObjectWrap<HardwareDeviceContext>::Unwrap(obj);
-  ctx->SetUnowned(device_ref); // We don't own contexts that are wrapped
+  ctx->SetOwned(ref);
   return obj;
 }
 
@@ -154,13 +164,14 @@ Napi::Value HardwareDeviceContext::Create(const Napi::CallbackInfo& info) {
   enum AVHWDeviceType type = static_cast<AVHWDeviceType>(info[0].As<Napi::Number>().Int32Value());
   
   const char* device = nullptr;
+  std::string device_str;
   if (info.Length() > 1 && !info[1].IsNull() && !info[1].IsUndefined()) {
     if (!info[1].IsString()) {
       Napi::TypeError::New(env, "Device must be string or null")
           .ThrowAsJavaScriptException();
       return env.Undefined();
     }
-    static std::string device_str = info[1].As<Napi::String>().Utf8Value();
+    device_str = info[1].As<Napi::String>().Utf8Value();
     device = device_str.c_str();
   }
   
@@ -168,14 +179,18 @@ Napi::Value HardwareDeviceContext::Create(const Napi::CallbackInfo& info) {
   
   if (info.Length() > 2 && !info[2].IsNull() && !info[2].IsUndefined()) {
     Dictionary* dict = UnwrapNativeObject<Dictionary>(env, info[2], "Dictionary");
-    if (dict && dict->Get()) {
+    if (!dict) {
+      // Bail out before the existing context is unref'd below
+      Napi::TypeError::New(env, "Invalid Dictionary object").ThrowAsJavaScriptException();
+      return env.Undefined();
+    }
+    if (dict->Get()) {
       av_dict_copy(&opts, dict->Get(), 0);
     }
   }
   
   // Free existing context if any
   av_buffer_unref(&device_ref_);
-  unowned_ref_ = nullptr;
 
   AVBufferRef* new_ref = nullptr;
   int ret = av_hwdevice_ctx_create(&new_ref, type, device, opts, 0);
@@ -210,7 +225,6 @@ Napi::Value HardwareDeviceContext::CreateDerived(const Napi::CallbackInfo& info)
 
   // Free existing context if any
   av_buffer_unref(&device_ref_);
-  unowned_ref_ = nullptr;
 
   AVBufferRef* new_ref = nullptr;
   int ret = av_hwdevice_ctx_create_derived(&new_ref, type, src->Get(), 0);
@@ -296,7 +310,6 @@ Napi::Value HardwareDeviceContext::Free(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
   av_buffer_unref(&device_ref_);
-  unowned_ref_ = nullptr;
 
   return env.Undefined();
 }
