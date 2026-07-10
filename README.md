@@ -527,6 +527,13 @@ The key difference: Async methods don't block the Node.js event loop, allowing o
 
 NodeAV provides direct bindings to FFmpeg's C APIs, which work with raw memory pointers. The high-level API adds safety abstractions and automatic resource management, but incorrect usage can still cause crashes. Common issues include mismatched video dimensions, incompatible pixel formats, or improper frame buffer handling. The library validates parameters where possible, but can't guarantee complete memory safety without limiting functionality. When using the low-level API, pay attention to parameter consistency, resource cleanup, and format compatibility. Following the documented patterns helps avoid memory-related issues.
 
+## Worker Threads and the libuv Thread Pool
+
+NodeAV works inside `worker_threads`, with two caveats:
+
+- **Prefer graceful shutdown over `worker.terminate()`.** Terminating a worker while native calls are in flight is mitigated (pending completions are dropped safely instead of aborting), but a termination that lands exactly inside a running synchronous native call can still abort the process — a limitation of Node-API error handling during isolate teardown. Signal the worker to close its NodeAV resources and exit on its own. For test runners, process isolation (e.g. vitest `pool: 'forks'`) is the most robust choice.
+- **Async operations share the libuv thread pool** (default: 4 threads, process-wide across all workers). A custom IO read callback that never settles parks one pool thread until it resolves; enough of them stall every async NodeAV operation in the entire process. Make custom IO callbacks always settle (return `null` for EOF, throw on error), and raise `UV_THREADPOOL_SIZE` when running many parallel live inputs.
+
 ## Electron
 
 NodeAV fully supports Electron applications. The prebuilt binaries are ABI-compatible with Electron, so no native rebuild is required during packaging. Both the native bindings and the bundled FFmpeg CLI binaries work seamlessly within Electron's main process.
