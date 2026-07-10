@@ -150,6 +150,12 @@ jobs:
           echo "All release archives created:"
           ls -la *.zip
 
+          # Checksums over all release zips (verified by the FFmpeg postinstall
+          # download in src/ffmpeg/install.ts).
+          sha256sum *.zip > SHA256SUMS
+          echo "SHA256SUMS:"
+          cat SHA256SUMS
+
       - name: Generate release notes from CHANGELOG
         id: release_notes
         env:
@@ -246,36 +252,21 @@ jobs:
           for pkg_dir in packages/*/; do
             if [ -d "$pkg_dir" ]; then
               cd "$pkg_dir"
-              npm publish --access public --tag "$NPM_TAG"
+              npm publish --access public --tag "$NPM_TAG" --provenance
               cd -
             fi
           done
 
           # Publish main package
-          npm publish --access public --tag "$NPM_TAG"
+          npm publish --access public --tag "$NPM_TAG" --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Delete existing pre-release
-        run: |
-          VERSION="${GITHUB_REF#refs/tags/v}"
-
-          # Find and delete ALL existing pre-releases (we only keep one at a time)
-          echo "Deleting all existing pre-releases..."
-          RELEASES=$(gh release list --json tagName,isPrerelease -q ".[] | select(.isPrerelease == true) | .tagName" 2>/dev/null || echo "")
-
-          for TAG in $RELEASES; do
-            if [ "$TAG" != "v$VERSION" ]; then
-              echo "Deleting pre-release: $TAG"
-              gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
-            fi
-          done
-        env:
-          GH_TOKEN: ${{ github.token }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
-          files: "*.zip"
+          files: |
+            *.zip
+            SHA256SUMS
           body_path: release_notes.md
           prerelease: ${{ steps.npm_tag.outputs.tag == 'beta' }}
