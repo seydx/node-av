@@ -36,8 +36,8 @@ Napi::Object HardwareFramesContext::Init(Napi::Env env, Napi::Object exports) {
   return exports;
 }
 
-HardwareFramesContext::HardwareFramesContext(const Napi::CallbackInfo& info) 
-  : Napi::ObjectWrap<HardwareFramesContext>(info), unowned_ref_(nullptr) {
+HardwareFramesContext::HardwareFramesContext(const Napi::CallbackInfo& info)
+  : Napi::ObjectWrap<HardwareFramesContext>(info) {
   // Constructor does nothing - user must call alloc()
 }
 
@@ -49,10 +49,19 @@ Napi::Value HardwareFramesContext::Wrap(Napi::Env env, AVBufferRef* frames_ref) 
   if (!frames_ref) {
     return env.Null();
   }
-  
+
+  // Take our own reference on the context: the owner (frame/codec context) can
+  // drop its ref at any time, and a borrowed pointer would leave the wrapper
+  // dereferencing freed memory. The destructor/free() unref exactly this ref.
+  AVBufferRef* ref = av_buffer_ref(frames_ref);
+  if (!ref) {
+    Napi::Error::New(env, "Failed to reference hardware frames context (ENOMEM)").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
   Napi::Object obj = constructor.New({});
   HardwareFramesContext* ctx = Napi::ObjectWrap<HardwareFramesContext>::Unwrap(obj);
-  ctx->SetUnowned(frames_ref); // We don't own contexts that are wrapped
+  ctx->SetOwned(ref);
   return obj;
 }
 
@@ -235,7 +244,6 @@ Napi::Value HardwareFramesContext::CreateDerived(const Napi::CallbackInfo& info)
   
   // Free existing context if any
   av_buffer_unref(&frames_ref_);
-  unowned_ref_ = nullptr;
 
   AVBufferRef* new_ref = nullptr;
   int ret = av_hwframe_ctx_create_derived(&new_ref, format, derivedDevice->Get(), src->Get(), flags);
@@ -250,8 +258,15 @@ Napi::Value HardwareFramesContext::CreateDerived(const Napi::CallbackInfo& info)
 Napi::Value HardwareFramesContext::Free(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
-  av_buffer_unref(&frames_ref_);
-  unowned_ref_ = nullptr;
+  if (frames_ref_) {
+    // Dropping the reference while a transfer is still in flight on the
+    // threadpool would be a use-after-free; wait bounded, then error instead
+    // of crashing
+    if (!GuardAsyncOps(env, async_ops_, "HardwareFramesContext")) {
+      return env.Undefined();
+    }
+    av_buffer_unref(&frames_ref_);
+  }
 
   return env.Undefined();
 }

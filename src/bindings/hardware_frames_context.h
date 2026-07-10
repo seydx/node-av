@@ -4,6 +4,7 @@
 #include <napi.h>
 #include <memory>
 #include "common.h"
+#include "promise_worker.h"
 
 extern "C" {
 #include <libavutil/hwcontext.h>
@@ -19,35 +20,36 @@ class Frame;
 
 class HardwareFramesContext : public Napi::ObjectWrap<HardwareFramesContext> {
 public:
+  static thread_local Napi::FunctionReference constructor;
   static Napi::Object Init(Napi::Env env, Napi::Object exports);
   HardwareFramesContext(const Napi::CallbackInfo& info);
   ~HardwareFramesContext();
 
   AVBufferRef* Get() {
-    return frames_ref_ ? frames_ref_ : unowned_ref_;
+    return frames_ref_;
   }
   void SetOwned(AVBufferRef* ref) {
     av_buffer_unref(&frames_ref_);
     frames_ref_ = ref;
-    unowned_ref_ = nullptr;
   }
-  void SetUnowned(AVBufferRef* ref) {
-    av_buffer_unref(&frames_ref_);
-    frames_ref_ = nullptr;
-    unowned_ref_ = ref;
-  }
-  
+
   // Static factory
   static Napi::Value Wrap(Napi::Env env, AVBufferRef* frames_ref);
   
 private:
   friend class CodecContext;
   friend class Frame;
+  friend class HWFCTransferDataWorker;
 
-  static thread_local Napi::FunctionReference constructor;
 
+  // Always this wrapper's own reference (av_buffer_ref), never a borrowed
+  // pointer: Wrap() takes its own ref so the JS object stays valid even after
+  // the owner (frame/codec context) drops the underlying context.
   AVBufferRef* frames_ref_ = nullptr;
-  AVBufferRef* unowned_ref_ = nullptr;
+
+  // In-flight threadpool operations issued on this context (transferData);
+  // free() waits on this before dropping the reference.
+  AsyncOpCounter async_ops_;
 
   Napi::Value Alloc(const Napi::CallbackInfo& info);
   Napi::Value Init(const Napi::CallbackInfo& info);
