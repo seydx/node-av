@@ -1,3 +1,4 @@
+import { AV_NOPTS_VALUE } from '../constants/constants.js';
 import { FilterPreset } from './filter-presets.js';
 import { FilterAPI } from './filter.js';
 import { WhisperDownloader } from './utilities/whisper-model.js';
@@ -287,6 +288,8 @@ export class WhisperTranscriber implements Disposable {
    * Reads metadata directly from frame metadata tags (lavfi.whisper.text, lavfi.whisper.duration).
    *
    * The generator continues until the input stream ends or close() is called.
+   * When the input ends, the filter is flushed so audio still buffered in the
+   * whisper queue is transcribed before the generator finishes.
    * Always use with `for await...of` to properly handle async iteration.
    *
    * @param frames - Audio frames (from Decoder.frames()) or single frame to transcribe
@@ -353,12 +356,42 @@ export class WhisperTranscriber implements Disposable {
       dropOnChange: false,
     });
 
-    // Track cumulative time for start/end timestamps
-    let cumulativeTime = 0; // in milliseconds
-    const filterGenerator = filter.frames(frames);
+    // Fallback clock for frames without usable timestamps (in milliseconds)
+    let fallbackEnd = 0;
+
+    const toSegment = (frame: Frame): WhisperSegment | null => {
+      const metadata = frame.getMetadata();
+      const text = metadata.get('lavfi.whisper.text');
+      const durationStr = metadata.get('lavfi.whisper.duration');
+
+      if (!text?.trim()) {
+        return null;
+      }
+
+      // Parse duration (in seconds)
+      const duration = durationStr ? parseFloat(durationStr) * 1000 : 0;
+
+      // The whisper filter attaches its result to the frame that triggered the
+      // transcription, so that frame's timestamp marks (approximately) the end
+      // of the transcribed chunk. Deriving start/end from the frame PTS keeps
+      // segments aligned with the actual audio position; a counter that only
+      // advances on chunks that produced text would silently swallow every
+      // silent span and drift (e.g. a 60s intro would put the first segment
+      // at start 0).
+      const tb = frame.timeBase;
+      const frameTime = frame.pts !== AV_NOPTS_VALUE && tb.den !== 0 ? (Number(frame.pts) * 1000 * tb.num) / tb.den : null;
+      const end = frameTime ?? fallbackEnd + duration;
+      fallbackEnd = end;
+
+      return {
+        start: Math.max(0, end - duration),
+        end,
+        text: text.trim(),
+      };
+    };
 
     // Decode and process frames through filter
-    for await (using frame of filterGenerator) {
+    for await (using frame of filter.frames(frames)) {
       if (this.isClosed) {
         break;
       }
@@ -367,25 +400,25 @@ export class WhisperTranscriber implements Disposable {
         continue;
       }
 
-      // Get frame metadata
-      const metadata = frame.getMetadata();
-      const text = metadata.get('lavfi.whisper.text');
-      const durationStr = metadata.get('lavfi.whisper.duration');
+      const segment = toSegment(frame);
+      if (segment) {
+        yield segment;
+      }
+    }
 
-      if (text?.trim()) {
-        // Parse duration (in seconds)
-        const duration = durationStr ? parseFloat(durationStr) * 1000 : 0;
+    // Inputs that end without a trailing null never flush the filter, and the
+    // whisper queue (up to `queue` seconds of buffered audio) would be
+    // destroyed with it. Drain explicitly; after an upstream EOF this second
+    // flush is a no-op.
+    if (!this.isClosed) {
+      for await (using frame of filter.flushFrames()) {
+        if (!frame.isAudio()) {
+          continue;
+        }
 
-        // Yield transcribed segment
-        yield {
-          start: cumulativeTime,
-          end: cumulativeTime + duration,
-          text: text.trim(),
-        };
-
-        // Update cumulative time
-        if (duration > 0) {
-          cumulativeTime += duration;
+        const segment = toSegment(frame);
+        if (segment) {
+          yield segment;
         }
       }
     }
