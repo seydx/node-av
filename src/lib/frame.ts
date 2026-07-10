@@ -147,7 +147,6 @@ export interface DmaBufFrame {
  */
 export class Frame implements Disposable, NativeWrapper<NativeFrame> {
   private native: NativeFrame;
-  private _hwFramesCtx?: HardwareFramesContext | null; // Cache for hardware frames context wrapper
 
   constructor() {
     this.native = new bindings.Frame();
@@ -785,28 +784,20 @@ export class Frame implements Disposable, NativeWrapper<NativeFrame> {
    * Direct mapping to AVFrame->hw_frames_ctx.
    */
   get hwFramesCtx(): HardwareFramesContext | null {
-    // Return cached wrapper if we already have one
-    if (this._hwFramesCtx !== undefined) {
-      return this._hwFramesCtx;
-    }
-
+    // Not cached: the frame's hw_frames_ctx changes across unref()/reuse, and the
+    // native wrapper holds its own AVBufferRef, so a fresh wrapper per access is safe
     const native = this.native.hwFramesCtx;
     if (!native) {
-      this._hwFramesCtx = null;
       return null;
     }
 
-    // Create and cache the wrapper
     const frames = Object.create(HardwareFramesContext.prototype) as HardwareFramesContext;
     (frames as any).native = native;
-    this._hwFramesCtx = frames;
     return frames;
   }
 
   set hwFramesCtx(value: HardwareFramesContext | null) {
     this.native.hwFramesCtx = value?.getNative() ?? null;
-    // Clear the cache as the underlying context has changed
-    this._hwFramesCtx = undefined;
   }
 
   /**
@@ -1176,28 +1167,28 @@ export class Frame implements Disposable, NativeWrapper<NativeFrame> {
   }
 
   /**
-   * Get required buffer size for the frame.
+   * Allocate data buffers for the frame.
    *
-   * Calculates the required buffer size based on frame parameters.
+   * Allocates buffers based on frame parameters.
    * Must set format, width/height (video) or format, nb_samples, channel_layout (audio) first.
    *
    * Direct mapping to av_frame_get_buffer().
    *
    * @param align - Buffer size alignment (0 for default)
    *
-   * @returns Required buffer size in bytes, or negative AVERROR:
+   * @returns 0 on success, negative AVERROR on error:
    *   - AVERROR_EINVAL: Invalid frame parameters
+   *   - AVERROR_ENOMEM: Memory allocation failure
    *
    * @example
    * ```typescript
    * import { FFmpegError } from 'node-av';
    *
-   * const size = frame.getBuffer();
-   * FFmpegError.throwIfError(size, 'getBuffer');
-   * console.log(`Buffer size: ${size} bytes`);
+   * const ret = frame.getBuffer();
+   * FFmpegError.throwIfError(ret, 'getBuffer');
    * ```
    *
-   * @see {@link allocBuffer} To allocate the buffer
+   * @see {@link allocBuffer} Equivalent without alignment parameter
    */
   getBuffer(align = 0): number {
     return this.native.getBuffer(align);
@@ -1227,7 +1218,7 @@ export class Frame implements Disposable, NativeWrapper<NativeFrame> {
    * FFmpegError.throwIfError(ret, 'allocBuffer');
    * ```
    *
-   * @see {@link getBuffer} To get required size
+   * @see {@link getBuffer} Equivalent with an alignment parameter
    */
   allocBuffer(): number {
     return this.native.allocBuffer();
@@ -1325,8 +1316,9 @@ export class Frame implements Disposable, NativeWrapper<NativeFrame> {
   /**
    * Fill frame data from buffer.
    *
-   * Copies data from buffer into frame data planes.
-   * Frame must have allocated buffers.
+   * Copies data from buffer into frame-owned data planes; the frame never
+   * references the source buffer, so it may be reused or garbage collected
+   * afterwards. Allocates the frame's buffers if not already allocated.
    *
    * @param buffer - Source buffer with frame data
    *
