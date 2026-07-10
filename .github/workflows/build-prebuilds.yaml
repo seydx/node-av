@@ -9,6 +9,7 @@ env:
   CACHE_VERSION_LINUX: "v33"
   CACHE_VERSION_MACOS: "v17"
   FFMPEG_MSVC_PREBUILT_TAG: "autobuild-2026-06-23-01-10"
+  XCODE_VERSION: "26.5"
   # JELLYFIN_FFMPEG_HASH: "5cd65f8388fbcd2f87088d3b10fe53fc5ea81ed5"
 
 on:
@@ -883,9 +884,12 @@ jobs:
             echo "hash=$(git -C externals/jellyfin-ffmpeg rev-parse HEAD)" >> $GITHUB_OUTPUT
           fi
 
-      - name: Get Xcode version
-        id: xcode-version
-        run: echo "version=$(xcodebuild -version | awk 'NR==1{print $2}')" >> $GITHUB_OUTPUT
+      - name: Select pinned Xcode
+        run: |
+          # Fails loudly when the runner image no longer carries the pinned
+          # version - bump XCODE_VERSION at the top of the workflow deliberately
+          sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app"
+          xcodebuild -version
 
       - name: Prepare directories
         run: |
@@ -900,7 +904,7 @@ jobs:
           path: |
             /opt/ffbuild/prefix
             externals/jellyfin-ffmpeg/config*.h
-          key: ffmpeg-macos-${{ matrix.arch }}-${{ env.CACHE_VERSION_MACOS }}-xcode${{ steps.xcode-version.outputs.version }}-${{ steps.ffmpeg-hash.outputs.hash }}
+          key: ffmpeg-macos-${{ matrix.arch }}-${{ env.CACHE_VERSION_MACOS }}-xcode${{ env.XCODE_VERSION }}-${{ steps.ffmpeg-hash.outputs.hash }}
 
       - name: Ensure Metal Toolchain
         if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
@@ -965,7 +969,7 @@ jobs:
           path: |
             /opt/ffbuild/prefix
             externals/jellyfin-ffmpeg/config*.h
-          key: ffmpeg-macos-${{ matrix.arch }}-${{ env.CACHE_VERSION_MACOS }}-xcode${{ steps.xcode-version.outputs.version }}-${{ steps.ffmpeg-hash.outputs.hash }}
+          key: ffmpeg-macos-${{ matrix.arch }}-${{ env.CACHE_VERSION_MACOS }}-xcode${{ env.XCODE_VERSION }}-${{ steps.ffmpeg-hash.outputs.hash }}
 
       - name: Upload FFmpeg cache as artifact
         if: inputs.upload_caches == true
@@ -1079,3 +1083,36 @@ jobs:
           name: ffmpeg-v${{ steps.ffmpeg-version.outputs.version }}-macos-${{ matrix.arch }}-jellyfin.zip
           path: ffmpeg-binary-macos-${{ matrix.arch }}-jellyfin/
           if-no-files-found: ignore
+
+  cleanup_caches:
+    name: "Cleanup stale FFmpeg caches"
+    runs-on: ubuntu-latest
+    needs: [build_windows_mingw, build_windows_msvc, build_linux, build_macos]
+    if: always() && github.event_name != 'pull_request'
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Delete FFmpeg caches with outdated keys
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The submodule pointer is part of the tree - no submodule checkout needed
+          HASH="${JELLYFIN_FFMPEG_HASH:-$(git ls-tree HEAD --object-only externals/jellyfin-ffmpeg)}"
+          KEEP="ffmpeg-windows-x64-${CACHE_VERSION_WINDOWS}-${HASH}
+          ffmpeg-windows-arm64-${CACHE_VERSION_WINDOWS}-${HASH}
+          ffmpeg-linux-x64-${CACHE_VERSION_LINUX}-${HASH}
+          ffmpeg-linux-arm64-${CACHE_VERSION_LINUX}-${HASH}
+          ffmpeg-macos-x64-${CACHE_VERSION_MACOS}-xcode${XCODE_VERSION}-${HASH}
+          ffmpeg-macos-arm64-${CACHE_VERSION_MACOS}-xcode${XCODE_VERSION}-${HASH}"
+          KEEP="$(echo "$KEEP" | sed 's/^ *//')"
+
+          gh cache list --limit 100 --json id,key --jq '.[] | select(.key | startswith("ffmpeg-")) | "\(.id) \(.key)"' |
+          while read -r id key; do
+            if ! grep -qxF "$key" <<< "$KEEP"; then
+              echo "Deleting stale cache: $key"
+              gh cache delete "$id" || true
+            fi
+          done
