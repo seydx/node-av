@@ -3,6 +3,7 @@
 
 #include <napi.h>
 #include "common.h"
+#include "promise_worker.h"
 
 extern "C" {
 #include <libavutil/audio_fifo.h>
@@ -12,6 +13,7 @@ namespace ffmpeg {
 
 class AudioFifo : public Napi::ObjectWrap<AudioFifo> {
 public:
+  static thread_local Napi::FunctionReference constructor;
   static Napi::Object Init(Napi::Env env, Napi::Object exports);
   AudioFifo(const Napi::CallbackInfo& info);
   ~AudioFifo();
@@ -19,9 +21,13 @@ public:
   AVAudioFifo* Get() { return fifo_; }
 
 private:
-  static thread_local Napi::FunctionReference constructor;
 
   AVAudioFifo* fifo_ = nullptr;
+  int nb_buffers_ = 0;  // Plane buffers required per write/read/peek (planar: channels, interleaved: 1)
+  AsyncOpCounter async_ops_;
+
+  // Shared validation for the sync and async write/read/peek paths
+  bool ValidateBufferCount(Napi::Env env, uint32_t count);
 
   Napi::Value Alloc(const Napi::CallbackInfo& info);
   Napi::Value Free(const Napi::CallbackInfo& info);

@@ -4,6 +4,7 @@
 extern "C" {
 #include <libavutil/mem.h>
 #include <libavutil/audio_fifo.h>
+#include <libavutil/samplefmt.h>
 }
 
 namespace ffmpeg {
@@ -57,8 +58,11 @@ Napi::Value AudioFifo::Alloc(const Napi::CallbackInfo& info) {
     return env.Undefined();
   }
   
-  // Free old fifo if exists
+  // Free old fifo if exists - wait for in-flight async operations first
   if (fifo_) {
+    if (!GuardAsyncOps(env, async_ops_, "AudioFifo")) {
+      return env.Undefined();
+    }
     av_audio_fifo_free(fifo_);
   }
   
@@ -67,23 +71,47 @@ Napi::Value AudioFifo::Alloc(const Napi::CallbackInfo& info) {
   int nb_samples = info[2].As<Napi::Number>().Int32Value();
   
   fifo_ = av_audio_fifo_alloc(sample_fmt, channels, nb_samples);
-  
+
   if (!fifo_) {
+    nb_buffers_ = 0;
     Napi::Error::New(env, "Failed to allocate AudioFifo").ThrowAsJavaScriptException();
     return env.Undefined();
   }
-  
+
+  // Mirror the fifo's internal nb_buffers (audio_fifo.c): planar formats use one
+  // buffer per channel, interleaved formats use a single buffer.
+  nb_buffers_ = av_sample_fmt_is_planar(sample_fmt) ? channels : 1;
+
   return env.Undefined();
+}
+
+bool AudioFifo::ValidateBufferCount(Napi::Env env, uint32_t count) {
+  // av_audio_fifo_write/read/peek iterate the fifo's channel count (af->nb_buffers)
+  // for planar formats, NOT the caller-supplied array length. Passing fewer buffers
+  // reads past the pointer array on write and writes through garbage pointers on
+  // read/peek (heap corruption), so the count must match exactly.
+  if (count != static_cast<uint32_t>(nb_buffers_)) {
+    Napi::TypeError::New(env, "Expected " + std::to_string(nb_buffers_) + " buffer(s) for this AudioFifo, got " + std::to_string(count))
+        .ThrowAsJavaScriptException();
+    return false;
+  }
+  return true;
 }
 
 Napi::Value AudioFifo::Free(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
-  
+
   if (fifo_) {
+    // Freeing while a worker still uses the fifo on the threadpool would be a
+    // use-after-free; wait bounded, then error instead of crashing
+    if (!GuardAsyncOps(env, async_ops_, "AudioFifo")) {
+      return env.Undefined();
+    }
     av_audio_fifo_free(fifo_);
     fifo_ = nullptr;
+    nb_buffers_ = 0;
   }
-  
+
   return env.Undefined();
 }
 

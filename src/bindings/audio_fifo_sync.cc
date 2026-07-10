@@ -28,6 +28,10 @@ Napi::Value AudioFifo::WriteSync(const Napi::CallbackInfo& info) {
   if (info[0].IsArray()) {
     Napi::Array dataArray = info[0].As<Napi::Array>();
 
+    if (!ValidateBufferCount(env, dataArray.Length())) {
+      return env.Undefined();
+    }
+
     void** data = static_cast<void**>(av_malloc(dataArray.Length() * sizeof(void*)));
     if (!data) {
       Napi::Error::New(env, "Out of memory").ThrowAsJavaScriptException();
@@ -50,6 +54,10 @@ Napi::Value AudioFifo::WriteSync(const Napi::CallbackInfo& info) {
   }
   // Handle single buffer (interleaved format)
   else if (info[0].IsBuffer()) {
+    if (!ValidateBufferCount(env, 1)) {
+      return env.Undefined();
+    }
+
     Napi::Buffer<uint8_t> buffer = info[0].As<Napi::Buffer<uint8_t>>();
     void* data[1] = { buffer.Data() };
 
@@ -84,6 +92,10 @@ Napi::Value AudioFifo::ReadSync(const Napi::CallbackInfo& info) {
   if (info[0].IsArray()) {
     Napi::Array dataArray = info[0].As<Napi::Array>();
 
+    if (!ValidateBufferCount(env, dataArray.Length())) {
+      return env.Undefined();
+    }
+
     void** data = static_cast<void**>(av_malloc(dataArray.Length() * sizeof(void*)));
     if (!data) {
       Napi::Error::New(env, "Out of memory").ThrowAsJavaScriptException();
@@ -106,6 +118,10 @@ Napi::Value AudioFifo::ReadSync(const Napi::CallbackInfo& info) {
   }
   // Handle single buffer (interleaved format)
   else if (info[0].IsBuffer()) {
+    if (!ValidateBufferCount(env, 1)) {
+      return env.Undefined();
+    }
+
     Napi::Buffer<uint8_t> buffer = info[0].As<Napi::Buffer<uint8_t>>();
     void* data[1] = { buffer.Data() };
 
@@ -140,6 +156,10 @@ Napi::Value AudioFifo::PeekSync(const Napi::CallbackInfo& info) {
   if (info[0].IsArray()) {
     Napi::Array dataArray = info[0].As<Napi::Array>();
 
+    if (!ValidateBufferCount(env, dataArray.Length())) {
+      return env.Undefined();
+    }
+
     void** data = static_cast<void**>(av_malloc(dataArray.Length() * sizeof(void*)));
     if (!data) {
       Napi::Error::New(env, "Out of memory").ThrowAsJavaScriptException();
@@ -162,6 +182,10 @@ Napi::Value AudioFifo::PeekSync(const Napi::CallbackInfo& info) {
   }
   // Handle single buffer (interleaved format)
   else if (info[0].IsBuffer()) {
+    if (!ValidateBufferCount(env, 1)) {
+      return env.Undefined();
+    }
+
     Napi::Buffer<uint8_t> buffer = info[0].As<Napi::Buffer<uint8_t>>();
     void* data[1] = { buffer.Data() };
 
