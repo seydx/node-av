@@ -15,6 +15,7 @@ public:
     IOContext* ioContext,
     int maxProbeSize
   ) : AsyncWorker(env),
+      ops_(&ioContext->async_ops_),
       io_context_(ioContext),
       max_probe_size_(maxProbeSize),
       result_format_(nullptr),
@@ -22,6 +23,7 @@ public:
       deferred_(Napi::Promise::Deferred::New(env)) {
     // Hold reference to prevent GC during async operation
     io_ctx_ref_.Reset(ioCtxObj, 1);
+    ops_->Begin();
   }
 
   ~InputFormatProbeBufferWorker() {
@@ -30,30 +32,35 @@ public:
 
   void Execute() override {
     // Null checks to prevent use-after-free crashes
-    if (!io_context_) {
+    if (io_context_) {
+      AVIOContext* avio = io_context_->Get();
+      if (!avio) {
+        ret_ = AVERROR(EINVAL);
+      } else {
+        // av_probe_input_buffer2 will probe the format from the IO context
+        const AVInputFormat* fmt = nullptr;
+        ret_ = av_probe_input_buffer2(
+          avio,
+          &fmt,
+          nullptr,  // filename (optional)
+          nullptr,  // logctx
+          0,        // offset
+          max_probe_size_
+        );
+
+        if (ret_ >= 0) {
+          result_format_ = fmt;
+        }
+      }
+    } else {
       ret_ = AVERROR(EINVAL);
-      return;
     }
 
-    AVIOContext* avio = io_context_->Get();
-    if (!avio) {
-      ret_ = AVERROR(EINVAL);
-      return;
-    }
-
-    // av_probe_input_buffer2 will probe the format from the IO context
-    const AVInputFormat* fmt = nullptr;
-    ret_ = av_probe_input_buffer2(
-      avio,
-      &fmt,
-      nullptr,  // filename (optional)
-      nullptr,  // logctx
-      0,        // offset
-      max_probe_size_
-    );
-
-    if (ret_ >= 0) {
-      result_format_ = fmt;
+    // Release before OnOK: the AVIOContext is not touched past this point,
+    // so a guard wait on the main thread can proceed
+    if (ops_) {
+      ops_->End();
+      ops_ = nullptr;
     }
   }
 
@@ -82,6 +89,10 @@ public:
   }
 
   void OnError(const Napi::Error& e) override {
+    if (ops_) {
+      ops_->End();
+      ops_ = nullptr;
+    }
     deferred_.Reject(e.Value());
   }
 
@@ -91,6 +102,7 @@ public:
 
 private:
   Napi::ObjectReference io_ctx_ref_;
+  AsyncOpCounter* ops_;
   IOContext* io_context_;
   int max_probe_size_;
   const AVInputFormat* result_format_;
