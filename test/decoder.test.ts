@@ -1359,4 +1359,47 @@ describe('Decoder', () => {
       }
     });
   });
+
+  describe('demuxer lifetime independence', () => {
+    it('should keep decoding after its source demuxer was closed and reopened', async () => {
+      // The decoder snapshots stream.index at creation - reading the retained
+      // Stream per packet dereferences freed memory once the demuxer is closed
+      // (garbage index on Linux -> every packet silently dropped)
+      const media1 = await Demuxer.open(inputFile);
+      const videoStream1 = media1.video();
+      assert.ok(videoStream1, 'Should find video stream');
+
+      const decoder = await Decoder.create(videoStream1);
+
+      let framesBefore = 0;
+      for await (const packet of media1.packets()) {
+        if (!packet) continue;
+        const frames = await decoder.decodeAll(packet);
+        framesBefore += frames.length;
+        frames.forEach((f) => f.free());
+        packet.free();
+        if (framesBefore > 0) break;
+      }
+      assert.ok(framesBefore > 0, 'Should decode from the first demuxer');
+
+      // Frees the AVStream the decoder was created from
+      await media1.close();
+
+      // Same file, same stream layout - the close-and-reopen loop pattern
+      const media2 = await Demuxer.open(inputFile);
+      let framesAfter = 0;
+      for await (const packet of media2.packets()) {
+        if (!packet) continue;
+        const frames = await decoder.decodeAll(packet);
+        framesAfter += frames.length;
+        frames.forEach((f) => f.free());
+        packet.free();
+        if (framesAfter > 0) break;
+      }
+      assert.ok(framesAfter > 0, 'Decoder must keep working after its demuxer was closed');
+
+      decoder.close();
+      await media2.close();
+    });
+  });
 });
