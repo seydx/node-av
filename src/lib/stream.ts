@@ -1,11 +1,11 @@
 import { CodecParameters } from './codec-parameters.js';
 import { CodecParser } from './codec-parser.js';
 import { Dictionary } from './dictionary.js';
+import { Packet } from './packet.js';
 import { Rational } from './rational.js';
 
 import type { AVDiscard, AVDisposition, AVStreamEventFlag } from '../constants/constants.js';
 import type { NativeStream, NativeWrapper } from './native-types.js';
-import type { Packet } from './packet.js';
 
 /**
  * Media stream within a format context.
@@ -50,9 +50,7 @@ import type { Packet } from './packet.js';
  */
 export class Stream implements NativeWrapper<NativeStream> {
   private native: NativeStream;
-  private _metadata?: Dictionary; // Cache for metadata wrapper
   private _codecpar?: CodecParameters; // Cache the wrapped codecpar
-  private _parser?: CodecParser; // Cache the wrapped parser
 
   /**
    * @param native - The native stream instance
@@ -298,31 +296,22 @@ export class Stream implements NativeWrapper<NativeStream> {
    * Dictionary containing stream-specific metadata
    * (e.g., language, title, encoder settings).
    *
-   * Direct mapping to AVStream->metadata.
+   * Returns a copy of AVStream->metadata - mutating the returned Dictionary
+   * does not affect the stream. Assign it back to apply changes.
    */
   get metadata(): Dictionary | null {
     const native = this.native.metadata;
     if (!native) {
-      // Clear cache if native is null
-      this._metadata = undefined;
       return null;
     }
 
-    // Return cached wrapper if available and still valid
-    if (this._metadata && (this._metadata as any).native === native) {
-      return this._metadata;
-    }
-
-    // Create and cache new wrapper
-    const device = Object.create(Dictionary.prototype) as Dictionary;
-    (device as any).native = native;
-    this._metadata = device;
-    return device;
+    const dict = Object.create(Dictionary.prototype) as Dictionary;
+    (dict as any).native = native;
+    return dict;
   }
 
   set metadata(value: Dictionary | null) {
     this.native.metadata = value?.getNative() ?? null;
-    this._metadata = undefined;
   }
 
   /**
@@ -334,7 +323,16 @@ export class Stream implements NativeWrapper<NativeStream> {
    * Direct mapping to AVStream->attached_pic.
    */
   get attachedPic(): Packet | null {
-    return this.native.attachedPic as unknown as Packet;
+    const native = this.native.attachedPic;
+    if (!native) {
+      return null;
+    }
+
+    // The native getter refs the picture data into a new packet - the returned
+    // wrapper owns that ref (freed on GC, or free() to release earlier)
+    const packet = Object.create(Packet.prototype) as Packet;
+    (packet as any).native = native;
+    return packet;
   }
 
   /**
@@ -376,22 +374,15 @@ export class Stream implements NativeWrapper<NativeStream> {
    * @see {@link CodecParser} For parser details
    */
   get parser(): CodecParser | null {
+    // Not cached: the native getter returns a fresh object per access, so an
+    // identity-based cache can never hit
     const native = this.native.parser;
     if (!native) {
-      // Clear cache if native is null
-      this._parser = undefined;
       return null;
     }
 
-    // Return cached wrapper if available and still valid
-    if (this._parser && (this._parser as any).native === native) {
-      return this._parser;
-    }
-
-    // Create and cache new wrapper
     const parser = Object.create(CodecParser.prototype) as CodecParser;
     (parser as any).native = native;
-    this._parser = parser;
     return parser;
   }
 
