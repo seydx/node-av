@@ -1,8 +1,9 @@
 import assert from 'node:assert';
+import { existsSync, unlinkSync, writeFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 
-import { FMP4Stream } from '../src/index.js';
-import { getInputFile, prepareTestEnvironment } from './index.js';
+import { Demuxer, FMP4Stream } from '../src/index.js';
+import { getInputFile, getOutputFile, prepareTestEnvironment } from './index.js';
 
 import type { FMP4Data, MP4Box } from '../src/index.js';
 
@@ -389,6 +390,66 @@ describe('FMP4Stream', () => {
 
       assert.ok(largeFragments >= 1, 'Should produce at least one fragment');
       assert.ok(smallFragments > largeFragments, `Smaller fragDuration must yield more fragments (got ${smallFragments} vs ${largeFragments})`);
+    });
+  });
+
+  describe('transcode keyframe cadence', () => {
+    // hevc-short.mp4: 320x240, 15fps, 4s, single keyframe (long GOP in the source).
+    // Transcoding to H.264 must bound the encoder GOP to the fragment duration so
+    // every fMP4 fragment starts with a keyframe - otherwise frag_duration cuts
+    // fragments mid-GOP on a P-frame and strict consumers (HKSV) reject them.
+    // Regression test for the missing gopSize on the demuxer transcode path.
+    it('bounds the encoder GOP to the fragment duration when transcoding', async () => {
+      const hevcInput = getInputFile('hevc-short.mp4');
+      const outputFile = getOutputFile('fmp4-keyframe-cadence.mp4');
+
+      const chunks: Buffer[] = [];
+      let onClose!: (error?: Error) => void;
+      const closed = new Promise<void>((resolve, reject) => {
+        onClose = (error) => (error ? reject(error) : resolve());
+      });
+
+      const stream = FMP4Stream.create(hevcInput, {
+        supportedCodecs: 'avc1.640029', // H.264 only -> HEVC source is transcoded
+        boxMode: true,
+        fragDuration: 1_000_000, // 1s; source GOP would otherwise be ~250 frames
+        movFlags: 'frag_keyframe+empty_moov+default_base_moof',
+        onData: (data) => chunks.push(Buffer.from(data)),
+        onClose,
+      });
+
+      await stream.start();
+      await withTimeout(closed, 30000);
+      await stream.stop();
+
+      writeFileSync(outputFile, Buffer.concat(chunks));
+
+      try {
+        const keyframeTimes: number[] = [];
+        await using media = await Demuxer.open(outputFile);
+        const videoStream = media.video();
+        assert.ok(videoStream, 'transcoded output has a video stream');
+        const tb = videoStream.timeBase;
+
+        for await (using packet of media.packets(videoStream.index)) {
+          if (!packet) continue;
+          if (packet.isKeyframe && packet.pts !== null) {
+            keyframeTimes.push((Number(packet.pts) * tb.num) / tb.den);
+          }
+        }
+
+        // 4s of video at 1s fragments -> ~4 keyframes. Without the GOP fix the
+        // encoder keeps the 250-frame default and emits a single keyframe.
+        assert.ok(keyframeTimes.length >= 3, `Expected keyframes at the fragment cadence, got ${keyframeTimes.length}: ${keyframeTimes.join(', ')}`);
+
+        // Consecutive keyframes must be roughly one fragment apart, not one long GOP.
+        for (let i = 1; i < keyframeTimes.length; i++) {
+          const gap = keyframeTimes[i] - keyframeTimes[i - 1];
+          assert.ok(gap <= 2, `Keyframe interval ${gap.toFixed(2)}s exceeds the fragment duration (GOP not bounded)`);
+        }
+      } finally {
+        if (existsSync(outputFile)) unlinkSync(outputFile);
+      }
     });
   });
 });
