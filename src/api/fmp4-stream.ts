@@ -21,6 +21,7 @@ import { HardwareContext } from './hardware.js';
 import { Muxer } from './muxer.js';
 import { consumeStreamInParallel, pipeline, PipelineControlImpl } from './pipeline.js';
 
+import type { CodecContext } from '../lib/codec-context.js';
 import type { AVCodecID, AVHWDeviceType, FFHWDeviceType } from '../constants/index.js';
 import type { DemuxerOptions } from './demuxer.js';
 import type { EncoderOptions } from './encoder.js';
@@ -213,6 +214,7 @@ export interface FMP4StreamOptions {
     fps?: number;
     width?: number;
     height?: number;
+    bitrate?: number;
     encoderOptions?: EncoderOptions['options'];
   };
 
@@ -364,13 +366,11 @@ export class FMP4Stream {
     }
 
     const inputUrl = this.inputUrl ?? '';
+    const isLiveInput = /^(rtsp|rtmp|rtp|udp|srt|tcp|sctp):/i.test(inputUrl);
     this.inputOptions = {
       ...options.inputOptions,
       options: {
-        flags: 'low_delay',
-        fflags: 'nobuffer',
-        // analyzeduration: 0,
-        // probesize: 32,
+        ...(isLiveInput ? { flags: 'low_delay', fflags: 'nobuffer' } : {}),
         timeout: 10000000,
         rtsp_transport: inputUrl.toLowerCase().startsWith('rtsp') ? 'tcp' : undefined,
         ...options.inputOptions?.options,
@@ -388,6 +388,7 @@ export class FMP4Stream {
         fps: options.video?.fps,
         width: options.video?.width,
         height: options.video?.height,
+        bitrate: options.video?.bitrate,
         encoderOptions: options.video?.encoderOptions ?? {},
       },
       audio: {
@@ -749,9 +750,18 @@ export class FMP4Stream {
         ...this.options.video.encoderOptions,
       };
 
+      const effectiveFps = this.options.video.fps ?? currentFps;
+      const fpsForGop = isFinite(effectiveFps) && effectiveFps > 0 ? effectiveFps : 30;
+      const fragSeconds = this.options.fragDuration && this.options.fragDuration > 0 ? this.options.fragDuration / 1_000_000 : 2;
+      const bitrate = this.options.video.bitrate;
+
       this.videoEncoder = await Encoder.create(encoderCodec, {
         decoder: this.videoDecoder,
         options: encoderOptions,
+        configure: (ctx) => {
+          ctx.gopSize = Math.max(1, Math.round(fpsForGop * fragSeconds));
+          this.applyBitrate(ctx, bitrate);
+        },
       });
     }
 
@@ -779,6 +789,32 @@ export class FMP4Stream {
     this.output = await this.createOutput();
 
     this.attachCompletion(this.runPipeline());
+  }
+
+  /**
+   * Cap the video bitrate on the encoder context.
+   *
+   * Applies a VBV rate cap (maxrate + a 1s buffer) WITHOUT setting a target
+   * bitrate, so the encoder keeps its default constant-quality mode but can
+   * never exceed the negotiated ceiling. Setting the bitrate as an ABR target
+   * instead would push a normally-lighter stream UP to fill it, overshooting on
+   * bursts - the opposite of what strict consumers (HomeKit Secure Video) want.
+   * No-op when no bitrate was requested.
+   *
+   * @param ctx - Encoder codec context
+   *
+   * @param bitrate - Maximum bitrate in bits per second, or undefined
+   *
+   * @internal
+   */
+  private applyBitrate(ctx: CodecContext, bitrate: number | undefined): void {
+    if (!bitrate || bitrate <= 0) {
+      return;
+    }
+    ctx.rcMaxRate = BigInt(Math.round(bitrate));
+    // 1s buffer keeps per-fragment size close to the cap instead of allowing
+    // multi-second bursts over it.
+    ctx.rcBufferSize = Math.round(bitrate);
   }
 
   /**
@@ -890,13 +926,19 @@ export class FMP4Stream {
       }
 
       // Set the framerate explicitly - without a decoder the encoder would infer
-      // it from the frame timebase and pick an absurd level. Bound the GOP so
-      // fragments get keyframes at a sensible cadence.
+      // it from the frame timebase and pick an absurd level. Bound the GOP to the
+      // fragment duration (2s default) so every fMP4 fragment starts with a
+      // keyframe; otherwise frag_duration flushes fragments mid-GOP on a P-frame
+      // and strict consumers (HomeKit Secure Video) reject them.
+      const fragSeconds = this.options.fragDuration && this.options.fragDuration > 0 ? this.options.fragDuration / 1_000_000 : 2;
+      const bitrate = this.options.video.bitrate;
+
       this.videoEncoder = await Encoder.create(encoderCodec, {
         options: encoderOptions,
         configure: (ctx) => {
           ctx.framerate = new Rational(Math.round(fps), 1);
-          ctx.gopSize = Math.max(1, Math.round(fps * 2));
+          ctx.gopSize = Math.max(1, Math.round(fps * fragSeconds));
+          this.applyBitrate(ctx, bitrate);
         },
       });
     }
