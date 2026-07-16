@@ -1,10 +1,10 @@
 import { isRtcp, RtpPacket } from 'werift';
 
-import { AV_HWDEVICE_TYPE_NONE, AV_PICTURE_TYPE_I, AV_SAMPLE_FMT_FLTP } from '../constants/constants.js';
+import { AV_HWDEVICE_TYPE_NONE, AV_PICTURE_TYPE_I, AV_PIX_FMT_YUV420P, AV_SAMPLE_FMT_FLTP } from '../constants/constants.js';
 import { FF_ENCODER_LIBOPUS, FF_ENCODER_LIBX264, FF_ENCODER_LIBX265 } from '../constants/encoders.js';
 import { Codec } from '../lib/codec.js';
 import { Rational } from '../lib/rational.js';
-import { avChannelLayoutDefault } from '../lib/utilities.js';
+import { avChannelLayoutDefault, avGetPixFmtName } from '../lib/utilities.js';
 import { MAX_PACKET_SIZE } from './constants.js';
 import { Decoder } from './decoder.js';
 import { Demuxer } from './demuxer.js';
@@ -14,9 +14,9 @@ import { FilterAPI } from './filter.js';
 import { HardwareContext } from './hardware.js';
 import { Muxer } from './muxer.js';
 import { pipeline } from './pipeline.js';
-import { pickSupportedLayout, pickSupportedRate, pickSupportedSampleFormat } from './utilities/codec-format.js';
+import { pickSupportedLayout, pickSupportedPixelFormat, pickSupportedRate, pickSupportedSampleFormat } from './utilities/codec-format.js';
 
-import type { AVCodecID, AVHWDeviceType, AVSampleFormat, FFAudioEncoder, FFHWDeviceType, FFVideoEncoder } from '../constants/index.js';
+import type { AVCodecID, AVHWDeviceType, AVPixelFormat, AVSampleFormat, FFAudioEncoder, FFHWDeviceType, FFVideoEncoder } from '../constants/index.js';
 import type { Frame } from '../lib/frame.js';
 import type { DemuxerOptions } from './demuxer.js';
 import type { EncoderOptions } from './encoder.js';
@@ -504,6 +504,23 @@ export class RTPStream {
 
       const needsFps = this.options.video.fps !== undefined && isFinite(currentFps) && this.options.video.fps !== currentFps;
 
+      // Get first supported codec
+      const targetCodecId = this.options.supportedVideoCodecs[0];
+      if (!targetCodecId) {
+        throw new Error('No supported video codec specified for transcoding');
+      }
+
+      let encoderCodec: Codec | null = null;
+      if (typeof targetCodecId === 'string') {
+        encoderCodec = Codec.findEncoderByName(targetCodecId);
+      } else {
+        encoderCodec = this.hardwareContext?.getEncoderCodec(targetCodecId) ?? Codec.findEncoder(targetCodecId);
+      }
+
+      if (!encoderCodec) {
+        throw new Error(`No encoder found for codec ID ${targetCodecId}`);
+      }
+
       // Create filter chain only if needed
       if (needsScale || needsFps) {
         const filterChain = FilterPreset.chain(this.hardwareContext);
@@ -520,26 +537,27 @@ export class RTPStream {
           filterChain.filter('fps', { fps: this.options.video.fps! });
         }
 
+        // Software scaling leaves the graph output format unconstrained, so swscale keeps the
+        // source format on both sides of the scale. Packed formats like yuyv422 can't be scaled
+        // in place (yuyv422 -> yuyv422 fails with ENOSYS), and the encoder wouldn't accept them
+        // anyway. Pin the output to yuv420p so the graph negotiates a real conversion: it is the
+        // one format every browser/player can decode over WebRTC (unlike e.g. the 4:2:2 High
+        // profile that a least-loss pick would choose for a yuyv422 source). Fall back to a
+        // codec-supported format only if the encoder genuinely can't take yuv420p. Hardware chains
+        // negotiate their format through the frames context instead.
+        if (needsScale && !this.hardwareContext) {
+          const formats = encoderCodec.pixelFormats;
+          const targetFmt =
+            !formats || formats.includes(AV_PIX_FMT_YUV420P) ? AV_PIX_FMT_YUV420P : pickSupportedPixelFormat(videoStream.codecpar.format as AVPixelFormat, formats);
+          const targetFmtName = avGetPixFmtName(targetFmt);
+          if (targetFmtName) {
+            filterChain.filter('format', { pix_fmts: targetFmtName });
+          }
+        }
+
         this.videoFilter = FilterAPI.create(filterChain.build(), {
           hardware: this.hardwareContext,
         });
-      }
-
-      // Get first supported codec
-      const targetCodecId = this.options.supportedVideoCodecs[0];
-      if (!targetCodecId) {
-        throw new Error('No supported video codec specified for transcoding');
-      }
-
-      let encoderCodec: Codec | null = null;
-      if (typeof targetCodecId === 'string') {
-        encoderCodec = Codec.findEncoderByName(targetCodecId);
-      } else {
-        encoderCodec = this.hardwareContext?.getEncoderCodec(targetCodecId) ?? Codec.findEncoder(targetCodecId);
-      }
-
-      if (!encoderCodec) {
-        throw new Error(`No encoder found for codec ID ${targetCodecId}`);
       }
 
       let encoderOptions: EncoderOptions['options'] = {};

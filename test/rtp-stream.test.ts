@@ -1,8 +1,9 @@
 import assert from 'node:assert';
+import { writeFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 
 import { FF_ENCODER_LIBX264 } from '../src/index.js';
-import { getInputFile, prepareTestEnvironment } from './index.js';
+import { getInputFile, getOutputFile, prepareTestEnvironment } from './index.js';
 
 import type { RtpPacket } from 'werift';
 import type { RTPStreamOptions } from '../src/webrtc/index.js';
@@ -118,6 +119,31 @@ describe('RTPStream', skipWerift, () => {
       for (const inc of increments(frames)) {
         assert.ok(Math.abs(inc - 9000) <= 90, `expected ~9000 ticks (10 fps option), got ${inc}`);
       }
+    });
+  });
+
+  describe('scaling', () => {
+    it('transcodes and scales a packed yuyv422 source (issue #294)', async () => {
+      // A yuyv422 (packed 4:2:2) source fed through scale=WxH used to fail: swscale can't
+      // scale packed yuyv422 in place (yuyv422 -> yuyv422 => ENOSYS on some builds) and
+      // libx264 rejects yuyv422 outright. The scale chain must pin the output to yuv420p.
+      // Synthesize a few frames of gray yuyv422 rawvideo - the exact pixel values don't
+      // matter, only that the demuxer reads them as yuyv422 and the graph has to convert.
+      const width = 320;
+      const height = 240;
+      const frames = 6;
+      const frame = Buffer.alloc(width * height * 2, 0x80);
+      const raw = Buffer.concat(Array.from({ length: frames }, () => frame));
+      const rawPath = getOutputFile('issue-294-yuyv422.raw');
+      writeFileSync(rawPath, raw);
+
+      const packets = await collectVideoRtp(rawPath, {
+        supportedVideoCodecs: [FF_ENCODER_LIBX264],
+        inputOptions: { format: 'rawvideo', options: { pixel_format: 'yuyv422', video_size: `${width}x${height}`, framerate: '12' } },
+        video: { width: 160, height: 120 },
+      });
+
+      assert.ok(packets.length > 0, 'expected RTP packets from the scaled yuyv422 source');
     });
   });
 
