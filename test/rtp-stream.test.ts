@@ -45,6 +45,20 @@ async function collectVideoRtp(input: string, options: RTPStreamOptions = {}): P
   return packets;
 }
 
+async function withTimeout<T>(promise: Promise<T>, ms = 5000): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`Timed out after ${ms}ms`)), ms);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function frameTimestamps(packets: VideoRtpInfo[]): number[] {
   return packets.filter((p) => p.marker).map((p) => p.timestamp);
 }
@@ -144,6 +158,35 @@ describe('RTPStream', skipWerift, () => {
       });
 
       assert.ok(packets.length > 0, 'expected RTP packets from the scaled yuyv422 source');
+    });
+  });
+
+  describe('bitrate cap', () => {
+    it('applies the negotiated bitrate as a VBV cap on the transcode path', async () => {
+      const { RTPStream } = await import('../src/webrtc/index.js');
+
+      let sawPacket!: () => void;
+      const firstPacket = new Promise<void>((resolve) => (sawPacket = resolve));
+
+      const stream = RTPStream.create(getInputFile('hevc-short.mp4'), {
+        supportedVideoCodecs: [FF_ENCODER_LIBX264], // HEVC source -> forced transcode
+        video: { bitrate: 300_000 },
+        onVideoPacket: () => sawPacket(),
+      });
+
+      await stream.start();
+      try {
+        // the encoder configures itself lazily on the first frame
+        await withTimeout(firstPacket, 15000);
+
+        const encoder = (stream as unknown as { videoEncoder?: unknown }).videoEncoder;
+        assert.ok(encoder, 'transcode path must create a video encoder');
+        const ctx = (encoder as { codecContext: { rcMaxRate: bigint; rcBufferSize: number } }).codecContext;
+        assert.equal(ctx.rcMaxRate, 300000n, 'bitrate must land as VBV maxrate, not a target');
+        assert.equal(ctx.rcBufferSize, 300000, 'VBV buffer must bound bursts to ~1s');
+      } finally {
+        await stream.stop();
+      }
     });
   });
 

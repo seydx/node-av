@@ -17,6 +17,7 @@ import { pipeline } from './pipeline.js';
 import { pickSupportedLayout, pickSupportedPixelFormat, pickSupportedRate, pickSupportedSampleFormat } from './utilities/codec-format.js';
 
 import type { AVCodecID, AVHWDeviceType, AVPixelFormat, AVSampleFormat, FFAudioEncoder, FFHWDeviceType, FFVideoEncoder } from '../constants/index.js';
+import type { CodecContext } from '../lib/codec-context.js';
 import type { Frame } from '../lib/frame.js';
 import type { DemuxerOptions } from './demuxer.js';
 import type { EncoderOptions } from './encoder.js';
@@ -89,6 +90,7 @@ export interface RTPStreamOptions {
     fps?: number;
     width?: number;
     height?: number;
+    bitrate?: number;
     encoderOptions?: EncoderOptions['options'];
   };
 
@@ -275,6 +277,7 @@ export class RTPStream {
         fps: options.video?.fps,
         width: options.video?.width,
         height: options.video?.height,
+        bitrate: options.video?.bitrate,
         encoderOptions: options.video?.encoderOptions ?? {},
       },
       audio: {
@@ -586,10 +589,14 @@ export class RTPStream {
         ...this.options.video.encoderOptions,
       };
 
+      const bitrate = this.options.video.bitrate;
       this.videoEncoder = await Encoder.create(encoderCodec, {
         decoder: this.videoDecoder,
         maxBFrames: 0,
         options: encoderOptions,
+        configure: (ctx) => {
+          this.applyBitrate(ctx, bitrate);
+        },
       });
       this.throwIfStopRequested();
     }
@@ -684,6 +691,29 @@ export class RTPStream {
   }
 
   /**
+   * Cap the video bitrate on the encoder context.
+   *
+   * Applies a VBV rate cap (maxrate + a 1s buffer) WITHOUT setting a target
+   * bitrate, so the encoder keeps its default constant-quality mode but can
+   * never exceed the negotiated ceiling. Setting the bitrate as an ABR target
+   * instead would push a normally-lighter stream UP to fill it, overshooting
+   * on bursts.
+   *
+   * @param ctx - Encoder codec context
+   *
+   * @param bitrate - Maximum bitrate in bits per second, or undefined
+   *
+   * @internal
+   */
+  private applyBitrate(ctx: CodecContext, bitrate: number | undefined): void {
+    if (!bitrate || bitrate <= 0) {
+      return;
+    }
+    ctx.rcMaxRate = BigInt(Math.round(bitrate));
+    ctx.rcBufferSize = Math.round(bitrate);
+  }
+
+  /**
    * Wire the pipeline completion to the onClose/error callbacks.
    *
    * On success invokes `onClose()`; on error stops the stream and invokes
@@ -766,12 +796,14 @@ export class RTPStream {
       // browsers can't decode over WebRTC. Bound the GOP to ~2s: live receivers
       // that join (or lose) mid-stream must get a keyframe quickly - the x264
       // default of 250 frames leaves them waiting for many seconds.
+      const bitrate = this.options.video.bitrate;
       this.videoEncoder = await Encoder.create(encoderCodec, {
         maxBFrames: 0,
         options: encoderOptions,
         configure: (ctx) => {
           ctx.framerate = new Rational(Math.round(fps), 1);
           ctx.gopSize = Math.max(1, Math.round(fps * 2));
+          this.applyBitrate(ctx, bitrate);
         },
       });
 
