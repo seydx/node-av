@@ -118,6 +118,18 @@ export interface FMP4Data {
 }
 
 /**
+ * A parsed top-level box held for fragment-aligned emission.
+ *
+ * @internal
+ */
+interface ParsedBox {
+  type: MP4BoxType;
+  size: number;
+  headerSize: number;
+  raw: Buffer;
+}
+
+/**
  * Options for configuring fMP4 streaming.
  */
 export interface FMP4StreamOptions {
@@ -236,7 +248,10 @@ export interface FMP4StreamOptions {
 
   /**
    * Enable box mode - buffers data until complete MP4 boxes are available.
-   * When true, onData receives complete boxes with parsed box information.
+   * When true, onData receives complete boxes with parsed box information,
+   * and media fragments are emitted fragment-aligned: a callback that contains
+   * a `moof` always contains its `mdat` too, regardless of how the muxer's
+   * I/O buffer split the write (large fragments arrive in several chunks).
    * When false, onData receives raw chunks as they arrive from FFmpeg.
    *
    * @default false
@@ -332,7 +347,11 @@ export class FMP4Stream {
   private signal?: AbortSignal;
   private supportedCodecs: Set<string>;
   private incompleteBoxBuffer: Buffer | null = null;
+  private pendingFragment: ParsedBox[] = [];
   private abortHandler?: () => void;
+  private stopRequested = false;
+  private stopPromise?: Promise<void>;
+  private startAbort?: AbortController;
   private fragmentQueue: {
     queue: FMP4Fragment[];
     resolve: ((value: IteratorResult<FMP4Fragment>) => void) | null;
@@ -657,6 +676,12 @@ export class FMP4Stream {
    * @internal
    */
   private async doStart(): Promise<void> {
+    // A start racing an in-flight stop() waits for the teardown to finish,
+    // otherwise it would build the pipeline on top of freed resources.
+    if (this.stopPromise) {
+      await this.stopPromise;
+    }
+
     if (this.pipeline) {
       return;
     }
@@ -673,6 +698,10 @@ export class FMP4Stream {
 
     this._droppedFragments = 0;
 
+    // Lets stop() interrupt a startup that is blocked in the input open
+    // (an RTSP connect can take seconds).
+    this.startAbort = new AbortController();
+
     // Frame-source path: encode pre-composited frames directly (no demuxer/decoder).
     if (this.source) {
       await this.startFromFrames();
@@ -684,8 +713,10 @@ export class FMP4Stream {
       if (!this.inputUrl) {
         throw new Error('No input URL or Demuxer provided');
       }
-      this.input = await Demuxer.open(this.inputUrl, this.inputOptions);
+      const openSignal = this.signal ? AbortSignal.any([this.signal, this.startAbort.signal]) : this.startAbort.signal;
+      this.input = await Demuxer.open(this.inputUrl, { ...this.inputOptions, signal: openSignal });
     }
+    this.throwIfStopRequested();
 
     const videoStream = this.input.video();
     const audioStream = this.input.audio();
@@ -706,6 +737,7 @@ export class FMP4Stream {
         hardware: this.hardwareContext,
         exitOnError: false,
       });
+      this.throwIfStopRequested();
 
       // Determine if we need filters by comparing with current stream properties
       const currentWidth = videoStream.codecpar.width;
@@ -783,6 +815,7 @@ export class FMP4Stream {
           this.applyBitrate(ctx, bitrate);
         },
       });
+      this.throwIfStopRequested();
     }
 
     // Check if audio needs transcoding
@@ -803,12 +836,31 @@ export class FMP4Stream {
         filter: this.audioFilter,
         options: this.options.audio.encoderOptions,
       });
+      this.throwIfStopRequested();
     }
 
     // Setup output with callback
     this.output = await this.createOutput();
+    this.throwIfStopRequested();
 
     this.attachCompletion(this.runPipeline());
+  }
+
+  /**
+   * Abort an in-flight startup once stop() was requested.
+   *
+   * Checked after every await in the startup path: the resources created so
+   * far are all assigned to instance fields, so the stop() that is waiting on
+   * this startup tears them down the moment it unwinds.
+   *
+   * @throws {Error} If stop() was called while starting
+   *
+   * @internal
+   */
+  private throwIfStopRequested(): void {
+    if (this.stopRequested) {
+      throw new Error('FMP4Stream stopped during start');
+    }
   }
 
   /**
@@ -818,7 +870,7 @@ export class FMP4Stream {
    * bitrate, so the encoder keeps its default constant-quality mode but can
    * never exceed the negotiated ceiling. Setting the bitrate as an ABR target
    * instead would push a normally-lighter stream UP to fill it, overshooting on
-   * bursts - the opposite of what strict consumers (HomeKit Secure Video) want.
+   * bursts - the opposite of what strict rate-capped consumers want.
    * No-op when no bitrate was requested.
    *
    * @param ctx - Encoder codec context
@@ -949,7 +1001,7 @@ export class FMP4Stream {
       // it from the frame timebase and pick an absurd level. Bound the GOP to the
       // fragment duration (2s default) so every fMP4 fragment starts with a
       // keyframe; otherwise frag_duration flushes fragments mid-GOP on a P-frame
-      // and strict consumers (HomeKit Secure Video) reject them.
+      // and strict consumers reject them.
       const fragSeconds = this.options.fragDuration && this.options.fragDuration > 0 ? this.options.fragDuration / 1_000_000 : 2;
       const bitrate = this.options.video.bitrate;
 
@@ -973,8 +1025,10 @@ export class FMP4Stream {
         options: this.options.audio.encoderOptions,
       });
     }
+    this.throwIfStopRequested();
 
     this.output = await this.createOutput();
+    this.throwIfStopRequested();
 
     // eslint-disable-next-line prefer-const
     let control: PipelineControl | undefined;
@@ -1020,66 +1074,103 @@ export class FMP4Stream {
    * ```
    */
   async stop(): Promise<void> {
-    this.endFragments();
+    // Memoized: concurrent stop() calls share one teardown instead of
+    // double-closing native resources.
+    this.stopPromise ??= this.doStop().finally(() => {
+      this.stopPromise = undefined;
+    });
+    await this.stopPromise;
+  }
 
-    // A consumer awaiting the init segment must not hang forever.
-    this.rejectInitSegment(new Error('FMP4Stream stopped before init segment was produced'));
+  /**
+   * Perform the actual teardown (see {@link stop}).
+   *
+   * @internal
+   */
+  private async doStop(): Promise<void> {
+    // An in-flight start() must unwind before teardown - otherwise it would
+    // keep building the pipeline on top of freed resources and leave an
+    // orphaned transcode running forever. The flag makes doStart() bail at its
+    // next checkpoint, the abort unblocks a startup stuck in the input open.
+    this.stopRequested = true;
+    this.startAbort?.abort();
+    this.startAbort = undefined;
 
-    // Remove the abort listener so it does not accumulate across restarts.
-    if (this.abortHandler) {
-      this.signal?.removeEventListener('abort', this.abortHandler);
-      this.abortHandler = undefined;
-    }
-
+    const inflightStart = this.startPromise;
     // Allow a fresh start() after stopping.
     this.startPromise = undefined;
-
-    // Stop pipeline if running and wait for completion. Swallow a rejected
-    // completion - the error is already surfaced via the onClose(error) path;
-    // we just need cleanup to proceed.
-    if (this.pipeline && !this.pipeline.isStopped()) {
-      this.pipeline.stop();
+    if (inflightStart) {
       try {
-        await this.pipeline.completion;
+        await inflightStart;
       } catch {
-        // Pipeline errored - proceed with teardown regardless.
+        // Aborted or failed startup - resources are torn down below either way.
       }
-      this.pipeline = undefined;
     }
 
-    // Close all resources
+    try {
+      this.endFragments();
 
-    await this.input?.close();
-    this.input = undefined;
+      // A consumer awaiting the init segment must not hang forever.
+      this.rejectInitSegment(new Error('FMP4Stream stopped before init segment was produced'));
 
-    this.videoDecoder?.close();
-    this.videoDecoder = undefined;
-    this.videoFilter?.close();
-    this.videoFilter = undefined;
-    this.videoEncoder?.close();
-    this.videoEncoder = undefined;
+      // Remove the abort listener so it does not accumulate across restarts.
+      if (this.abortHandler) {
+        this.signal?.removeEventListener('abort', this.abortHandler);
+        this.abortHandler = undefined;
+      }
 
-    this.audioDecoder?.close();
-    this.audioDecoder = undefined;
-    this.audioFilter?.close();
-    this.audioFilter = undefined;
-    this.audioEncoder?.close();
-    this.audioEncoder = undefined;
+      // Stop pipeline if running and wait for completion. Swallow a rejected
+      // completion - the error is already surfaced via the onClose(error) path;
+      // we just need cleanup to proceed.
+      if (this.pipeline && !this.pipeline.isStopped()) {
+        this.pipeline.stop();
+        try {
+          await this.pipeline.completion;
+        } catch {
+          // Pipeline errored - proceed with teardown regardless.
+        }
+        this.pipeline = undefined;
+      }
 
-    this.hardwareContext?.dispose();
-    this.hardwareContext = undefined;
+      // Close all resources. The output goes FIRST: its async write worker may
+      // still be draining (header init reads the input's stream parameters),
+      // so freeing the input before the muxer has fully settled is a
+      // use-after-free on the worker thread.
+      await this.output?.close();
+      this.output = undefined;
 
-    await this.output?.close();
-    this.output = undefined;
+      this.videoDecoder?.close();
+      this.videoDecoder = undefined;
+      this.videoFilter?.close();
+      this.videoFilter = undefined;
+      this.videoEncoder?.close();
+      this.videoEncoder = undefined;
 
-    // Reset parser and init segment state so a restart parses a clean stream.
-    this.incompleteBoxBuffer = null;
-    this._initSegment = null;
-    this._initSegmentResolve = null;
-    this._initSegmentReject = null;
-    this._initSegmentPromise = null;
-    this._ftypData = null;
-    this._moovData = null;
+      this.audioDecoder?.close();
+      this.audioDecoder = undefined;
+      this.audioFilter?.close();
+      this.audioFilter = undefined;
+      this.audioEncoder?.close();
+      this.audioEncoder = undefined;
+
+      this.hardwareContext?.dispose();
+      this.hardwareContext = undefined;
+
+      await this.input?.close();
+      this.input = undefined;
+
+      // Reset parser and init segment state so a restart parses a clean stream.
+      this.incompleteBoxBuffer = null;
+      this.pendingFragment = [];
+      this._initSegment = null;
+      this._initSegmentResolve = null;
+      this._initSegmentReject = null;
+      this._initSegmentPromise = null;
+      this._ftypData = null;
+      this._moovData = null;
+    } finally {
+      this.stopRequested = false;
+    }
   }
 
   /**
@@ -1254,6 +1345,13 @@ export class FMP4Stream {
    * (header or body) is buffered for the next chunk; the parser never
    * loses bytes regardless of where the split falls.
    *
+   * Emission is fragment-aligned: a `moof` is held back until its `mdat` has
+   * arrived, then both are emitted as ONE onData call. The avio buffer flushes
+   * at arbitrary points (a fragment larger than the buffer always splits), so
+   * without this a consumer would see a bare `moof` followed by a detached
+   * `mdat` - unplayable framing for fMP4 consumers.
+   * Non-fragment boxes (ftyp, moov, mfra, ...) are emitted as they complete.
+   *
    * @param chunk - Incoming data chunk from FFmpeg
    *
    * @internal
@@ -1266,7 +1364,14 @@ export class FMP4Stream {
     }
 
     let offset = 0;
-    const boxes: MP4Box[] = [];
+    let immediate: ParsedBox[] = [];
+
+    const flushImmediate = () => {
+      if (immediate.length > 0) {
+        this.emitBoxGroup(immediate);
+        immediate = [];
+      }
+    };
 
     while (offset < chunk.length) {
       const remaining = chunk.length - offset;
@@ -1309,50 +1414,89 @@ export class FMP4Stream {
         break;
       }
 
-      // We have the complete box - parse it
-      const boxType = chunk.toString('ascii', offset + 4, offset + 8);
-      boxes.push({
-        type: boxType,
+      const parsed: ParsedBox = {
+        type: chunk.toString('ascii', offset + 4, offset + 8),
         size: boxSize,
-        data: chunk.subarray(offset + headerSize, offset + boxSize),
-        offset: offset,
-      });
+        headerSize,
+        raw: chunk.subarray(offset, offset + boxSize),
+      };
+
+      if (parsed.type === 'moof') {
+        flushImmediate();
+        if (this.pendingFragment.length > 0) {
+          // a moof without a following mdat never happens with movenc, emit
+          // the stale fragment as-is rather than silently dropping bytes
+          this.emitBoxGroup(this.pendingFragment);
+          this.pendingFragment = [];
+        }
+        this.pendingFragment.push(parsed);
+      } else if (this.pendingFragment.length > 0) {
+        this.pendingFragment.push(parsed);
+        if (parsed.type === 'mdat') {
+          this.emitBoxGroup(this.pendingFragment);
+          this.pendingFragment = [];
+        }
+      } else {
+        immediate.push(parsed);
+      }
 
       // Move to next box
       offset += boxSize;
     }
 
-    // If we have complete boxes, send them to the callback
-    if (boxes.length > 0) {
-      const boxData = chunk.subarray(0, offset);
-      const info: FMP4Data = { isComplete: true, boxes };
+    flushImmediate();
+  }
 
-      // onData callback gets everything
-      this.options.onData(boxData, info);
+  /**
+   * Emit a group of complete boxes as one onData call.
+   *
+   * Concatenates the raw box bytes, rebuilds the box list with offsets
+   * relative to the emitted buffer, tracks the init segment, and feeds the
+   * fragments() queue when the group is a media fragment.
+   *
+   * @param entries - Complete boxes in stream order
+   *
+   * @internal
+   */
+  private emitBoxGroup(entries: ParsedBox[]): void {
+    const data = entries.length === 1 ? entries[0].raw : Buffer.concat(entries.map((e) => e.raw));
 
-      // Init segment tracking: collect ftyp and moov data
-      if (!this._initSegment) {
-        for (const box of boxes) {
-          if (box.type === 'ftyp' && !this._ftypData) {
-            this._ftypData = chunk.subarray(box.offset, box.offset + box.size);
-          }
-          if (box.type === 'moov' && !this._moovData) {
-            this._moovData = chunk.subarray(box.offset, box.offset + box.size);
-          }
+    let position = 0;
+    const boxes: MP4Box[] = entries.map((entry) => {
+      const box: MP4Box = {
+        type: entry.type,
+        size: entry.size,
+        data: data.subarray(position + entry.headerSize, position + entry.size),
+        offset: position,
+      };
+      position += entry.size;
+      return box;
+    });
+
+    const info: FMP4Data = { isComplete: true, boxes };
+    this.options.onData(data, info);
+
+    // Init segment tracking: collect ftyp and moov data
+    if (!this._initSegment) {
+      for (const box of boxes) {
+        if (box.type === 'ftyp' && !this._ftypData) {
+          this._ftypData = data.subarray(box.offset, box.offset + box.size);
         }
-        if (this._ftypData && this._moovData) {
-          this._initSegment = Buffer.concat([this._ftypData, this._moovData]);
-          this._initSegmentResolve?.(this._initSegment);
-          this._initSegmentResolve = null;
-          this._initSegmentReject = null;
+        if (box.type === 'moov' && !this._moovData) {
+          this._moovData = data.subarray(box.offset, box.offset + box.size);
         }
       }
-
-      // fragments() generator gets only media fragments (moof+mdat)
-      const isMediaFragment = boxes.some((b) => b.type === 'moof');
-      if (isMediaFragment) {
-        this.pushFragment(boxData, info);
+      if (this._ftypData && this._moovData) {
+        this._initSegment = Buffer.concat([this._ftypData, this._moovData]);
+        this._initSegmentResolve?.(this._initSegment);
+        this._initSegmentResolve = null;
+        this._initSegmentReject = null;
       }
+    }
+
+    // fragments() generator gets only media fragments (moof+mdat)
+    if (boxes.some((b) => b.type === 'moof')) {
+      this.pushFragment(data, info);
     }
   }
 
