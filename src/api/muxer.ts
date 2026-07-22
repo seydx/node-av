@@ -1880,6 +1880,19 @@ export class Muxer implements AsyncDisposable, Disposable {
 
     this.isClosed = true;
 
+    // A header write launched by a concurrent writePacket() must settle before
+    // teardown: nulling pb / freeing the format context under a running
+    // avformat_write_header() crashes on the worker thread. This happens when a
+    // pipeline is stopped mid-startup - the reader task rejects the shared
+    // completion while the writer task is still inside its first writePacket().
+    if (this.headerWritePromise) {
+      try {
+        await this.headerWritePromise;
+      } catch {
+        // Ignore errors - teardown proceeds either way
+      }
+    }
+
     // Close write queue and wait for worker to finish.
     // The worker catches its own errors, but guard the await anyway so a
     // failed worker can never abort cleanup - resources below must always
