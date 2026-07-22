@@ -267,7 +267,9 @@ export interface DemuxerOptions<F extends DemuxerFormat | (string & {}) = Demuxe
    * AbortSignal for cancellation.
    *
    * When aborted, async generators stop yielding and async methods throw AbortError.
-   * The demux thread is stopped automatically.
+   * The demux thread is stopped automatically. Aborting also fires the native
+   * interrupt callback, unblocking a blocking open (e.g. an unresponsive RTSP
+   * source) or a stalled av_read_frame().
    */
   signal?: AbortSignal;
 }
@@ -692,6 +694,15 @@ export class Demuxer implements AsyncDisposable, Disposable {
     let optionsDict: Dictionary | null = null;
     let inputFormat: InputFormat | null = null;
 
+    // Abort during the open phase: avformat_open_input()/find_stream_info()
+    // block for seconds on an unresponsive network source, so the signal must
+    // fire the native interrupt callback to unblock them.
+    const onOpenAbort = () => formatContext.interrupt();
+    if (options.signal) {
+      options.signal.throwIfAborted();
+      options.signal.addEventListener('abort', onOpenAbort, { once: true });
+    }
+
     try {
       // Create options dictionary if options are provided
       if (options.options) {
@@ -820,12 +831,30 @@ export class Demuxer implements AsyncDisposable, Disposable {
       const demuxer = new Demuxer(formatContext, fullOptions, ioContext);
 
       if (options.signal) {
-        options.signal.throwIfAborted();
-        demuxer.signal = options.signal;
+        const signal = options.signal;
+        signal.removeEventListener('abort', onOpenAbort);
+        demuxer.signal = signal;
+
+        // An abort that raced the successful open must not hand out a usable
+        // demuxer - tear it down and surface the abort instead.
+        if (signal.aborted) {
+          await demuxer.close();
+          signal.throwIfAborted();
+        }
+
+        // Keep abort -> interrupt wired for the demuxer's lifetime so a
+        // blocked av_read_frame() unwinds too; close() removes the listener.
+        const onAbort = () => {
+          demuxer.demuxThreadActive = false;
+          demuxer.interrupt();
+        };
+        signal.addEventListener('abort', onAbort, { once: true });
+        demuxer.signalCleanup = () => signal.removeEventListener('abort', onAbort);
       }
 
       return demuxer;
     } catch (error) {
+      options.signal?.removeEventListener('abort', onOpenAbort);
       // Clean up only on error
       if (ioContext) {
         // Clear the pb reference first
