@@ -10,6 +10,7 @@ import { StreamingUtils } from '../src/api/utilities/streaming.js';
 import { AV_CODEC_ID_AAC, AV_CODEC_ID_H264, AV_CODEC_ID_OPUS } from '../src/constants/constants.js';
 import { AVERROR_EIO, AVMEDIA_TYPE_AUDIO, AVMEDIA_TYPE_VIDEO, AVSEEK_CUR, AVSEEK_END, AVSEEK_SET, AVSEEK_SIZE, FFmpegError } from '../src/index.js';
 import { getInputFile, prepareTestEnvironment } from './index.js';
+import type { AddressInfo } from 'node:net';
 
 import type { AVSeekWhence, IOInputCallbacks } from '../src/index.js';
 
@@ -1554,6 +1555,28 @@ describe('Demuxer', () => {
       await assert.rejects(() => media.seek(0), { name: 'AbortError' });
 
       await media.close();
+    });
+
+    it('should unblock a hanging network open when the signal aborts', async () => {
+      const net = await import('node:net');
+      // Accepts the TCP connection but never answers - avformat_open_input()
+      // blocks in the RTSP handshake until the interrupt callback fires.
+      const server = net.createServer(() => {});
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+      const port = (server.address() as AddressInfo).port;
+
+      const controller = new AbortController();
+      const abortTimer = setTimeout(() => controller.abort(), 200);
+
+      try {
+        const startedAt = Date.now();
+        await assert.rejects(Demuxer.open(`rtsp://127.0.0.1:${port}/stream`, { signal: controller.signal }), 'open must reject after abort');
+        const elapsed = Date.now() - startedAt;
+        assert.ok(elapsed < 5000, `open must unblock shortly after abort, took ${elapsed}ms`);
+      } finally {
+        clearTimeout(abortTimer);
+        server.close();
+      }
     });
   });
 });

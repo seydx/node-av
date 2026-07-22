@@ -14,6 +14,7 @@ const inputFile = getInputFile('video.mp4');
 interface FMP4StreamInternals {
   processBoxMode: (chunk: Buffer) => void;
   incompleteBoxBuffer: Buffer | null;
+  pendingFragment: { raw: Buffer }[];
   endFragments: () => void;
 }
 
@@ -61,6 +62,7 @@ function mediaFragment(marker: number): Buffer {
 interface ParseResult {
   types: string[];
   sizes: number[];
+  groups: string[][];
   emitted: Buffer;
   leftover: Buffer;
 }
@@ -69,10 +71,12 @@ function parseChunked(full: Buffer, boundaries: number[]): ParseResult {
   const emitted: Buffer[] = [];
   const types: string[] = [];
   const sizes: number[] = [];
+  const groups: string[][] = [];
   const stream = FMP4Stream.create('unused', {
     boxMode: true,
     onData: (data: Buffer, info: FMP4Data) => {
       emitted.push(Buffer.from(data));
+      groups.push(info.boxes.map((b) => b.type));
       for (const b of info.boxes) {
         types.push(b.type);
         sizes.push(b.size);
@@ -89,11 +93,19 @@ function parseChunked(full: Buffer, boundaries: number[]): ParseResult {
     }
   }
 
+  // Unemitted parser state, in stream order: a fragment held back for its mdat
+  // comes before the trailing partial box.
+  const held = internals.pendingFragment.map((p) => Buffer.from(p.raw));
+  if (internals.incompleteBoxBuffer) {
+    held.push(Buffer.from(internals.incompleteBoxBuffer));
+  }
+
   return {
     types,
     sizes,
+    groups,
     emitted: Buffer.concat(emitted),
-    leftover: internals.incompleteBoxBuffer ? Buffer.from(internals.incompleteBoxBuffer) : Buffer.alloc(0),
+    leftover: Buffer.concat(held),
   };
 }
 
@@ -162,6 +174,14 @@ describe('FMP4Stream', () => {
         assert.deepEqual(result.sizes, baseline.sizes, `${name}: box sizes must match baseline`);
         assert.ok(result.emitted.equals(baseline.emitted), `${name}: emitted bytes must match baseline`);
         assert.equal(result.leftover.length, 0, `${name}: no bytes may be left over`);
+
+        // Fragment alignment: no split may ever separate a moof from its mdat
+        for (const group of result.groups) {
+          if (group.includes('moof')) {
+            assert.ok(group.includes('mdat'), `${name}: a moof emission must carry its mdat (got [${group.join(' ')}])`);
+          }
+          assert.ok(!(group.includes('mdat') && !group.includes('moof')), `${name}: no standalone mdat emission (got [${group.join(' ')}])`);
+        }
       }
     });
 
@@ -198,6 +218,137 @@ describe('FMP4Stream', () => {
       assert.deepEqual(byteByByte.sizes, baseline.sizes);
       assert.ok(byteByByte.emitted.equals(baseline.emitted));
       assert.equal(byteByByte.leftover.length, 0);
+    });
+  });
+
+  describe('fragment alignment', () => {
+    it('holds a moof until its mdat arrives when the write splits between them', () => {
+      const groups: string[][] = [];
+      const stream = FMP4Stream.create('unused', {
+        boxMode: true,
+        onData: (_data: Buffer, info: FMP4Data) => groups.push(info.boxes.map((b) => b.type)),
+      });
+      const internals = internalsOf(stream);
+
+      const moof = box('moof', 24);
+      const mdat = box('mdat', 5000);
+
+      // avio flush boundary right after the moof (the split observed with
+      // fragments larger than the muxer buffer)
+      internals.processBoxMode(moof);
+      assert.deepEqual(groups, [], 'A bare moof must not be emitted');
+      assert.equal(internals.pendingFragment.length, 1, 'The moof must be held');
+
+      // mdat body arrives in several chunks
+      internals.processBoxMode(mdat.subarray(0, 2000));
+      internals.processBoxMode(mdat.subarray(2000, 4000));
+      assert.deepEqual(groups, [], 'A partial mdat must not trigger an emission');
+      internals.processBoxMode(mdat.subarray(4000));
+
+      assert.deepEqual(groups, [['moof', 'mdat']], 'moof and mdat must be emitted as one fragment');
+    });
+
+    it('emits fragment-aligned onData for a real stream with a tiny I/O buffer', async () => {
+      const groups: string[][] = [];
+      let onClose!: (error?: Error) => void;
+      const closed = new Promise<void>((resolve, reject) => {
+        onClose = (error) => (error ? reject(error) : resolve());
+      });
+
+      const stream = FMP4Stream.create(inputFile, {
+        supportedCodecs: 'avc1,mp4a.40.2', // Stream copy
+        boxMode: true,
+        // Far below the fragment size: every fragment is split across many
+        // avio flushes. Regression: consumers received a bare moof followed
+        // by a detached mdat and could not play the fragment.
+        bufferSize: 4096,
+        onData: (_data: Buffer, info: FMP4Data) => groups.push(info.boxes.map((b) => b.type)),
+        onClose,
+      });
+
+      await stream.start();
+      await withTimeout(closed, 30000);
+      await stream.stop();
+
+      const fragmentGroups = groups.filter((g) => g.includes('moof'));
+      assert.ok(fragmentGroups.length > 1, 'Should emit multiple media fragments');
+      for (const group of fragmentGroups) {
+        assert.ok(group.includes('mdat'), `Every fragment emission must carry its mdat (got [${group.join(' ')}])`);
+      }
+      assert.ok(!groups.some((g) => g.includes('mdat') && !g.includes('moof')), 'No standalone mdat may be emitted');
+    });
+  });
+
+  describe('stop during start', () => {
+    it('never leaves an orphaned pipeline producing data after stop() returned', async () => {
+      for (const delayMs of [0, 1, 5]) {
+        let dataAfterStop = 0;
+        let stopped = false;
+        const lateBoxes: string[] = [];
+
+        const stream = FMP4Stream.create(inputFile, {
+          supportedCodecs: 'avc1,mp4a.40.2',
+          boxMode: true,
+          onData: (_data: Buffer, info: FMP4Data) => {
+            if (stopped) {
+              dataAfterStop++;
+              lateBoxes.push(info.boxes.map((b) => b.type).join('+'));
+            }
+          },
+        });
+
+        const startPromise = stream.start().catch(() => {});
+        if (delayMs > 0) {
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+        }
+        await stream.stop();
+        stopped = true;
+        await startPromise;
+
+        // an orphaned pipeline would keep emitting here
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        const s = stream as unknown as Record<string, unknown>;
+        const state = [
+          `pipeline=${!!s.pipeline}`,
+          `input=${!!s.input}`,
+          `output=${!!s.output}`,
+          `startPromise=${!!s.startPromise}`,
+          `stopPromise=${!!s.stopPromise}`,
+          `lateBoxes=[${lateBoxes.join(' | ')}]`,
+        ].join(' ');
+        assert.equal(dataAfterStop, 0, `stop() after ${delayMs}ms must not leave a running pipeline (${state})`);
+      }
+    });
+
+    it('remains restartable after a stop that aborted the startup', async () => {
+      const stream = FMP4Stream.create(inputFile, {
+        supportedCodecs: 'avc1,mp4a.40.2',
+        boxMode: true,
+      });
+
+      const first = stream.start().catch(() => {});
+      await stream.stop();
+      await first;
+
+      // fresh start must run through to a working stream
+      let sawFragment!: () => void;
+      const fragment = new Promise<void>((resolve) => (sawFragment = resolve));
+      (stream as unknown as { options: { onData: (d: Buffer, i: FMP4Data) => void } }).options.onData = (_d, info) => {
+        if (info.boxes.some((b) => b.type === 'moof')) sawFragment();
+      };
+
+      await stream.start();
+      await withTimeout(fragment, 15000);
+      await stream.stop();
+    });
+
+    it('shares one teardown between concurrent stop() calls', async () => {
+      const stream = FMP4Stream.create(inputFile, {
+        supportedCodecs: 'avc1,mp4a.40.2',
+        boxMode: true,
+      });
+      await stream.start();
+      await Promise.all([stream.stop(), stream.stop(), stream.stop()]);
     });
   });
 
@@ -397,7 +548,7 @@ describe('FMP4Stream', () => {
     // hevc-short.mp4: 320x240, 15fps, 4s, single keyframe (long GOP in the source).
     // Transcoding to H.264 must bound the encoder GOP to the fragment duration so
     // every fMP4 fragment starts with a keyframe - otherwise frag_duration cuts
-    // fragments mid-GOP on a P-frame and strict consumers (HKSV) reject them.
+    // fragments mid-GOP on a P-frame and strict consumers reject them.
     // Regression test for the missing gopSize on the demuxer transcode path.
     it('bounds the encoder GOP to the fragment duration when transcoding', async () => {
       const hevcInput = getInputFile('hevc-short.mp4');

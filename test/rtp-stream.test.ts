@@ -206,4 +206,51 @@ describe('RTPStream', skipWerift, () => {
       }
     });
   });
+
+  describe('stop during start', () => {
+    it('never leaves an orphaned pipeline producing packets after stop() returned', async () => {
+      const { RTPStream } = await import('../src/webrtc/index.js');
+
+      for (const delayMs of [0, 1, 5]) {
+        let packetsAfterStop = 0;
+        let stopped = false;
+
+        const stream = RTPStream.create(getInputFile('video.mp4'), {
+          onVideoPacket: () => {
+            if (stopped) packetsAfterStop++;
+          },
+        });
+
+        const startPromise = stream.start().catch(() => {});
+        if (delayMs > 0) {
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+        }
+        await stream.stop();
+        stopped = true;
+        await startPromise;
+
+        // an orphaned pipeline would keep emitting here
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        assert.equal(packetsAfterStop, 0, `stop() after ${delayMs}ms must not leave a running pipeline`);
+      }
+    });
+
+    it('remains restartable after a stop that aborted the startup', async () => {
+      const { RTPStream } = await import('../src/webrtc/index.js');
+
+      let sawPacket!: () => void;
+      const packet = new Promise<void>((resolve) => (sawPacket = resolve));
+      const stream = RTPStream.create(getInputFile('video.mp4'), {
+        onVideoPacket: () => sawPacket(),
+      });
+
+      const first = stream.start().catch(() => {});
+      await stream.stop();
+      await first;
+
+      await stream.start();
+      await packet;
+      await stream.stop();
+    });
+  });
 });
