@@ -213,6 +213,9 @@ export class RTPStream {
   private supportedAudioCodecs: Set<AVCodecID | FFAudioEncoder>;
   private videoKeyframeRequested = false;
   private abortHandler?: () => void;
+  private stopRequested = false;
+  private stopPromise?: Promise<void>;
+  private startAbort?: AbortController;
 
   /**
    * @param input - Media input URL or pre-opened Demuxer
@@ -447,6 +450,12 @@ export class RTPStream {
    * @internal
    */
   private async doStart(): Promise<void> {
+    // A start racing an in-flight stop() waits for the teardown to finish,
+    // otherwise it would build the pipeline on top of freed resources.
+    if (this.stopPromise) {
+      await this.stopPromise;
+    }
+
     if (this.pipeline) {
       return;
     }
@@ -463,6 +472,10 @@ export class RTPStream {
       this.signal.addEventListener('abort', this.abortHandler, { once: true });
     }
 
+    // Lets stop() interrupt a startup that is blocked in the input open
+    // (an RTSP connect can take seconds).
+    this.startAbort = new AbortController();
+
     // Frame-source path: encode pre-composited frames directly (no demuxer/decoder).
     if (this.source) {
       await this.startFromFrames();
@@ -473,8 +486,10 @@ export class RTPStream {
       if (!this.inputUrl) {
         throw new Error('No input URL or Demuxer provided');
       }
-      this.input = await Demuxer.open(this.inputUrl, this.inputOptions);
+      const openSignal = this.signal ? AbortSignal.any([this.signal, this.startAbort.signal]) : this.startAbort.signal;
+      this.input = await Demuxer.open(this.inputUrl, { ...this.inputOptions, signal: openSignal });
     }
+    this.throwIfStopRequested();
 
     const videoStream = this.input.video();
     const audioStream = this.input.audio();
@@ -576,10 +591,12 @@ export class RTPStream {
         maxBFrames: 0,
         options: encoderOptions,
       });
+      this.throwIfStopRequested();
     }
 
     // Setup video output
     this.videoOutput = await this.createVideoOutput();
+    this.throwIfStopRequested();
 
     // Setup audio if available and needs transcoding
     if (audioStream && !this.isAudioCodecSupported(audioStream.codecpar.codecId)) {
@@ -636,15 +653,34 @@ export class RTPStream {
         filter: this.audioFilter,
         options: encoderOptions,
       });
+      this.throwIfStopRequested();
     }
 
     // Setup audio output if available
     if (audioStream) {
       this.audioOutput = await this.createAudioOutput();
+      this.throwIfStopRequested();
     }
 
     // Start pipeline in background (don't await)
     this.attachCompletion(this.runPipeline());
+  }
+
+  /**
+   * Abort an in-flight startup once stop() was requested.
+   *
+   * Checked after every await in the startup path: the resources created so
+   * far are all assigned to instance fields, so the stop() that is waiting on
+   * this startup tears them down the moment it unwinds.
+   *
+   * @throws {Error} If stop() was called while starting
+   *
+   * @internal
+   */
+  private throwIfStopRequested(): void {
+    if (this.stopRequested) {
+      throw new Error('RTPStream stopped during start');
+    }
   }
 
   /**
@@ -740,6 +776,7 @@ export class RTPStream {
       });
 
       this.videoOutput = await this.createVideoOutput();
+      this.throwIfStopRequested();
       controls.push(pipeline(this.wrapVideoSource(source.video), this.videoEncoder, this.videoOutput, opts));
     }
 
@@ -780,6 +817,7 @@ export class RTPStream {
       });
 
       this.audioOutput = await this.createAudioOutput();
+      this.throwIfStopRequested();
       controls.push(pipeline(source.audio, this.audioFilter, this.audioEncoder, this.audioOutput, opts));
     }
 
@@ -971,55 +1009,89 @@ export class RTPStream {
    * ```
    */
   async stop(): Promise<void> {
+    // Memoized: concurrent stop() calls share one teardown instead of
+    // double-closing native resources.
+    this.stopPromise ??= this.doStop().finally(() => {
+      this.stopPromise = undefined;
+    });
+    await this.stopPromise;
+  }
+
+  /**
+   * Perform the actual teardown (see {@link stop}).
+   *
+   * @internal
+   */
+  private async doStop(): Promise<void> {
+    // An in-flight start() must unwind before teardown - otherwise it would
+    // keep building the pipeline on top of freed resources and leave an
+    // orphaned transcode running forever. The flag makes doStart() bail at its
+    // next checkpoint, the abort unblocks a startup stuck in the input open.
+    this.stopRequested = true;
+    this.startAbort?.abort();
+    this.startAbort = undefined;
+
+    const inflightStart = this.startPromise;
     // Allow a fresh start() after stopping.
     this.startPromise = undefined;
-
-    // Detach the abort listener so it cannot fire for a torn-down session and
-    // does not accumulate across start()/stop() cycles.
-    if (this.abortHandler) {
-      this.signal?.removeEventListener('abort', this.abortHandler);
-      this.abortHandler = undefined;
-    }
-
-    // Stop pipeline if running and wait for completion. pipeline.stop() interrupts
-    // the source demuxer's read (frame-source pipelines unwind via iterator.return
-    // instead). Swallow a rejected completion here - the error is already surfaced
-    // to the caller via the onClose(error) path; we just need cleanup to proceed.
-    if (this.pipeline && !this.pipeline.isStopped()) {
-      this.pipeline.stop();
+    if (inflightStart) {
       try {
-        await this.pipeline.completion;
+        await inflightStart;
       } catch {
-        // Pipeline errored - proceed with teardown regardless.
+        // Aborted or failed startup - resources are torn down below either way.
       }
-      this.pipeline = undefined;
     }
 
-    // Close all resources
-    await this.videoOutput?.close();
-    this.videoOutput = undefined;
-    await this.audioOutput?.close();
-    this.audioOutput = undefined;
+    try {
+      // Detach the abort listener so it cannot fire for a torn-down session and
+      // does not accumulate across start()/stop() cycles.
+      if (this.abortHandler) {
+        this.signal?.removeEventListener('abort', this.abortHandler);
+        this.abortHandler = undefined;
+      }
 
-    this.videoEncoder?.close();
-    this.videoEncoder = undefined;
-    this.videoFilter?.close();
-    this.videoFilter = undefined;
-    this.videoDecoder?.close();
-    this.videoDecoder = undefined;
+      // Stop pipeline if running and wait for completion. pipeline.stop() interrupts
+      // the source demuxer's read (frame-source pipelines unwind via iterator.return
+      // instead). Swallow a rejected completion here - the error is already surfaced
+      // to the caller via the onClose(error) path; we just need cleanup to proceed.
+      if (this.pipeline && !this.pipeline.isStopped()) {
+        this.pipeline.stop();
+        try {
+          await this.pipeline.completion;
+        } catch {
+          // Pipeline errored - proceed with teardown regardless.
+        }
+        this.pipeline = undefined;
+      }
 
-    this.audioEncoder?.close();
-    this.audioEncoder = undefined;
-    this.audioFilter?.close();
-    this.audioFilter = undefined;
-    this.audioDecoder?.close();
-    this.audioDecoder = undefined;
+      // Close all resources
+      await this.videoOutput?.close();
+      this.videoOutput = undefined;
+      await this.audioOutput?.close();
+      this.audioOutput = undefined;
 
-    this.hardwareContext?.dispose();
-    this.hardwareContext = undefined;
+      this.videoEncoder?.close();
+      this.videoEncoder = undefined;
+      this.videoFilter?.close();
+      this.videoFilter = undefined;
+      this.videoDecoder?.close();
+      this.videoDecoder = undefined;
 
-    await this.input?.close();
-    this.input = undefined;
+      this.audioEncoder?.close();
+      this.audioEncoder = undefined;
+      this.audioFilter?.close();
+      this.audioFilter = undefined;
+      this.audioDecoder?.close();
+      this.audioDecoder = undefined;
+
+      this.hardwareContext?.dispose();
+      this.hardwareContext = undefined;
+
+      await this.input?.close();
+      this.input = undefined;
+    } finally {
+      this.stopRequested = false;
+    }
   }
 
   /**
