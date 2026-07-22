@@ -181,8 +181,9 @@ describe('RTPStream', skipWerift, () => {
 
         const encoder = (stream as unknown as { videoEncoder?: unknown }).videoEncoder;
         assert.ok(encoder, 'transcode path must create a video encoder');
-        const ctx = (encoder as { codecContext: { rcMaxRate: bigint; rcBufferSize: number } }).codecContext;
-        assert.equal(ctx.rcMaxRate, 300000n, 'bitrate must land as VBV maxrate, not a target');
+        const ctx = (encoder as { codecContext: { bitRate: bigint; rcMaxRate: bigint; rcBufferSize: number } }).codecContext;
+        assert.equal(ctx.bitRate, 300000n, 'target must be lowered to the cap, VAAPI rejects target > maxrate');
+        assert.equal(ctx.rcMaxRate, 300000n, 'bitrate must land as VBV maxrate');
         assert.equal(ctx.rcBufferSize, 300000, 'VBV buffer must bound bursts to ~1s');
       } finally {
         await stream.stop();
@@ -214,6 +215,49 @@ describe('RTPStream', skipWerift, () => {
         assert.strictEqual(rejections.length, 0, `unhandled rejections after abort: ${String(rejections[0])}`);
       } finally {
         process.off('unhandledRejection', onRejection);
+      }
+    });
+
+    it('reports a deliberate stop as a clean close, not a pipeline error', async () => {
+      const { RTPStream } = await import('../src/webrtc/index.js');
+
+      const closeArgs: (Error | undefined)[] = [];
+      const consoleErrors: string[] = [];
+      const origError = console.error;
+      console.error = (...args: unknown[]) => {
+        consoleErrors.push(args.map(String).join(' '));
+      };
+
+      let sawPacket!: () => void;
+      const firstPacket = new Promise<void>((resolve) => (sawPacket = resolve));
+
+      try {
+        const controller = new AbortController();
+        const stream = RTPStream.create(getInputFile('hevc-short.mp4'), {
+          signal: controller.signal,
+          supportedVideoCodecs: [FF_ENCODER_LIBX264], // forced transcode keeps the pipeline busy mid-stop
+          onVideoPacket: () => sawPacket(),
+          onClose: (error) => closeArgs.push(error),
+        });
+
+        await stream.start();
+        await withTimeout(firstPacket, 15000);
+        controller.abort();
+
+        const deadline = Date.now() + 5000;
+        while (stream.isStreamActive && Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+        await stream.stop();
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
+        assert.ok(
+          closeArgs.every((error) => error === undefined),
+          `onClose must not receive an error on deliberate shutdown: ${String(closeArgs.find(Boolean))}`,
+        );
+        assert.strictEqual(consoleErrors.filter((line) => line.includes('Pipeline error')).length, 0, 'a deliberate stop must not log a pipeline error');
+      } finally {
+        console.error = origError;
       }
     });
 

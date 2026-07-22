@@ -693,11 +693,9 @@ export class RTPStream {
   /**
    * Cap the video bitrate on the encoder context.
    *
-   * Applies a VBV rate cap (maxrate + a 1s buffer) WITHOUT setting a target
-   * bitrate, so the encoder keeps its default constant-quality mode but can
-   * never exceed the negotiated ceiling. Setting the bitrate as an ABR target
-   * instead would push a normally-lighter stream UP to fill it, overshooting
-   * on bursts.
+   * Sets the target bitrate together with a VBV cap (maxrate + a 1s buffer).
+   * Encoder.create() always seeds a default target bitrate (1 Mbps for video),
+   * so the target MUST be lowered along with the cap.
    *
    * @param ctx - Encoder codec context
    *
@@ -709,8 +707,10 @@ export class RTPStream {
     if (!bitrate || bitrate <= 0) {
       return;
     }
-    ctx.rcMaxRate = BigInt(Math.round(bitrate));
-    ctx.rcBufferSize = Math.round(bitrate);
+    const rate = Math.round(bitrate);
+    ctx.bitRate = BigInt(rate);
+    ctx.rcMaxRate = BigInt(rate);
+    ctx.rcBufferSize = rate;
   }
 
   /**
@@ -730,10 +730,31 @@ export class RTPStream {
         this.options.onClose?.();
       })
       .catch(async (error) => {
+        // A stop() in flight or an aborted signal means the owner is tearing
+        // the stream down - the pipeline unwinding with an AbortError (or an
+        // interrupted FFmpeg call) is the expected shutdown path, not a failure.
+        if (this.isDeliberateStop(error)) {
+          await this.stop().catch(() => {});
+          this.options.onClose?.();
+          return;
+        }
         console.error('[RTPStream] Pipeline error:', error);
         await this.stop();
         this.options.onClose?.(error);
       });
+  }
+
+  /**
+   * Whether a pipeline rejection was caused by an intentional shutdown.
+   *
+   * @param error - The pipeline rejection reason
+   *
+   * @returns True when stop() is in flight or the owner's signal aborted
+   *
+   * @internal
+   */
+  private isDeliberateStop(error: unknown): boolean {
+    return this.stopRequested || this.stopPromise !== undefined || this.signal?.aborted === true || (error instanceof Error && error.name === 'AbortError');
   }
 
   /**

@@ -951,9 +951,30 @@ export class FMP4Stream {
         // Reject with the pipeline error so an initSegment consumer sees the
         // actual failure instead of the generic "stopped" error from stop().
         this.rejectInitSegment(error instanceof Error ? error : new Error(String(error)));
+        // A stop() in flight or an aborted signal means the owner is tearing
+        // the stream down - the pipeline unwinding with an AbortError is the
+        // expected shutdown path, not a failure.
+        if (this.isDeliberateStop(error)) {
+          await this.stop().catch(() => {});
+          this.options.onClose?.();
+          return;
+        }
         await this.stop();
         this.options.onClose?.(error);
       });
+  }
+
+  /**
+   * Whether a pipeline rejection was caused by an intentional shutdown.
+   *
+   * @param error - The pipeline rejection reason
+   *
+   * @returns True when stop() is in flight or the owner's signal aborted
+   *
+   * @internal
+   */
+  private isDeliberateStop(error: unknown): boolean {
+    return this.stopRequested || this.stopPromise !== undefined || this.signal?.aborted === true || (error instanceof Error && error.name === 'AbortError');
   }
 
   /**
