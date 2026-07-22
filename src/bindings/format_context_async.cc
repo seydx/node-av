@@ -75,6 +75,23 @@ Napi::Value FormatContext::OpenInputAsync(const Napi::CallbackInfo& info) {
     // If we already have a context (e.g., for custom I/O), use it
     AVFormatContext* ctx = self->ctx_;
 
+    // URL path: avformat_open_input() would allocate the context itself,
+    // without our interrupt callback - a blocking network open (unresponsive
+    // RTSP source) could then never be unblocked via Interrupt(). Pre-allocate
+    // so the callback is wired before any I/O starts. The flag reset matches
+    // AllocContext: a stale interrupt from a previous close/open on this
+    // wrapper must not abort a fresh open (JS re-checks its AbortSignal after
+    // the open, so an abort racing this reset still takes effect).
+    if (!ctx) {
+      ctx = avformat_alloc_context();
+      if (!ctx) {
+        return AVERROR(ENOMEM);
+      }
+      ctx->interrupt_callback.callback = InterruptCallback;
+      ctx->interrupt_callback.opaque = self;
+      self->interrupt_requested_.store(false);
+    }
+
     // For custom I/O, pass NULL as URL
     const char* urlPtr = nullptr;
     if (!url.empty() && url != "dummy") {

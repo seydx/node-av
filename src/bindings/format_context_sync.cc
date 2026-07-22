@@ -168,6 +168,21 @@ Napi::Value FormatContext::OpenInputSync(const Napi::CallbackInfo& info) {
   // If we already have a context (e.g., for custom I/O), preserve it
   AVFormatContext* ctx = ctx_;
 
+  // URL path: pre-allocate so the interrupt callback is wired before any I/O
+  // starts (avformat_open_input() would allocate without it). The flag reset
+  // matches AllocContext: a stale interrupt from a previous close/open on
+  // this wrapper must not abort a fresh open.
+  if (!ctx) {
+    ctx = avformat_alloc_context();
+    if (!ctx) {
+      Napi::Error::New(env, "Out of memory allocating format context").ThrowAsJavaScriptException();
+      return env.Undefined();
+    }
+    ctx->interrupt_callback.callback = InterruptCallback;
+    ctx->interrupt_callback.opaque = this;
+    interrupt_requested_.store(false);
+  }
+
   // Direct synchronous call
   const char* urlPtr = url.empty() || url == "dummy" ? nullptr : url.c_str();
   int ret = avformat_open_input(&ctx, urlPtr, fmt, options ? &options : nullptr);
