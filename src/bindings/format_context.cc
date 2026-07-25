@@ -884,11 +884,17 @@ void FormatContext::SetPb(const Napi::CallbackInfo& info, const Napi::Value& val
   if (io) {
     // Set the custom IO context
     ctx->pb = io->Get();
-    
-    // CRITICAL: Set AVFMT_FLAG_CUSTOM_IO to indicate we're using custom IO
-    // This tells FFmpeg's avformat_close_input() to NOT free our pb
-    ctx->flags |= AVFMT_FLAG_CUSTOM_IO;
-    
+
+    // AVFMT_FLAG_CUSTOM_IO marks a pb that libavformat must never close for us
+    // (avformat_close_input() would otherwise avio_closep() it). Only
+    // callback-backed contexts qualify: a pb opened via avio_open2() owns a
+    // protocol handle that still has to be released with avio_closep(), and
+    // flagging it as custom IO would leak the file descriptor / Windows HANDLE
+    // - the file then stays locked until the process exits.
+    if (io->callback_data_) {
+      ctx->flags |= AVFMT_FLAG_CUSTOM_IO;
+    }
+
     // We never own custom pb - IOContext keeps ownership
   }
 }

@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 import { createWriteStream } from 'node:fs';
-import { readFile, stat, unlink } from 'node:fs/promises';
+import { readFile, rename, stat, unlink } from 'node:fs/promises';
 import { describe, it } from 'node:test';
 
 import {
@@ -216,6 +216,68 @@ describe('Muxer', () => {
       packet.free();
       await output.close();
       ws.end();
+      await cleanup();
+    });
+  });
+
+  describe('file handle release', () => {
+    // Closing a file-based muxer must avio_closep() the AVIOContext, not just
+    // free it: a leaked protocol handle keeps the file locked on Windows, so
+    // renaming/deleting it fails with EBUSY until the process exits.
+    const writeSomePackets = async (outputFile: string) => {
+      await using input = await Demuxer.open(inputFile);
+      const output = await Muxer.open(outputFile);
+      const videoStream = input.video()!;
+      const streamIdx = output.addStream(videoStream);
+
+      let count = 0;
+      for await (const packet of input.packets(videoStream.index)) {
+        await output.writePacket(packet, streamIdx);
+        packet.free();
+        if (++count >= 10) break;
+      }
+
+      return output;
+    };
+
+    it('should release the output file after close (async)', async () => {
+      const outputFile = getTempFile('mp4');
+      const renamed = `${outputFile}.renamed`;
+      tempFiles.push(renamed);
+
+      const output = await writeSomePackets(outputFile);
+      await output.close();
+
+      await rename(outputFile, renamed);
+      await unlink(renamed);
+      await cleanup();
+    });
+
+    it('should release the output file after closeSync (sync)', async () => {
+      const outputFile = getTempFile('mp4');
+      const renamed = `${outputFile}.renamed`;
+      tempFiles.push(renamed);
+
+      const output = await writeSomePackets(outputFile);
+      output.closeSync();
+
+      await rename(outputFile, renamed);
+      await unlink(renamed);
+      await cleanup();
+    });
+
+    it('should release the output file when open fails (async)', async () => {
+      const outputFile = getTempFile('mp4');
+      const renamed = `${outputFile}.renamed`;
+      tempFiles.push(renamed);
+
+      // Aborting after the file was opened takes the error cleanup path
+      const controller = new AbortController();
+      controller.abort();
+      await assert.rejects(() => Muxer.open(outputFile, { signal: controller.signal }), { name: 'AbortError' });
+
+      await rename(outputFile, renamed);
+      await unlink(renamed);
       await cleanup();
     });
   });

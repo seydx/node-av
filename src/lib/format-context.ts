@@ -269,6 +269,8 @@ export class FormatContext extends OptionMember<NativeFormatContext> implements 
    * Custom I/O context.
    *
    * For custom I/O operations instead of file I/O.
+   * Assigning a callback-backed context also sets AVFMT_FLAG_CUSTOM_IO so libavformat never closes it.
+   * A context opened with open2() keeps its protocol handle and must be released with closep().
    *
    * Direct mapping to AVFormatContext->pb.
    */
