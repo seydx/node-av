@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 import { createReadStream, readFileSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { copyFile, readFile, rename, unlink } from 'node:fs/promises';
 import { Readable } from 'node:stream';
 import { after, describe, it } from 'node:test';
 
@@ -8,8 +8,19 @@ import { Demuxer } from '../src/api/index.js';
 import { IOStream } from '../src/api/io-stream.js';
 import { StreamingUtils } from '../src/api/utilities/streaming.js';
 import { AV_CODEC_ID_AAC, AV_CODEC_ID_H264, AV_CODEC_ID_OPUS } from '../src/constants/constants.js';
-import { AVERROR_EIO, AVMEDIA_TYPE_AUDIO, AVMEDIA_TYPE_VIDEO, AVSEEK_CUR, AVSEEK_END, AVSEEK_SET, AVSEEK_SIZE, FFmpegError } from '../src/index.js';
-import { getInputFile, prepareTestEnvironment } from './index.js';
+import {
+  AVERROR_EIO,
+  AVIO_FLAG_READ,
+  AVMEDIA_TYPE_AUDIO,
+  AVMEDIA_TYPE_VIDEO,
+  AVSEEK_CUR,
+  AVSEEK_END,
+  AVSEEK_SET,
+  AVSEEK_SIZE,
+  FFmpegError,
+  IOContext,
+} from '../src/index.js';
+import { getInputFile, getOutputFile, prepareTestEnvironment } from './index.js';
 import type { AddressInfo } from 'node:net';
 
 import type { AVSeekWhence, IOInputCallbacks } from '../src/index.js';
@@ -246,6 +257,40 @@ describe('Demuxer', () => {
       assert.ok(packetCount > 0, 'Should have read packets');
 
       media.closeSync();
+    });
+
+    it('should release a native IOContext opened with open2 (async)', async () => {
+      // Closing the demuxer must avio_closep() a caller-supplied protocol-backed
+      // context - merely freeing it leaks the handle and locks the file on Windows
+      const tempFile = getOutputFile(`demuxer-io-release-${Date.now()}.mp4`);
+      const renamed = `${tempFile}.renamed`;
+      await copyFile(inputFile, tempFile);
+
+      const ioContext = new IOContext();
+      FFmpegError.throwIfError(await ioContext.open2(tempFile, AVIO_FLAG_READ), 'open2');
+
+      const media = await Demuxer.open(ioContext, { format: 'mp4' });
+      assert.ok(media.streams.length > 0, 'Should have streams');
+      await media.close();
+
+      await rename(tempFile, renamed);
+      await unlink(renamed);
+    });
+
+    it('should release a native IOContext opened with open2 (sync)', async () => {
+      const tempFile = getOutputFile(`demuxer-io-release-sync-${Date.now()}.mp4`);
+      const renamed = `${tempFile}.renamed`;
+      await copyFile(inputFile, tempFile);
+
+      const ioContext = new IOContext();
+      FFmpegError.throwIfError(ioContext.open2Sync(tempFile, AVIO_FLAG_READ), 'open2Sync');
+
+      const media = Demuxer.openSync(ioContext, { format: 'mp4' });
+      assert.ok(media.streams.length > 0, 'Should have streams');
+      media.closeSync();
+
+      await rename(tempFile, renamed);
+      await unlink(renamed);
     });
 
     it('should require format for native IOContext (async)', async () => {

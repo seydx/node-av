@@ -232,6 +232,7 @@ describe('Muxer', () => {
 
       let count = 0;
       for await (const packet of input.packets(videoStream.index)) {
+        if (!packet) break;
         await output.writePacket(packet, streamIdx);
         packet.free();
         if (++count >= 10) break;

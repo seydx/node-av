@@ -379,10 +379,11 @@ export class IOContext extends OptionMember<NativeIOContext> implements Disposab
    *
    * Closes the I/O context and releases associated resources.
    * Flushes any buffered data before closing.
+   * A context that was already closed or freed is a no-op, matching avio_close() on a null context.
    *
    * Direct mapping to avio_closep().
    *
-   * @returns 0 on success, negative AVERROR on error
+   * @returns 0 on success or when there was nothing left to close, negative AVERROR on error
    *
    * @example
    * ```typescript
@@ -404,10 +405,11 @@ export class IOContext extends OptionMember<NativeIOContext> implements Disposab
    *
    * Closes the I/O context and frees resources.
    * Sets internal pointer to NULL.
+   * A context that was already closed or freed is a no-op, matching avio_close() on a null context.
    *
    * Direct mapping to avio_closep().
    *
-   * @returns 0 on success, negative AVERROR on error
+   * @returns 0 on success or when there was nothing left to close, negative AVERROR on error
    *
    * @example
    * ```typescript
