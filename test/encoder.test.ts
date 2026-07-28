@@ -297,10 +297,9 @@ describe('Encoder', () => {
     // one, so the forced keyframe is unambiguous.
     const forcedKeyframeEncoder = () =>
       Encoder.create(FF_ENCODER_LIBX264, {
-        timeBase: new Rational(1, 30),
         gopSize: 1000,
         maxBFrames: 0,
-        options: { preset: 'ultrafast', tune: 'zerolatency', 'forced-idr': 1 },
+        options: { preset: 'ultrafast', tune: 'zerolatency', 'forced-idr': true },
       });
 
     it('should not force a keyframe from pictType by default', async () => {
@@ -313,11 +312,10 @@ describe('Encoder', () => {
 
     it('should force a keyframe from pictType when preserveFramePictType is set', async () => {
       const encoder = await Encoder.create(FF_ENCODER_LIBX264, {
-        timeBase: new Rational(1, 30),
         gopSize: 1000,
         maxBFrames: 0,
         preserveFramePictType: true,
-        options: { preset: 'ultrafast', tune: 'zerolatency', 'forced-idr': 1 },
+        options: { preset: 'ultrafast', tune: 'zerolatency', 'forced-idr': true },
       });
       const keyframes = await keyframeIndices(encoder, 10, 5);
       encoder.close();
