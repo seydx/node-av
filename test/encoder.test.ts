@@ -303,7 +303,7 @@ describe('Encoder', () => {
         options: { preset: 'ultrafast', tune: 'zerolatency', 'forced-idr': 1 },
       });
 
-    it('does not force a keyframe from pictType by default', async () => {
+    it('should not force a keyframe from pictType by default', async () => {
       const encoder = await forcedKeyframeEncoder();
       const keyframes = await keyframeIndices(encoder, 10, 5);
       encoder.close();
@@ -311,7 +311,7 @@ describe('Encoder', () => {
       assert.deepEqual(keyframes, [0], `expected only the initial keyframe, got [${keyframes}]`);
     });
 
-    it('forces a keyframe from pictType when preserveFramePictType is set', async () => {
+    it('should force a keyframe from pictType when preserveFramePictType is set', async () => {
       const encoder = await Encoder.create(FF_ENCODER_LIBX264, {
         timeBase: new Rational(1, 30),
         gopSize: 1000,

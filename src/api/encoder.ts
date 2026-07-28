@@ -282,16 +282,14 @@ export interface EncoderOptions<C = unknown> {
    * Keep each frame's `pictType` instead of clearing it before encoding.
    *
    * By default the encoder resets `frame.pictType` to `AV_PICTURE_TYPE_NONE`,
-   * because when re-encoding a decoded stream the input frames carry frame-type
-   * hints that should not drive the output GOP structure. That clearing also
-   * discards a deliberately requested keyframe: setting
-   * `frame.pictType = AV_PICTURE_TYPE_I` (with `forced-idr` on encoders that
-   * support it) is the standard FFmpeg way to force an IDR for a specific frame,
-   * and it never reaches the codec.
+   * since decoded input frames carry frame-type hints that should not drive the
+   * output GOP structure when re-encoding. That clearing also discards a
+   * deliberately requested keyframe: setting `frame.pictType = AV_PICTURE_TYPE_I`
+   * (with `forced-idr` on encoders that support it) is the standard FFmpeg way
+   * to force an IDR for a specific frame.
    *
-   * Set this to `true` to honour that request — required for on-demand keyframes
-   * in live streaming (packet-loss recovery, a late-joining viewer, a resized
-   * encode), where a receiver stays black until its first IDR. Leave it `false`
+   * Set to `true` to pass `pictType` through — needed for on-demand keyframes in
+   * live streaming (packet-loss recovery, a late-joining viewer). Leave `false`
    * for transcoding, where the input's frame types should be ignored.
    *
    * @default false
