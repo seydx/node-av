@@ -6,6 +6,7 @@ import {
   AV_CHANNEL_LAYOUT_STEREO,
   AV_CHANNEL_ORDER_UNSPEC,
   AV_NOPTS_VALUE,
+  AV_PICTURE_TYPE_I,
   AV_PIX_FMT_RGB24,
   AV_PIX_FMT_YUV420P,
   AV_PIX_FMT_YUV422P,
@@ -250,6 +251,77 @@ describe('Encoder', () => {
       }
 
       encoder.close();
+    });
+
+    // Encode `count` gradient frames through `encoder`, requesting a forced
+    // keyframe on frame `forceAt` via pictType = I, and return the indices of
+    // the output packets that came out as keyframes.
+    async function keyframeIndices(encoder: Encoder, count: number, forceAt: number): Promise<number[]> {
+      const keyframes: number[] = [];
+      let outIdx = 0;
+      const drain = async (frame: Frame | null): Promise<void> => {
+        for await (using pkt of encodeFrame(encoder, frame)) {
+          if (pkt.isKeyframe) keyframes.push(outIdx);
+          outIdx++;
+        }
+      };
+      for (let i = 0; i < count; i++) {
+        using frame = new Frame();
+        frame.alloc();
+        frame.width = 320;
+        frame.height = 240;
+        frame.format = AV_PIX_FMT_YUV420P;
+        frame.pts = BigInt(i);
+        frame.timeBase = new Rational(1, 30);
+        assert.equal(frame.getBuffer(), 0, 'Should allocate frame buffer');
+        const planes = frame.data;
+        if (planes?.[0]) {
+          const y = planes[0];
+          for (let p = 0; p < 320 * 240; p++) y[p] = (p + i) % 256;
+          if (planes[1] && planes[2]) {
+            const chromaSize = (320 * 240) / 4;
+            for (let p = 0; p < chromaSize; p++) {
+              planes[1][p] = 128;
+              planes[2][p] = 128;
+            }
+          }
+        }
+        if (i === forceAt) frame.pictType = AV_PICTURE_TYPE_I;
+        await drain(frame);
+      }
+      await drain(null); // flush
+      return keyframes;
+    }
+
+    // A long GOP means the only keyframes are the initial IDR and any forced
+    // one, so the forced keyframe is unambiguous.
+    const forcedKeyframeEncoder = () =>
+      Encoder.create(FF_ENCODER_LIBX264, {
+        timeBase: new Rational(1, 30),
+        gopSize: 1000,
+        maxBFrames: 0,
+        options: { preset: 'ultrafast', tune: 'zerolatency', 'forced-idr': 1 },
+      });
+
+    it('does not force a keyframe from pictType by default', async () => {
+      const encoder = await forcedKeyframeEncoder();
+      const keyframes = await keyframeIndices(encoder, 10, 5);
+      encoder.close();
+      // Only the initial IDR; the request on frame 5 is cleared before encoding.
+      assert.deepEqual(keyframes, [0], `expected only the initial keyframe, got [${keyframes}]`);
+    });
+
+    it('forces a keyframe from pictType when preserveFramePictType is set', async () => {
+      const encoder = await Encoder.create(FF_ENCODER_LIBX264, {
+        timeBase: new Rational(1, 30),
+        gopSize: 1000,
+        maxBFrames: 0,
+        preserveFramePictType: true,
+        options: { preset: 'ultrafast', tune: 'zerolatency', 'forced-idr': 1 },
+      });
+      const keyframes = await keyframeIndices(encoder, 10, 5);
+      encoder.close();
+      assert.ok(keyframes.includes(5), `expected a forced keyframe at frame 5, got [${keyframes}]`);
     });
 
     it('should encode video frames (sync)', () => {
