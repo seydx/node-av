@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-## [6.2.0-beta.5] - 2026-07-10
+## [6.2.0-beta.13] - 2026-08-03
 
 ### Added
 
@@ -54,6 +54,7 @@ All notable changes to this project will be documented in this file.
 - **`getOption(name, AV_OPT_TYPE_INT64)` returns exact values** — the getter went through a double and silently truncated values above 2^53; it now reads through a BigInt-returning native path.
 - **Frames with unset timestamps no longer produce garbage.** `AV_NOPTS_VALUE` was rescaled like a real timestamp (`av_rescale_q(INT64_MIN)`) in the encoder and filter paths; it is passed through untouched now.
 - **CI/build reliability:** pushes touching `binding.gyp`, `binding-msvc.gyp`, `scripts/**` or `package.json` now trigger prebuild CI (an msvc-only change could previously merge green and break the release build); a new `check-gyp-sync` script (also `npm run lint:gyp`) fails CI when the three gyp files drift; macOS x64 prebuilds get a Rosetta 2 load smoke test before publishing (previously shipped untested); the MSVC FFmpeg prebuilt is pinned to a tag instead of `releases/latest`; and the install script's build-from-source fallback — impossible from the published tarball — was replaced by an honest unsupported-platform message with a musl/Alpine hint.
+- **`Scaler` no longer grows without bound on varied crop geometries.** The software path pooled one `SwsContext` and one staging `AVFrame` per distinct source/destination geometry and never evicted them, so a workload that crops ever-changing regions (object-detection crops, per-detection thumbnails) leaked native memory for the lifetime of the process — hundreds of MB per day at typical detection rates, invisible to the V8 heap. Both pools are now LRU-bounded (64 contexts, 32 frames); entries evicted while an async scale is still in flight are retired and freed only after the operation completes, never under a running job.
 
 ## [6.1.1] - 2026-07-06
 
