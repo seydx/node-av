@@ -1,7 +1,9 @@
 #pragma once
 
 #include <napi.h>
+#include <list>
 #include <unordered_map>
+#include <vector>
 #include "promise_worker.h"
 
 extern "C" {
@@ -59,8 +61,28 @@ private:
     }
   };
 
-  std::unordered_map<FrameConfig, AVFrame*, FrameConfigHash> frame_pool_;
-  std::unordered_map<SwsConfig, SwsContext*, SwsConfigHash> sws_pool_;
+  // detection crops arrive with per-object geometry, so an uncapped pool grows
+  // with every distinct size the workload ever sees
+  static constexpr size_t kMaxFrameEntries = 32;
+  static constexpr size_t kMaxSwsEntries = 64;
+
+  struct FrameEntry {
+    AVFrame* frame;
+    std::list<FrameConfig>::iterator lru;
+  };
+  struct SwsEntry {
+    SwsContext* sws;
+    std::list<SwsConfig>::iterator lru;
+  };
+
+  std::unordered_map<FrameConfig, FrameEntry, FrameConfigHash> frame_pool_;
+  std::unordered_map<SwsConfig, SwsEntry, SwsConfigHash> sws_pool_;
+  std::list<FrameConfig> frame_lru_;
+  std::list<SwsConfig> sws_lru_;
+
+  // evicted while an async job might still use them; freed once no op is in flight
+  std::vector<AVFrame*> retired_frames_;
+  std::vector<SwsContext*> retired_sws_;
 
   Napi::Value Process(const Napi::CallbackInfo& info);
   Napi::Value ProcessAsync(const Napi::CallbackInfo& info);
@@ -69,6 +91,7 @@ private:
   AVFrame* GetOrCreateFrame(int width, int height, AVPixelFormat format);
   SwsContext* GetOrCreateSwsContext(int src_w, int src_h, AVPixelFormat src_fmt, int dst_w, int dst_h, AVPixelFormat dst_fmt);
 
+  void DrainRetired();
   void CleanupFrames();
   void CleanupSwsContexts();
 

@@ -42,6 +42,10 @@ static AVPixelFormat ParseOutputFormat(const std::string& s, AVPixelFormat fallb
 }
 
 bool Scaler::PrepareJob(Napi::Env env, const Napi::CallbackInfo& info, ScaleJob& job) {
+  // runs on the JS thread before this job registers itself, so idle means no
+  // Execute() can still touch a retired frame/context
+  DrainRetired();
+
   if (info.Length() < 2 || !info[0].IsObject() || !info[1].IsObject()) {
     Napi::TypeError::New(env, "Expected (frame, options)").ThrowAsJavaScriptException();
     return false;
@@ -179,7 +183,10 @@ Napi::Value Scaler::Close(const Napi::CallbackInfo& info) {
 AVFrame* Scaler::GetOrCreateFrame(int width, int height, AVPixelFormat format) {
   FrameConfig config = {width, height, format};
   auto it = frame_pool_.find(config);
-  if (it != frame_pool_.end()) return it->second;
+  if (it != frame_pool_.end()) {
+    frame_lru_.splice(frame_lru_.begin(), frame_lru_, it->second.lru);
+    return it->second.frame;
+  }
 
   AVFrame* frame = av_frame_alloc();
   if (!frame) return nullptr;
@@ -190,33 +197,66 @@ AVFrame* Scaler::GetOrCreateFrame(int width, int height, AVPixelFormat format) {
     av_frame_free(&frame);
     return nullptr;
   }
-  frame_pool_[config] = frame;
+  frame_lru_.push_front(config);
+  frame_pool_[config] = {frame, frame_lru_.begin()};
+
+  if (frame_pool_.size() > kMaxFrameEntries) {
+    auto victim = frame_pool_.find(frame_lru_.back());
+    retired_frames_.push_back(victim->second.frame);
+    frame_pool_.erase(victim);
+    frame_lru_.pop_back();
+  }
   return frame;
 }
 
 SwsContext* Scaler::GetOrCreateSwsContext(int src_w, int src_h, AVPixelFormat src_fmt, int dst_w, int dst_h, AVPixelFormat dst_fmt) {
   SwsConfig config = {src_w, src_h, dst_w, dst_h, src_fmt, dst_fmt};
   auto it = sws_pool_.find(config);
-  if (it != sws_pool_.end()) return it->second;
+  if (it != sws_pool_.end()) {
+    sws_lru_.splice(sws_lru_.begin(), sws_lru_, it->second.lru);
+    return it->second.sws;
+  }
 
   SwsContext* sws = sws_getContext(src_w, src_h, src_fmt, dst_w, dst_h, dst_fmt, flags_, nullptr, nullptr, nullptr);
   if (!sws) return nullptr;
-  sws_pool_[config] = sws;
+  sws_lru_.push_front(config);
+  sws_pool_[config] = {sws, sws_lru_.begin()};
+
+  if (sws_pool_.size() > kMaxSwsEntries) {
+    auto victim = sws_pool_.find(sws_lru_.back());
+    retired_sws_.push_back(victim->second.sws);
+    sws_pool_.erase(victim);
+    sws_lru_.pop_back();
+  }
   return sws;
+}
+
+void Scaler::DrainRetired() {
+  if (async_ops_.Active() > 0) return;
+  for (AVFrame* f : retired_frames_) av_frame_free(&f);
+  retired_frames_.clear();
+  for (SwsContext* s : retired_sws_) sws_freeContext(s);
+  retired_sws_.clear();
 }
 
 void Scaler::CleanupFrames() {
   for (auto& p : frame_pool_) {
-    if (p.second) av_frame_free(&p.second);
+    if (p.second.frame) av_frame_free(&p.second.frame);
   }
   frame_pool_.clear();
+  frame_lru_.clear();
+  for (AVFrame* f : retired_frames_) av_frame_free(&f);
+  retired_frames_.clear();
 }
 
 void Scaler::CleanupSwsContexts() {
   for (auto& p : sws_pool_) {
-    if (p.second) sws_freeContext(p.second);
+    if (p.second.sws) sws_freeContext(p.second.sws);
   }
   sws_pool_.clear();
+  sws_lru_.clear();
+  for (SwsContext* s : retired_sws_) sws_freeContext(s);
+  retired_sws_.clear();
 }
 
 } // namespace ffmpeg
