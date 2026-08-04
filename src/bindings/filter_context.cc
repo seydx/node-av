@@ -320,8 +320,10 @@ Napi::Value FilterContext::BuffersrcParametersSet(const Napi::CallbackInfo& info
   
   // Apply parameters to buffer source
   int ret = av_buffersrc_parameters_set(ctx, par);
-  
-  // Free parameters (av_buffersrc_parameters_set makes internal copies)
+
+  // av_buffersrc_parameters_set makes its own references; the allocated
+  // fields in par stay owned by us and must be released before av_free
+  av_buffer_unref(&par->hw_frames_ctx);
   av_free(par);
   
   return Napi::Number::New(env, ret);
