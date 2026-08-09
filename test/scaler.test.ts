@@ -189,6 +189,20 @@ describe('Scaler', () => {
       }
     });
 
+    it('applies the crop when the target size equals the frame size', async () => {
+      const { frame, width, height, close } = await firstFrame();
+      using scaler = new Scaler();
+      try {
+        const resize = { width, height };
+        const plain = await scaler.toBuffer(frame, { resize, format: 'rgb' });
+        const cropped = await scaler.toBuffer(frame, { crop: { x: 0, y: 0, width: width >> 1, height: height >> 1 }, resize, format: 'rgb' });
+        assert.strictEqual(cropped.length, width * height * 3);
+        assert.ok(!plain.equals(cropped), 'A crop must change the output even when the target size matches the source');
+      } finally {
+        await close();
+      }
+    });
+
     it('rejects an out-of-bounds crop', async () => {
       const { frame, width, height, close } = await firstFrame();
       using scaler = new Scaler();
@@ -444,6 +458,35 @@ describe('Scaler', () => {
 
           // Rejects an out-of-bounds crop on the hardware path too.
           await assert.rejects(scaler.toBuffer(frame, { crop: { x: width - 4, y: 0, width: 64, height: 16 } }), /crop/i);
+        } finally {
+          await close();
+        }
+      } finally {
+        hw.dispose();
+      }
+    });
+
+    it('applies the crop when the target size equals the frame size (GPU)', skipInCI, async () => {
+      const hw = HardwareContext.auto();
+      if (!hw) {
+        console.log('No hardware acceleration available - skipping HW same-size crop test');
+        return;
+      }
+
+      try {
+        const { frame, width, height, close } = await firstFrame(hw);
+        using scaler = new Scaler({ hardware: hw });
+        try {
+          if (!frame.isHwFrame()) {
+            return;
+          }
+          // Hardware scalers may skip themselves when input and output size match;
+          // the crop must survive that (scale_vaapi silently dropped it).
+          const resize = { width, height };
+          const plain = await scaler.toBuffer(frame, { resize, format: 'rgb' });
+          const cropped = await scaler.toBuffer(frame, { crop: { x: 0, y: 0, width: width >> 1, height: height >> 1 }, resize, format: 'rgb' });
+          assert.strictEqual(cropped.length, width * height * 3);
+          assert.ok(!plain.equals(cropped), 'A crop must change the output even when the target size matches the source');
         } finally {
           await close();
         }

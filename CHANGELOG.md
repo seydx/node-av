@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-## [6.2.0-beta.13] - 2026-08-03
+## [6.2.0-beta.14] - 2026-08-03
 
 ### Added
 
@@ -56,6 +56,8 @@ All notable changes to this project will be documented in this file.
 - **CI/build reliability:** pushes touching `binding.gyp`, `binding-msvc.gyp`, `scripts/**` or `package.json` now trigger prebuild CI (an msvc-only change could previously merge green and break the release build); a new `check-gyp-sync` script (also `npm run lint:gyp`) fails CI when the three gyp files drift; macOS x64 prebuilds get a Rosetta 2 load smoke test before publishing (previously shipped untested); the MSVC FFmpeg prebuilt is pinned to a tag instead of `releases/latest`; and the install script's build-from-source fallback — impossible from the published tarball — was replaced by an honest unsupported-platform message with a musl/Alpine hint.
 - **`Scaler` no longer grows without bound on varied crop geometries.** The software path pooled one `SwsContext` and one staging `AVFrame` per distinct source/destination geometry and never evicted them, so a workload that crops ever-changing regions (object-detection crops, per-detection thumbnails) leaked native memory for the lifetime of the process — hundreds of MB per day at typical detection rates, invisible to the V8 heap. Both pools are now LRU-bounded (64 contexts, 32 frames); entries evicted while an async scale is still in flight are retired and freed only after the operation completes, never under a running job.
 - **Hardware filter graphs no longer leak the hardware frames context.** `buffersrcParametersSet` took its own reference on `hw_frames_ctx` and never released it after `av_buffersrc_parameters_set` (which makes its own copy), so every hardware `FilterAPI` graph pinned the decoder's frame pool and its device — on VAAPI that meant one leaked DRM fd plus the full surface pool (tens of MB) per graph. Long-running processes that rebuild filter graphs (per stream session, per reconnect) accumulated GPU memory without bound; the leak is invisible to process RSS and only shows up as cgroup/system shmem.
+- **`Scaler` dropped the crop on hardware when the target size matched the frame size.** `scale_vaapi` (and `scale_cuda`/`vpp_qsv`) skip themselves entirely when input and output size and format match — decided at graph-config time, before any crop is known. Since the crop filter only sets metadata on hardware frames and relies on the scaler to apply it, a call like "crop 320x180, resize to 640x360" on a 640x360 frame silently returned the uncropped full frame. The scalers' passthrough is now disabled whenever a `Scaler` graph can carry a crop (`scale_vaapi` gained a `passthrough` option for this, matching `scale_cuda`/`vpp_qsv`).
+- **Hardware scalers left stale crop metadata on their output frames.** `scale_cuda`, `vpp_qsv` and `scale_rkrga` copied the input's crop fields onto the already-cropped output (only `scale_vaapi`/`scale_vt` cleared them), so a second GPU filter in the same graph (e.g. the format-conversion step on 10-bit sources) could apply the crop twice. All hardware scalers now clear the consumed crop fields.
 
 ## [6.1.1] - 2026-07-06
 

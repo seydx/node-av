@@ -1,6 +1,9 @@
 import {
   AV_CODEC_FLAG_QSCALE,
+  AV_HWDEVICE_TYPE_CUDA,
   AV_HWDEVICE_TYPE_OPENCL,
+  AV_HWDEVICE_TYPE_QSV,
+  AV_HWDEVICE_TYPE_VAAPI,
   AV_PIX_FMT_GRAY8,
   AV_PIX_FMT_NV12,
   AV_PIX_FMT_RGB24,
@@ -966,7 +969,9 @@ export class Scaler implements Disposable {
    * For software frames this is `crop,scale,format`. For hardware frames the crop
    * filter sets crop metadata that the hardware scaler (scale_vt/scale_cuda/
    * scale_vaapi) applies on the GPU; the result is kept in NV12, downloaded, and
-   * converted on the CPU. When `commandable` the crop is a labeled instance
+   * converted on the CPU. Scalers with a same-size/same-format passthrough mode
+   * (scale_vaapi/scale_cuda/vpp_qsv) get `passthrough=0`, since skipping the scaler
+   * would drop the crop metadata unapplied. When `commandable` the crop is a labeled instance
    * (`crop@sc`) whose initial region is `crop` but which is re-aimed per frame via
    * `sendCommand`. Otherwise (OpenCL) the crop is fixed in the graph.
    *
@@ -994,7 +999,13 @@ export class Scaler implements Disposable {
     } else {
       chain = chain.crop(crop.width, crop.height, crop.x, crop.y);
     }
-    chain = chain.scale(outW, outH);
+    // The crop filter only sets crop metadata on hardware frames; the hw scaler
+    // materializes it. scale_vaapi/scale_cuda/vpp_qsv skip themselves entirely when
+    // input and output size/format match (decided at config time, before any crop
+    // command), which would silently drop the crop - so their passthrough is disabled.
+    const passthroughCapable = [AV_HWDEVICE_TYPE_VAAPI, AV_HWDEVICE_TYPE_CUDA, AV_HWDEVICE_TYPE_QSV] as number[];
+    const noPassthrough = isHw && passthroughCapable.includes(this.hardware!.deviceType);
+    chain = chain.scale(outW, outH, noPassthrough ? { passthrough: 0 } : undefined);
     if (isHw) {
       // Keep the GPU result in NV12, download the small frame, then convert on CPU.
       chain = chain.scaleFormat(AV_PIX_FMT_NV12).hwdownload().format(AV_PIX_FMT_NV12);
