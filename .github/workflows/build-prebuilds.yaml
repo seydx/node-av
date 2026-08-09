@@ -176,6 +176,20 @@ jobs:
           mkdir -p /${{ matrix.os.msystem == 'CLANG64' && 'clang64' || 'clangarm64' }}/ffbuild/include
           mkdir -p /${{ matrix.os.msystem == 'CLANG64' && 'clang64' || 'clangarm64' }}/ffbuild/bin
 
+          # Harden source downloads. The stock DLAGENTS pass --retry, but curl only
+          # retries transient HTTP/timeout failures - a TLS handshake abort (curl 35),
+          # which upstream hosts like downloads.xiph.org throw regularly, aborts the
+          # whole build on the first try. --retry-all-errors covers those too.
+          cat >> /etc/makepkg.conf <<'MAKEPKG_DLAGENTS'
+
+          DLAGENTS=('file::/usr/bin/curl -qgC - -o %o %u'
+                    'ftp::/usr/bin/curl -qgfC - --ftp-pasv --connect-timeout 30 --retry 5 --retry-delay 5 --retry-all-errors -o %o %u'
+                    'http::/usr/bin/curl -qgb "" -fLC - --connect-timeout 30 --retry 5 --retry-delay 5 --retry-all-errors -o %o %u'
+                    'https::/usr/bin/curl -qgb "" -fLC - --connect-timeout 30 --retry 5 --retry-delay 5 --retry-all-errors -o %o %u'
+                    'rsync::/usr/bin/rsync --no-motd -z %u %o'
+                    'scp::/usr/bin/scp -C %u %o')
+          MAKEPKG_DLAGENTS
+
           cd externals/jellyfin-ffmpeg/msys2
 
           # Run Jellyfin build script
