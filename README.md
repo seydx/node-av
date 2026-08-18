@@ -642,17 +642,17 @@ For issues and questions, please use the GitHub issue tracker.
   <source
     media="(prefers-color-scheme: dark)"
     srcset="
-      https://api.star-history.com/svg?repos=seydx/node-av&type=Date&theme=dark
+      https://star-history.dera.page/svg?repos=seydx/node-av&type=Date&theme=dark
     "
   />
   <source
     media="(prefers-color-scheme: light)"
     srcset="
-      https://api.star-history.com/svg?repos=seydx/node-av&type=Date
+https://star-history.dera.page/svg?repos=seydx/node-av&type=Date
     "
   />
   <img
     alt="Star History Chart"
-    src="https://api.star-history.com/svg?repos=seydx/node-av&type=Date"
+    src="https://star-history.dera.page/svg?repos=seydx/node-av&type=Date"
   />
 </picture>
