@@ -49,8 +49,9 @@ export interface IOOutputCallbacks {
    * Write callback - called when FFmpeg needs to write data.
    *
    * Can be synchronous or async (return a Promise).
-   * The buffer may be reused by FFmpeg after the callback completes,
-   * so copy it if you need to keep the data.
+   * Each call receives its own buffer holding a copy of the data, never a view
+   * into FFmpeg's internal write buffer, so it stays valid after the callback
+   * returns and may be queued or retained without copying it again.
    *
    * @param buffer - Buffer containing data to write
    *
