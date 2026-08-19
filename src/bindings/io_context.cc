@@ -104,11 +104,11 @@ int IOContext::ReadPacket(void* opaque, uint8_t* buf, int buf_size) {
       } else {
         return AVERROR(EINVAL);
       }
-    } catch (const Napi::Error& e) {
-      // Direct call failed (likely not in main thread or exception thrown)
-      // Fall through to ThreadSafeFunction approach
     } catch (...) {
-      // Unknown error
+      // Napi never unwinds here: all three gyp files build with
+      // NAPI_DISABLE_CPP_EXCEPTIONS, so a throwing JS callback leaves a pending
+      // exception that surfaces once control returns to JS. This only catches
+      // non-Napi failures such as a bad allocation.
       return AVERROR(EIO);
     }
   }
@@ -202,11 +202,11 @@ int IOContext::WritePacket(void* opaque, const uint8_t* buf, int buf_size) {
         return result.As<Napi::Number>().Int32Value();
       }
       return buf_size;  // Assume all bytes written
-    } catch (const Napi::Error& e) {
-      // Direct call failed (likely not in main thread or exception thrown)
-      // Fall through to ThreadSafeFunction approach
     } catch (...) {
-      // Unknown error
+      // Napi never unwinds here: all three gyp files build with
+      // NAPI_DISABLE_CPP_EXCEPTIONS, so a throwing JS callback leaves a pending
+      // exception that surfaces once control returns to JS. This only catches
+      // non-Napi failures such as a bad allocation.
       return AVERROR(EIO);
     }
   }
@@ -298,11 +298,11 @@ int64_t IOContext::Seek(void* opaque, int64_t offset, int whence) {
       } else {
         return AVERROR(EINVAL);
       }
-    } catch (const Napi::Error& e) {
-      // Direct call failed (likely not in main thread or exception thrown)
-      // Fall through to ThreadSafeFunction approach
     } catch (...) {
-      // Unknown error
+      // Napi never unwinds here: all three gyp files build with
+      // NAPI_DISABLE_CPP_EXCEPTIONS, so a throwing JS callback leaves a pending
+      // exception that surfaces once control returns to JS. This only catches
+      // non-Napi failures such as a bad allocation.
       return AVERROR(EIO);
     }
   }
