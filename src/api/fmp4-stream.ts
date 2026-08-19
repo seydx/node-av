@@ -1143,14 +1143,19 @@ export class FMP4Stream {
       // Stop pipeline if running and wait for completion. Swallow a rejected
       // completion - the error is already surfaced via the onClose(error) path;
       // we just need cleanup to proceed.
-      if (this.pipeline && !this.pipeline.isStopped()) {
-        this.pipeline.stop();
+      const pipeline = this.pipeline;
+      if (pipeline) {
+        if (!pipeline.isStopped()) {
+          pipeline.stop();
+        }
         try {
-          await this.pipeline.completion;
+          await pipeline.completion;
         } catch {
           // Pipeline errored - proceed with teardown regardless.
         }
-        this.pipeline = undefined;
+        if (this.pipeline === pipeline) {
+          this.pipeline = undefined;
+        }
       }
 
       // Close all resources. The output goes FIRST: its async write worker may
