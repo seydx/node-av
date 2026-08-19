@@ -179,6 +179,27 @@ describe('EncoderPool', () => {
 
       assert.equal(frame.pts, 99n, 'frame pts should be preserved');
     });
+
+    it('should encode frames with different time bases on one pooled encoder (async)', async () => {
+      using pool = new EncoderPool(FF_ENCODER_MJPEG);
+      // The encoder opens with the first frame's time base and rescales every
+      // frame's pts into it. A high-resolution time base on a later frame used
+      // to collapse the synthetic pts counter to 0 and trip the encoder's
+      // monotonic-pts check.
+      using first = createMjpegFrame(320, 240);
+      first.timeBase = new Rational(1, 25);
+      using second = createMjpegFrame(320, 240);
+      second.timeBase = new Rational(1, 90000);
+      using third = createMjpegFrame(320, 240);
+      third.timeBase = new Rational(1, 90000);
+
+      const a = await pool.encode(first);
+      const b = await pool.encode(second);
+      const c = await pool.encode(third);
+
+      assert.ok(isJpeg(a) && isJpeg(b) && isJpeg(c), 'every time base should encode');
+      assert.deepEqual(second.timeBase, new Rational(1, 90000), 'frame time base should be restored');
+    });
   });
 
   describe('concurrency', () => {

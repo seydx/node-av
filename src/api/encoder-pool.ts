@@ -4,6 +4,7 @@ import type { AVCodecFlag, AVCodecID, FFEncoderCodec } from '../constants/index.
 import type { Codec } from '../lib/codec.js';
 import type { Frame } from '../lib/frame.js';
 import type { Packet } from '../lib/packet.js';
+import type { Rational } from '../lib/rational.js';
 import type { EncoderOptions } from './encoder.js';
 
 /**
@@ -44,6 +45,14 @@ export class Mutex {
 interface PooledEncoder {
   encoder: Encoder;
   nextPts: bigint;
+  /**
+   * Time base the encoder opened with (pinned by the first frame). The
+   * synthetic pts counter is meaningless in a frame's own time base: the
+   * encoder rescales frame pts into its opened time base, which collapses
+   * small counters to 0 whenever the bases differ (e.g. a 1/90000 frame on
+   * an encoder opened from a 1/25 frame) and trips the monotonic-pts check.
+   */
+  timeBase: Rational | null;
   /** Serializes encodeAll (send + drain) per encoder. */
   lock: Mutex;
   /** In-flight async encodes holding this encoder alive. */
@@ -214,11 +223,15 @@ export class EncoderPool<const C extends FFEncoderCodec | AVCodecID | Codec> imp
       // would otherwise interleave and hand packets to the wrong caller.
       return await entry.lock.run(async () => {
         const savedPts = frame.pts;
+        const savedTimeBase = frame.timeBase;
+        entry.timeBase ??= savedTimeBase;
         frame.pts = entry.nextPts++;
+        frame.timeBase = entry.timeBase;
         try {
           return this.extract(await entry.encoder.encodeAll(frame), entry.encoder);
         } finally {
           frame.pts = savedPts;
+          frame.timeBase = savedTimeBase;
         }
       });
     } finally {
@@ -276,11 +289,15 @@ export class EncoderPool<const C extends FFEncoderCodec | AVCodecID | Codec> imp
     }
 
     const savedPts = frame.pts;
+    const savedTimeBase = frame.timeBase;
+    pooled.timeBase ??= savedTimeBase;
     frame.pts = pooled.nextPts++;
+    frame.timeBase = pooled.timeBase;
     try {
       return this.extract(pooled.encoder.encodeAllSync(frame), pooled.encoder);
     } finally {
       frame.pts = savedPts;
+      frame.timeBase = savedTimeBase;
     }
   }
 
@@ -355,7 +372,7 @@ export class EncoderPool<const C extends FFEncoderCodec | AVCodecID | Codec> imp
       encoder.setCodecFlags(...this.flags);
     }
 
-    const pooled: PooledEncoder = { encoder, nextPts: 0n, lock: new Mutex(), refs: 0, evicted: false };
+    const pooled: PooledEncoder = { encoder, nextPts: 0n, timeBase: null, lock: new Mutex(), refs: 0, evicted: false };
     this.encoders.set(key, pooled);
 
     if (this.encoders.size > this.maxSize) {
