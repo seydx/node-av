@@ -298,34 +298,32 @@ describe('RTPStream', skipWerift, () => {
     it('should stop when the frame source goes silent', async () => {
       const { RTPStream } = await import('../src/webrtc/index.js');
 
-      let silent = false;
+      const silent = Promise.withResolvers<void>();
       const stream = RTPStream.create(
-        { video: stallingFrameSource(20, () => (silent = true)) },
+        { video: stallingFrameSource(20, () => silent.resolve()) },
         {
           video: { fps: 30, encoderOptions: { preset: 'ultrafast', tune: 'zerolatency' } },
           onVideoPacket: () => {
             // drop
           },
+          // Surface a pipeline failure as itself instead of as an opaque timeout.
+          onClose: (error) => {
+            if (error) silent.reject(error);
+          },
         },
       );
 
       await stream.start();
-      await new Promise((resolve) => setTimeout(resolve, 400));
-      assert.ok(silent, 'the source should have gone silent before stop() is called');
+
+      // Wait for the source to actually stall instead of guessing a delay: a
+      // loaded runner needs longer to pull the frames, and stopping before the
+      // source went silent would exercise nothing.
+      await withTimeout(silent.promise, 30000);
 
       // A frame source has no demuxer for stop() to interrupt. Without an
-      // interruptible pull the completion barrier in stop() never settles.
-      let timer: NodeJS.Timeout | undefined;
-      try {
-        await Promise.race([
-          stream.stop(),
-          new Promise<never>((_, reject) => {
-            timer = setTimeout(() => reject(new Error('stop() did not return within 5000ms')), 5000);
-          }),
-        ]);
-      } finally {
-        clearTimeout(timer);
-      }
+      // interruptible pull the completion barrier in stop() never settles, so
+      // the bound only has to separate "returns" from "hangs forever".
+      await withTimeout(stream.stop(), 10000);
     });
   });
 
