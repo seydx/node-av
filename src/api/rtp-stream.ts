@@ -339,10 +339,14 @@ export class RTPStream {
   /**
    * Check if the stream is active.
    *
+   * Stays true while a requested stop is still unwinding: the pipeline reports
+   * itself stopped as soon as stop() is called, but its packets keep flowing
+   * and its native resources stay open until completion settles.
+   *
    * @returns True if the stream is active, false otherwise
    */
   get isStreamActive(): boolean {
-    return this.pipeline !== undefined && !this.pipeline.isStopped();
+    return this.pipeline !== undefined;
   }
 
   /**
@@ -724,6 +728,8 @@ export class RTPStream {
    * @internal
    */
   private attachCompletion(completion: Promise<void>): void {
+    // Captured so a restart that installed a newer pipeline keeps it.
+    const control = this.pipeline;
     completion
       .then(() => {
         // Pipeline completed successfully
@@ -741,6 +747,14 @@ export class RTPStream {
         console.error('[RTPStream] Pipeline error:', error);
         await this.stop();
         this.options.onClose?.(error);
+      })
+      .finally(() => {
+        // Drop the finished pipeline so isStreamActive reports inactive. The
+        // demuxer path already clears it in runPipeline(); a frame source has
+        // no such step, so without this it would look active forever.
+        if (this.pipeline === control) {
+          this.pipeline = undefined;
+        }
       });
   }
 
