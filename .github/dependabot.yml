@@ -15,3 +15,10 @@ updates:
     ignore:
       - dependency-name: "eslint"
       - dependency-name: "typescript"
+  - package-ecosystem: "npm"
+    directory: "/examples"
+    schedule:
+      interval: "monthly"
+    labels: []
+    ignore:
+      - dependency-name: "*"
