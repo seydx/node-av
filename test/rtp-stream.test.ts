@@ -3,7 +3,7 @@ import { writeFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 
 import { FF_ENCODER_LIBX264 } from '../src/index.js';
-import { getInputFile, getOutputFile, prepareTestEnvironment } from './index.js';
+import { getInputFile, getOutputFile, prepareTestEnvironment, stallingFrameSource } from './index.js';
 
 import type { RtpPacket } from 'werift';
 import type { RTPStreamOptions } from '../src/webrtc/index.js';
@@ -290,6 +290,41 @@ describe('RTPStream', skipWerift, () => {
       } finally {
         process.off('unhandledRejection', onRejection);
         process.off('warning', onWarning);
+      }
+    });
+  });
+
+  describe('stalled frame source', () => {
+    it('should stop when the frame source goes silent', async () => {
+      const { RTPStream } = await import('../src/webrtc/index.js');
+
+      let silent = false;
+      const stream = RTPStream.create(
+        { video: stallingFrameSource(20, () => (silent = true)) },
+        {
+          video: { fps: 30, encoderOptions: { preset: 'ultrafast', tune: 'zerolatency' } },
+          onVideoPacket: () => {
+            // drop
+          },
+        },
+      );
+
+      await stream.start();
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      assert.ok(silent, 'the source should have gone silent before stop() is called');
+
+      // A frame source has no demuxer for stop() to interrupt. Without an
+      // interruptible pull the completion barrier in stop() never settles.
+      let timer: NodeJS.Timeout | undefined;
+      try {
+        await Promise.race([
+          stream.stop(),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(() => reject(new Error('stop() did not return within 5000ms')), 5000);
+          }),
+        ]);
+      } finally {
+        clearTimeout(timer);
       }
     });
   });

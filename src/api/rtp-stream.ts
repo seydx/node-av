@@ -13,7 +13,7 @@ import { FilterPreset } from './filter-presets.js';
 import { FilterAPI } from './filter.js';
 import { HardwareContext } from './hardware.js';
 import { Muxer } from './muxer.js';
-import { pipeline } from './pipeline.js';
+import { interruptibleFrameSource, pipeline } from './pipeline.js';
 import { pickSupportedLayout, pickSupportedPixelFormat, pickSupportedRate, pickSupportedSampleFormat } from './utilities/codec-format.js';
 
 import type { AVCodecID, AVHWDeviceType, AVPixelFormat, AVSampleFormat, FFAudioEncoder, FFHWDeviceType, FFVideoEncoder } from '../constants/index.js';
@@ -218,6 +218,7 @@ export class RTPStream {
   private stopRequested = false;
   private stopPromise?: Promise<void>;
   private startAbort?: AbortController;
+  private stopSignal = Promise.withResolvers<void>();
 
   /**
    * @param input - Media input URL or pre-opened Demuxer
@@ -405,7 +406,9 @@ export class RTPStream {
    * @internal
    */
   private async *wrapVideoSource(src: AsyncIterable<Frame | null>): AsyncGenerator<Frame | null> {
-    for await (const frame of src) {
+    // Pull through the interruptible wrapper: a frame source has no demuxer for
+    // stop() to interrupt, so without it a silent source blocks teardown.
+    for await (const frame of interruptibleFrameSource(src, this.stopSignal.promise)) {
       if (frame && this.videoKeyframeRequested) {
         this.videoKeyframeRequested = false;
         frame.pictType = AV_PICTURE_TYPE_I;
@@ -478,6 +481,9 @@ export class RTPStream {
       };
       this.signal.addEventListener('abort', this.abortHandler, { once: true });
     }
+
+    // Re-armed per start so a restart is not torn down by the previous run.
+    this.stopSignal = Promise.withResolvers<void>();
 
     // Lets stop() interrupt a startup that is blocked in the input open
     // (an RTSP connect can take seconds).
@@ -885,7 +891,8 @@ export class RTPStream {
 
       this.audioOutput = await this.createAudioOutput();
       this.throwIfStopRequested();
-      controls.push(pipeline(source.audio, this.audioFilter, this.audioEncoder, this.audioOutput, opts));
+      const audio = interruptibleFrameSource(source.audio, this.stopSignal.promise);
+      controls.push(pipeline(audio, this.audioFilter, this.audioEncoder, this.audioOutput, opts));
     }
 
     this.pipeline = new CombinedPipelineControl(controls);
@@ -1097,6 +1104,9 @@ export class RTPStream {
     this.stopRequested = true;
     this.startAbort?.abort();
     this.startAbort = undefined;
+    // Unblocks a frame source that went silent, so the completion barrier below
+    // cannot wait on a pull that will never settle.
+    this.stopSignal.resolve();
 
     const inflightStart = this.startPromise;
     // Allow a fresh start() after stopping.

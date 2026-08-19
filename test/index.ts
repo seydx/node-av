@@ -2,11 +2,14 @@ import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { AV_PIX_FMT_YUV420P } from '../src/constants/constants.js';
+import { Frame } from '../src/lib/frame.js';
+import { Rational } from '../src/lib/rational.js';
+
 import type { BitStreamFilterAPI } from '../src/api/bitstream-filter.js';
 import type { Decoder } from '../src/api/decoder.js';
 import type { Encoder } from '../src/api/encoder.js';
 import type { FilterAPI } from '../src/api/filter.js';
-import type { Frame } from '../src/lib/frame.js';
 import type { Packet } from '../src/lib/packet.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -157,4 +160,31 @@ export function* filterPacketSync(filter: BitStreamFilterAPI, packet: Packet | n
     if (!filtered) break;
     yield filtered;
   }
+}
+
+export function syntheticVideoFrame(index: number, width = 320, height = 240): Frame {
+  const frame = new Frame();
+  frame.alloc();
+  frame.width = width;
+  frame.height = height;
+  frame.format = AV_PIX_FMT_YUV420P;
+  frame.pts = BigInt(index);
+  frame.timeBase = new Rational(1, 30);
+  frame.getBuffer();
+  const planes = frame.data;
+  planes?.[0]?.fill(index % 256);
+  planes?.[1]?.fill(128);
+  planes?.[2]?.fill(128);
+  return frame;
+}
+
+export async function* stallingFrameSource(count: number, onSilent: () => void): AsyncGenerator<Frame | null> {
+  for (let i = 0; i < count; i++) {
+    yield syntheticVideoFrame(i);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  onSilent();
+  await new Promise<void>(() => {
+    // never settles
+  });
 }

@@ -20,11 +20,11 @@ import { FilterPreset } from './filter-presets.js';
 import { FilterAPI } from './filter.js';
 import { HardwareContext } from './hardware.js';
 import { Muxer } from './muxer.js';
-import { consumeStreamInParallel, pipeline, PipelineControlImpl } from './pipeline.js';
+import { consumeStreamInParallel, interruptibleFrameSource, pipeline, PipelineControlImpl } from './pipeline.js';
 import { pickSupportedPixelFormat } from './utilities/codec-format.js';
 
-import type { CodecContext } from '../lib/codec-context.js';
 import type { AVCodecID, AVHWDeviceType, AVPixelFormat, FFHWDeviceType } from '../constants/index.js';
+import type { CodecContext } from '../lib/codec-context.js';
 import type { DemuxerOptions } from './demuxer.js';
 import type { EncoderOptions } from './encoder.js';
 import type { IOOutputCallbacks } from './io-stream.js';
@@ -352,6 +352,7 @@ export class FMP4Stream {
   private stopRequested = false;
   private stopPromise?: Promise<void>;
   private startAbort?: AbortController;
+  private stopSignal = Promise.withResolvers<void>();
   private fragmentQueue: {
     queue: FMP4Fragment[];
     resolve: ((value: IteratorResult<FMP4Fragment>) => void) | null;
@@ -697,6 +698,9 @@ export class FMP4Stream {
     this.signal?.addEventListener('abort', this.abortHandler, { once: true });
 
     this._droppedFragments = 0;
+
+    // Re-armed per start so a restart is not torn down by the previous run.
+    this.stopSignal = Promise.withResolvers<void>();
 
     // Lets stop() interrupt a startup that is blocked in the input open
     // (an RTSP connect can take seconds).
@@ -1056,14 +1060,20 @@ export class FMP4Stream {
     const shouldStop = (): boolean => control?.isStopped() ?? false;
     const tasks: Promise<void>[] = [];
 
+    // A frame source has no demuxer for stop() to interrupt, so wrap it to make
+    // a silent source releasable instead of blocking teardown forever.
+    const stopped = this.stopSignal.promise;
+
     if (source.video && this.videoEncoder) {
       const streamIndex = this.output.addStream(this.videoEncoder);
-      tasks.push(consumeStreamInParallel(this.videoEncoder.packets(source.video), this.output, streamIndex, shouldStop));
+      const video = interruptibleFrameSource(source.video, stopped);
+      tasks.push(consumeStreamInParallel(this.videoEncoder.packets(video), this.output, streamIndex, shouldStop));
     }
 
     if (source.audio && this.audioFilter && this.audioEncoder) {
       const streamIndex = this.output.addStream(this.audioEncoder);
-      tasks.push(consumeStreamInParallel(this.audioEncoder.packets(this.audioFilter.frames(source.audio)), this.output, streamIndex, shouldStop));
+      const audio = interruptibleFrameSource(source.audio, stopped);
+      tasks.push(consumeStreamInParallel(this.audioEncoder.packets(this.audioFilter.frames(audio)), this.output, streamIndex, shouldStop));
     }
 
     // Close the shared muxer only after ALL streams are done (flushes the trailer).
@@ -1116,6 +1126,9 @@ export class FMP4Stream {
     this.stopRequested = true;
     this.startAbort?.abort();
     this.startAbort = undefined;
+    // Unblocks a frame source that went silent, so the completion barrier below
+    // cannot wait on a pull that will never settle.
+    this.stopSignal.resolve();
 
     const inflightStart = this.startPromise;
     // Allow a fresh start() after stopping.

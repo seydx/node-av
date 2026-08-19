@@ -1936,6 +1936,60 @@ export async function consumeStreamInParallel(
 }
 
 /**
+ * Marks a pull that lost the race against the stop request.
+ *
+ * @internal
+ */
+const FRAME_SOURCE_STOPPED: unique symbol = Symbol('frameSourceStopped');
+
+/**
+ * Wrap a caller-supplied frame source so a stop request unblocks a stalled pull.
+ *
+ * A demuxer-backed pipeline unwinds promptly because stop() interrupts the
+ * blocking read. A frame source offers no such lever: the consuming loop only
+ * notices the stop request once the source yields again, so a source that goes
+ * silent (a wedged capture device, a generator awaiting an event that never
+ * fires) keeps the pipeline - and with it teardown - waiting forever. Calling
+ * `return()` on the source does not help, because an async generator queues
+ * that request behind the pending `next()` that is already stuck.
+ *
+ * Racing every pull against `stopped` supplies the missing lever.
+ *
+ * @param source - Caller-supplied frame source
+ *
+ * @param stopped - Resolves once teardown has been requested
+ *
+ * @yields {Frame | null} Frames from the source until it ends or teardown starts
+ *
+ * @internal
+ */
+export async function* interruptibleFrameSource(source: AsyncIterable<Frame | null>, stopped: Promise<void>): AsyncGenerator<Frame | null> {
+  const iterator = source[Symbol.asyncIterator]();
+  const stopRequested: Promise<typeof FRAME_SOURCE_STOPPED> = stopped.then(() => FRAME_SOURCE_STOPPED);
+
+  try {
+    for (;;) {
+      const result = await Promise.race([iterator.next(), stopRequested]);
+      if (result === FRAME_SOURCE_STOPPED || result.done) {
+        return;
+      }
+      yield result.value;
+    }
+  } finally {
+    // Deliberately not awaited: a stalled source never settles the pending
+    // next(), and return() would queue behind it - reintroducing the very hang
+    // this wrapper exists to prevent.
+    void (async () => {
+      try {
+        await iterator.return?.(undefined);
+      } catch {
+        // The source failed while winding down; teardown proceeds regardless.
+      }
+    })();
+  }
+}
+
+/**
  * Consume a named stream and write to output.
  *
  * @param stream - Stream of packets

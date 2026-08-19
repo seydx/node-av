@@ -3,7 +3,7 @@ import { existsSync, unlinkSync, writeFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 
 import { Demuxer, FMP4Stream } from '../src/index.js';
-import { getInputFile, getOutputFile, prepareTestEnvironment } from './index.js';
+import { getInputFile, getOutputFile, prepareTestEnvironment, stallingFrameSource } from './index.js';
 
 import type { FMP4Data, MP4Box } from '../src/index.js';
 
@@ -284,6 +284,31 @@ describe('FMP4Stream', () => {
         assert.ok(group.includes('mdat'), `Every fragment emission must carry its mdat (got [${group.join(' ')}])`);
       }
       assert.ok(!groups.some((g) => g.includes('mdat') && !g.includes('moof')), 'No standalone mdat may be emitted');
+    });
+  });
+
+  describe('stalled frame source', () => {
+    it('should stop when the frame source goes silent', async () => {
+      let silent = false;
+      const stream = FMP4Stream.create(
+        { video: stallingFrameSource(20, () => (silent = true)) },
+        {
+          supportedCodecs: 'avc1',
+          fragDuration: 1_000_000,
+          video: { fps: 30, encoderOptions: { preset: 'ultrafast', tune: 'zerolatency' } },
+          onData: () => {
+            // drop
+          },
+        },
+      );
+
+      await stream.start();
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      assert.ok(silent, 'the source should have gone silent before stop() is called');
+
+      // A frame source has no demuxer for stop() to interrupt. Without an
+      // interruptible pull the completion barrier in stop() never settles.
+      await withTimeout(stream.stop(), 5000);
     });
   });
 

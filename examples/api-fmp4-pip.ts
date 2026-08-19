@@ -214,7 +214,7 @@ const server = createServer(async (req, res) => {
           onClose: (err) => {
             console.log(err ? `stream error: ${err.message}` : 'stream ended - reload the page to start again (Ctrl+C to quit)');
             if (!res.writableEnded) res.end();
-            void composite.dispose();
+            composite.dispose();
           },
         },
       );
@@ -230,7 +230,7 @@ const server = createServer(async (req, res) => {
       // Tear down when the browser goes away (tab closed/reloaded).
       req.on('close', () => {
         if (activeRes === res) activeRes = null;
-        void stream.stop();
+        stream.stop();
       });
 
       await stream.start();

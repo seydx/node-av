@@ -255,7 +255,7 @@ const server = createServer(async (req, res) => {
           onClose: (err) => {
             console.log(err ? `stream error: ${err.message}` : 'stream ended - reload the page to start again (Ctrl+C to quit)');
             if (composite === built) {
-              void built.dispose();
+              built.dispose();
               composite = null;
               session = null;
             }
