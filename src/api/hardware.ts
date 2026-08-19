@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
@@ -143,6 +144,7 @@ export interface HardwareOptions {
 export class HardwareContext implements Disposable {
   private static _autoTested = false;
   private static _autoCachedType: AVHWDeviceType = AV_HWDEVICE_TYPE_NONE;
+  private static _rockchip: boolean | undefined;
 
   private _deviceContext: HardwareDeviceContext;
   private _deviceType: AVHWDeviceType;
@@ -1299,6 +1301,17 @@ export class HardwareContext implements Disposable {
     return new HardwareContext(deviceCtx, deviceType, deviceTypeName);
   }
 
+  private static isRockchip(): boolean {
+    if (this._rockchip === undefined) {
+      try {
+        this._rockchip = readFileSync('/proc/device-tree/compatible', 'utf8').includes('rockchip');
+      } catch {
+        this._rockchip = false;
+      }
+    }
+    return this._rockchip;
+  }
+
   /**
    * Get platform-specific preference order for hardware types.
    *
@@ -1346,6 +1359,13 @@ export class HardwareContext implements Disposable {
       }
     }
 
+    // Probing rkmpp on a board that is not Rockchip makes librockchip_mpp print
+    // its device-tree failure straight to stderr, past any log callback. Skip it
+    // unless the caller asked for it by name.
+    const skip = new Set<AVHWDeviceType>();
+    if (!this.isRockchip()) skip.add(AV_HWDEVICE_TYPE_RKMPP);
+    prefer?.forEach((type) => skip.delete(type));
+
     // Build the final order: user preference first, then the platform default,
     // then any remaining available types. Keep only available types, no dupes.
     const availableSet = new Set(available);
@@ -1353,7 +1373,7 @@ export class HardwareContext implements Disposable {
     const sortedAvailable: AVHWDeviceType[] = [];
 
     const push = (type: AVHWDeviceType): void => {
-      if (availableSet.has(type) && !seen.has(type)) {
+      if (availableSet.has(type) && !seen.has(type) && !skip.has(type)) {
         seen.add(type);
         sortedAvailable.push(type);
       }
