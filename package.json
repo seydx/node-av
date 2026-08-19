@@ -143,14 +143,10 @@
   },
   "overrides": {
     "werift": {
-      "@shinyoshiaki/binary-data": "npm:@seydx/binary-data@0.6.2",
-      "ip": "npm:neoip@2.1.0"
+      "@shinyoshiaki/binary-data": "npm:@seydx/binary-data@0.6.2"
     },
     "werift-dtls": {
       "@shinyoshiaki/binary-data": "npm:@seydx/binary-data@0.6.2"
-    },
-    "werift-ice": {
-      "ip": "npm:neoip@2.1.0"
     },
     "werift-sctp": {
       "@shinyoshiaki/binary-data": "npm:@seydx/binary-data@0.6.2"
