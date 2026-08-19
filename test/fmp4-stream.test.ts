@@ -16,6 +16,14 @@ interface FMP4StreamInternals {
   incompleteBoxBuffer: Buffer | null;
   pendingFragment: { raw: Buffer }[];
   endFragments: () => void;
+  pipeline?: {
+    isStopped(): boolean;
+    stop(): void;
+    completion: Promise<void>;
+  };
+  output?: {
+    close(): Promise<void>;
+  };
 }
 
 const internalsOf = (stream: FMP4Stream): FMP4StreamInternals => stream as unknown as FMP4StreamInternals;
@@ -349,6 +357,36 @@ describe('FMP4Stream', () => {
       });
       await stream.start();
       await Promise.all([stream.stop(), stream.stop(), stream.stop()]);
+    });
+
+    it('waits for an already-stopped pipeline before closing native resources', async () => {
+      const stream = FMP4Stream.create('unused', { boxMode: true });
+      const internals = internalsOf(stream);
+      let completePipeline!: () => void;
+      const completion = new Promise<void>((resolve) => {
+        completePipeline = resolve;
+      });
+      let outputClosed = false;
+
+      internals.pipeline = {
+        isStopped: () => true,
+        stop: () => assert.fail('an already-stopped pipeline must not be stopped twice'),
+        completion,
+      };
+      internals.output = {
+        close: async () => {
+          outputClosed = true;
+        },
+      };
+
+      const stopping = stream.stop();
+      await settle();
+      assert.equal(outputClosed, false, 'native output was closed while the pipeline was still unwinding');
+
+      completePipeline();
+      await stopping;
+      assert.equal(outputClosed, true, 'native output should close after pipeline completion');
+      assert.equal(internals.pipeline, undefined, 'completed pipeline reference should be cleared');
     });
   });
 

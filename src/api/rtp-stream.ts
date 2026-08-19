@@ -1107,14 +1107,19 @@ export class RTPStream {
       // the source demuxer's read (frame-source pipelines unwind via iterator.return
       // instead). Swallow a rejected completion here - the error is already surfaced
       // to the caller via the onClose(error) path; we just need cleanup to proceed.
-      if (this.pipeline && !this.pipeline.isStopped()) {
-        this.pipeline.stop();
+      const pipeline = this.pipeline;
+      if (pipeline) {
+        if (!pipeline.isStopped()) {
+          pipeline.stop();
+        }
         try {
-          await this.pipeline.completion;
+          await pipeline.completion;
         } catch {
           // Pipeline errored - proceed with teardown regardless.
         }
-        this.pipeline = undefined;
+        if (this.pipeline === pipeline) {
+          this.pipeline = undefined;
+        }
       }
 
       // Close all resources

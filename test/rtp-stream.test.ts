@@ -339,5 +339,45 @@ describe('RTPStream', skipWerift, () => {
       await packet;
       await stream.stop();
     });
+
+    it('waits for an already-stopped pipeline before closing native resources', async () => {
+      const { RTPStream } = await import('../src/webrtc/index.js');
+      const stream = RTPStream.create(getInputFile('video.mp4'));
+      const internals = stream as unknown as {
+        pipeline?: {
+          isStopped(): boolean;
+          stop(): void;
+          completion: Promise<void>;
+        };
+        videoOutput?: {
+          close(): Promise<void>;
+        };
+      };
+      let completePipeline!: () => void;
+      const completion = new Promise<void>((resolve) => {
+        completePipeline = resolve;
+      });
+      let outputClosed = false;
+
+      internals.pipeline = {
+        isStopped: () => true,
+        stop: () => assert.fail('an already-stopped pipeline must not be stopped twice'),
+        completion,
+      };
+      internals.videoOutput = {
+        close: async () => {
+          outputClosed = true;
+        },
+      };
+
+      const stopping = stream.stop();
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.equal(outputClosed, false, 'native output was closed while the pipeline was still unwinding');
+
+      completePipeline();
+      await stopping;
+      assert.equal(outputClosed, true, 'native output should close after pipeline completion');
+      assert.equal(internals.pipeline, undefined, 'completed pipeline reference should be cleared');
+    });
   });
 });
