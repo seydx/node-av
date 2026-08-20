@@ -362,6 +362,44 @@ describe('SyncQueue', () => {
       packet.free();
     });
 
+    it('should not retain memory across many send/receive cycles', () => {
+      const sq = SyncQueue.create();
+      queues.push(sq);
+      const streamIdx = sq.addStream(0); // non-limiting: packets pass straight through
+
+      const sendPacket = new Packet();
+      sendPacket.alloc();
+      sendPacket.timeBase = { num: 1, den: 90000 };
+      const recvPacket = new Packet();
+      recvPacket.alloc();
+
+      const cycle = (count: number, startPts: bigint): bigint => {
+        let pts = startPts;
+        for (let i = 0; i < count; i++) {
+          sendPacket.pts = pts;
+          sendPacket.dts = pts;
+          sq.send(streamIdx, sendPacket);
+          sq.receive(-1, recvPacket);
+          recvPacket.unref();
+          pts += 3000n;
+        }
+        return pts;
+      };
+
+      // Warm up so allocator growth is not counted as retention.
+      const warmedTo = cycle(50_000, 0n);
+      const before = process.memoryUsage().rss;
+
+      const measured = 400_000;
+      cycle(measured, warmedTo);
+      const perCycle = (process.memoryUsage().rss - before) / measured;
+
+      sendPacket.free();
+      recvPacket.free();
+
+      assert.ok(perCycle < 40, `sync queue retains ${perCycle.toFixed(1)} bytes per send/receive cycle`);
+    });
+
     it('should handle receive with specific stream index', () => {
       const sq = SyncQueue.create();
       queues.push(sq);
