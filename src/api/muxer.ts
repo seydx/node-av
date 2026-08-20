@@ -2426,18 +2426,25 @@ export class Muxer implements AsyncDisposable, Disposable {
    * @internal
    */
   private async writeInternal(pkt: Packet, streamInfo: StreamDescription, streamIndex: number): Promise<void> {
-    // Fix timestamps (rescale, DTS>PTS fix, monotonic DTS enforcement)
-    this.muxFixupTs(pkt, streamInfo, streamIndex);
+    try {
+      // Fix timestamps (rescale, DTS>PTS fix, monotonic DTS enforcement)
+      this.muxFixupTs(pkt, streamInfo, streamIndex);
 
-    // Write the packet (muxer takes ownership and will unref it)
-    // NOTE: Caller must clone packet if they need to keep it (e.g., for SyncQueue)
-    const ret = await this.formatContext.interleavedWriteFrame(pkt);
+      // Write the packet (muxer takes ownership and will unref it)
+      // NOTE: Caller must clone packet if they need to keep it (e.g., for SyncQueue)
+      const ret = await this.formatContext.interleavedWriteFrame(pkt);
 
-    // Handle write errors
-    if (ret < 0 && ret !== AVERROR_EOF) {
-      if (this.options.exitOnError) {
-        FFmpegError.throwIfError(ret, 'Failed to write packet');
+      // Handle write errors
+      if (ret < 0 && ret !== AVERROR_EOF) {
+        if (this.options.exitOnError) {
+          FFmpegError.throwIfError(ret, 'Failed to write packet');
+        }
       }
+    } finally {
+      // Every packet reaching here is a clone this class made, and the write
+      // has consumed its contents. Release the struct now instead of leaving a
+      // GC-sized backlog of them behind - this is the last owner.
+      pkt.free();
     }
   }
 
@@ -2487,14 +2494,19 @@ export class Muxer implements AsyncDisposable, Disposable {
    * @internal
    */
   private writeSync(pkt: Packet, streamInfo: StreamDescription, streamIndex: number): void {
-    // Fix timestamps (rescale, DTS>PTS fix, monotonic DTS enforcement)
-    this.muxFixupTs(pkt, streamInfo, streamIndex);
+    try {
+      // Fix timestamps (rescale, DTS>PTS fix, monotonic DTS enforcement)
+      this.muxFixupTs(pkt, streamInfo, streamIndex);
 
-    // Write the packet (muxer takes ownership and will unref it)
-    // NOTE: Caller must clone packet if they need to keep it (e.g., for SyncQueue)
-    const ret = this.formatContext.interleavedWriteFrameSync(pkt);
+      // Write the packet (muxer takes ownership and will unref it)
+      // NOTE: Caller must clone packet if they need to keep it (e.g., for SyncQueue)
+      const ret = this.formatContext.interleavedWriteFrameSync(pkt);
 
-    FFmpegError.throwIfError(ret, 'Failed to write packet');
+      FFmpegError.throwIfError(ret, 'Failed to write packet');
+    } finally {
+      // See writeInternal(): this is the last owner of the clone.
+      pkt.free();
+    }
   }
 
   /**
