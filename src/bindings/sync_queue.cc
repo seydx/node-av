@@ -170,6 +170,15 @@ Napi::Value SyncQueue::Send(const Napi::CallbackInfo& info) {
         return env.Null();
     }
 
+    // sq_send() takes the packet's contents into the queue but never the
+    // AVPacket struct - ffmpeg's own callers hand it a packet they keep owning.
+    // The clone above is ours, so it has to be released here: leaving it behind
+    // leaks one struct per muxed packet, and because its data is already gone
+    // the loss is invisible to heapUsed, external and arrayBuffers alike.
+    if (sqframe.p) {
+        av_packet_free(&sqframe.p);
+    }
+
     return Napi::Number::New(env, ret);
 }
 
