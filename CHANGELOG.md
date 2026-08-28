@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-## [6.2.0-beta.16] - 2026-08-10
+## [6.2.0-beta.20] - 2026-08-28
 
 ### Added
 
@@ -29,6 +29,9 @@ All notable changes to this project will be documented in this file.
 - **`Stream.attachedPic` returns a functional `Packet`** owning its own reference to the picture data (freed on GC, or `free()` early). Previously it returned the raw native object mislabeled as a `Packet` — every wrapper method threw — and the native getter dereferenced an unallocated packet.
 - **Packaging hardening:** platform packages are exact-pinned to the main package's version (a lockfile-less install can no longer pair an old `node-av` with newer native binaries), `engines` enforces Node ≥ 22.18, and the npm tarball is built from a `files` whitelist. The postinstall FFmpeg download now verifies SHA256 checksums against the release's `SHA256SUMS`, retries with backoff, skips the download when the right version is already present, and no longer crashes `npm install` on disk errors. `npm publish` runs with `--provenance`, and old beta GitHub releases are no longer deleted (their FFmpeg assets are what older, still-installable npm betas download).
 - **`FormatContext.metadata` / `Stream.metadata` document their copy semantics**: the getter returns an `av_dict_copy` — mutate and assign back to apply changes (mutating the returned dictionary alone was always a silent no-op).
+- **Freeing a `Packet` with a threadpool operation in flight is defined behavior now.** `Packet` carries the same operation counter as `Frame`: every worker that reads or fills a packet (`sendPacket`/`receivePacket`, bitstream filter send/receive, `writeFrame`/`interleavedWriteFrame`) holds it, and `free()`/`unref()`/`alloc()` wait (bounded, ~2s) and then throw a "busy" error instead of pulling the packet out from under the worker. `sendFrame`/`receiveFrame` hold the frame's counter too. `Encoder.close()` and `Decoder.close()` free their codec context (which waits for in-flight operations) before the packet/frame it was filling; the old order freed the packet first, which crashed in `av_packet_unref` on a saturated pool when a `receivePacket` was still queued.
+- **`FormatContext.freeContext()` leaves a custom output `pb` alone.** It used to `avio_closep()` a callback-backed pb like a file, which treats the callback data as a URL handle and frees it (double free at process exit). The async dispose path and the destructor already skipped custom IO; the sync free now matches, and the `IOContext` wrapper stays the owner.
+- **Input reads no longer occupy the libuv threadpool.** The first async `readFrame()` on an input `FormatContext` starts a reader thread owned by that context, modelled on the ffmpeg CLI's per-input demuxer thread: it is the only thread that touches the context from then on, blocks in `av_read_frame()` itself, retries `EAGAIN` natively and hands packets to JS through a bounded queue (16 packets / 8 MB, full queue applies backpressure to the source). Before, every read was a threadpool job that parked a pool thread while waiting for data, so N live pipelines could starve the process's 4 pool threads and every other native operation with them (observed as RTP delivered at 0.1x to 0.7x real time while nothing was lost). `seekFrame()`, `seekFile()`, `findStreamInfo()`, `flush()` and `sendRTSPPacket()` run on the reader thread between two reads while it is active (a seek drops the read-ahead); the sync variants throw while an async reader is active, so do not mix `packets()` and `packetsSync()` on one demuxer. `interrupt()`, `closeInput()` and abort signals settle pending reads with `AVERROR_EXIT` as before.
 
 ### Fixed
 
