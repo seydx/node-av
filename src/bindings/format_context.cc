@@ -1,4 +1,5 @@
 #include "format_context.h"
+#include "input_reader.h"
 #include "packet.h"
 #include "stream.h"
 #include "codec.h"
@@ -90,6 +91,8 @@ FormatContext::FormatContext(const Napi::CallbackInfo& info)
 }
 
 FormatContext::~FormatContext() {
+  StopReader();
+
   // Clean up if user forgot to call freeContext()
   if (ctx_) {
     // Clear the interrupt callback opaque
@@ -199,6 +202,10 @@ Napi::Value FormatContext::FreeContext(const Napi::CallbackInfo& info) {
     return env.Undefined();
   }
 
+  // The owner thread must be gone before the context is freed; stopping it
+  // interrupts a parked read, which is the one abort freeContext() performs
+  StopReader();
+
   // Freeing while a worker still uses the context on the threadpool would be
   // a use-after-free; wait bounded, then error instead of crashing. Blocked
   // readers are not interrupted here - freeContext() has no abort semantics,
@@ -229,9 +236,10 @@ Napi::Value FormatContext::FreeContext(const Napi::CallbackInfo& info) {
 
   if (is_output_) {
     // For output contexts allocated with avformat_alloc_output_context2
-    // Close pb if it exists and the format requires file I/O
-    // OR if it's a custom IO context (no oformat check needed for custom IO)
-    if (ctx->pb) {
+    // Close pb if it exists and the format requires file I/O. A custom pb
+    // belongs to its IOContext wrapper: avio_closep() would treat the
+    // callback opaque as a URLContext and free it (double free at teardown)
+    if (ctx->pb && !(ctx->flags & AVFMT_FLAG_CUSTOM_IO)) {
       if (!ctx->oformat || !(ctx->oformat->flags & AVFMT_NOFILE)) {
         avio_closep(&ctx->pb);
       }
@@ -1052,6 +1060,34 @@ Napi::Value FormatContext::Interrupt(const Napi::CallbackInfo& info) {
 
 void FormatContext::RequestInterrupt() {
   interrupt_requested_.store(true);
+  // the reader stays alive until its TSFN finalizes, so a stale pointer read
+  // here is still a valid object
+  InputReader* reader = reader_;
+  if (reader) {
+    reader->Interrupt();
+  }
+}
+
+void FormatContext::StopReader() {
+  InputReader* reader = reader_.exchange(nullptr);
+  if (!reader) {
+    return;
+  }
+  reader->Stop();
+}
+
+Napi::Promise FormatContext::RunOnInput(Napi::Env env, std::vector<Napi::Object> pins, std::function<int()> work, bool flushQueue) {
+  InputReader* reader = reader_;
+  if (reader) {
+    return reader->RunCommand(env, std::move(pins), std::move(work), flushQueue);
+  }
+  FormatContext* self = this;
+  return PromiseWorker::Run(env, &async_ops_, std::move(pins), [self, work = std::move(work)]() {
+    // Serializes FFmpeg calls on this context and pins it against close/free
+    // - AVFormatContext is not safe for concurrent use (see ctx_mutex_)
+    std::unique_lock<std::shared_timed_mutex> lifecycle(self->ctx_mutex_);
+    return work();
+  });
 }
 
 } // namespace ffmpeg

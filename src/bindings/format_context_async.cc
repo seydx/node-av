@@ -1,4 +1,5 @@
 #include "format_context.h"
+#include "input_reader.h"
 #include "packet.h"
 #include "input_format.h"
 #include "output_format.h"
@@ -140,10 +141,7 @@ Napi::Value FormatContext::FindStreamInfoAsync(const Napi::CallbackInfo& info) {
       });
 
   FormatContext* self = this;
-  return PromiseWorker::Run(env, &async_ops_, {info.This().As<Napi::Object>()}, [self, optionsHolder]() {
-    // Serializes FFmpeg calls on this context and pins it against close/free
-    // - AVFormatContext is not safe for concurrent use (see ctx_mutex_)
-    std::unique_lock<std::shared_timed_mutex> lifecycle(self->ctx_mutex_);
+  return RunOnInput(env, {info.This().As<Napi::Object>()}, [self, optionsHolder]() {
     if (!self->ctx_) {
       return AVERROR(EINVAL);
     }
@@ -153,7 +151,7 @@ Napi::Value FormatContext::FindStreamInfoAsync(const Napi::CallbackInfo& info) {
     // read out of bounds. The array was built on the JS thread by
     // BuildStreamOptions with exactly nb_streams entries.
     return avformat_find_stream_info(self->ctx_, optionsHolder->empty() ? nullptr : optionsHolder->data());
-  });
+  }, false);
 }
 
 Napi::Value FormatContext::ReadFrameAsync(const Napi::CallbackInfo& info) {
@@ -170,44 +168,20 @@ Napi::Value FormatContext::ReadFrameAsync(const Napi::CallbackInfo& info) {
     return env.Undefined();
   }
 
-  FormatContext* self = this;
-  return PromiseWorker::Run(
-      env, &async_ops_, {info.This().As<Napi::Object>(), info[0].As<Napi::Object>()},
-      [self, packet]() {
-        // Serializes FFmpeg calls on this context and pins it against close/free
-        // - AVFormatContext is not safe for concurrent use (see ctx_mutex_)
-        std::unique_lock<std::shared_timed_mutex> lifecycle(self->ctx_mutex_);
-        // Check interrupt flag BEFORE calling av_read_frame()
-        // The interrupt callback is only invoked during blocking I/O operations.
-        // If packets are already buffered, av_read_frame() won't block and the
-        // callback won't be called. We must manually check here.
-        if (self->interrupt_requested_.load()) {
-          return AVERROR_EXIT;
-        }
+  if (!ctx_) {
+    auto deferred = Napi::Promise::Deferred::New(env);
+    deferred.Resolve(Napi::Number::New(env, AVERROR(EINVAL)));
+    return deferred.Promise();
+  }
 
-        if (!self->ctx_) {
-          return AVERROR(EINVAL);
-        }
-
-        // active_read_operations_ complements the op counter: it marks a reader
-        // that may be BLOCKED inside av_read_frame(). Only the AVIO interrupt
-        // callback can abort such a read - the op counter can merely wait for it.
-        self->active_read_operations_.fetch_add(1);
-
-        int ret = av_read_frame(self->ctx_, packet->Get());
-
-        self->active_read_operations_.fetch_sub(1);
-        return ret;
-      },
-      [packet](Napi::Env env, int ret) -> Napi::Value {
-        // av_read_frame filled the packet's buffer on the worker thread; reconcile
-        // V8 accounting now that we are back on the JS thread. The packet pin
-        // keeps the wrapper alive until here.
-        if (ret >= 0) {
-          packet->SyncExternalMemory(env);
-        }
-        return Napi::Number::New(env, ret);
-      });
+  // Reads never touch the threadpool: the owner thread blocks in
+  // av_read_frame() and hands packets over through its queue
+  InputReader* reader = reader_;
+  if (!reader) {
+    reader = new InputReader(env, this);
+    reader_ = reader;
+  }
+  return reader->ReadFrame(env, {info.This().As<Napi::Object>(), info[0].As<Napi::Object>()}, packet);
 }
 
 Napi::Value FormatContext::SeekFrameAsync(const Napi::CallbackInfo& info) {
@@ -224,15 +198,13 @@ Napi::Value FormatContext::SeekFrameAsync(const Napi::CallbackInfo& info) {
   int flags = info[2].As<Napi::Number>().Int32Value();
 
   FormatContext* self = this;
-  return PromiseWorker::Run(env, &async_ops_, {info.This().As<Napi::Object>()}, [self, stream_index, timestamp, flags]() {
-    // Serializes FFmpeg calls on this context and pins it against close/free
-    // - AVFormatContext is not safe for concurrent use (see ctx_mutex_)
-    std::unique_lock<std::shared_timed_mutex> lifecycle(self->ctx_mutex_);
+  // a seek drops the packets the owner thread read ahead
+  return RunOnInput(env, {info.This().As<Napi::Object>()}, [self, stream_index, timestamp, flags]() {
     if (!self->ctx_) {
       return AVERROR(EINVAL);
     }
     return av_seek_frame(self->ctx_, stream_index, timestamp, flags);
-  });
+  }, true);
 }
 
 Napi::Value FormatContext::SeekFileAsync(const Napi::CallbackInfo& info) {
@@ -251,15 +223,12 @@ Napi::Value FormatContext::SeekFileAsync(const Napi::CallbackInfo& info) {
   int flags = info[4].As<Napi::Number>().Int32Value();
 
   FormatContext* self = this;
-  return PromiseWorker::Run(env, &async_ops_, {info.This().As<Napi::Object>()}, [self, stream_index, min_ts, ts, max_ts, flags]() {
-    // Serializes FFmpeg calls on this context and pins it against close/free
-    // - AVFormatContext is not safe for concurrent use (see ctx_mutex_)
-    std::unique_lock<std::shared_timed_mutex> lifecycle(self->ctx_mutex_);
+  return RunOnInput(env, {info.This().As<Napi::Object>()}, [self, stream_index, min_ts, ts, max_ts, flags]() {
     if (!self->ctx_) {
       return AVERROR(EINVAL);
     }
     return avformat_seek_file(self->ctx_, stream_index, min_ts, ts, max_ts, flags);
-  });
+  }, true);
 }
 
 Napi::Value FormatContext::WriteHeaderAsync(const Napi::CallbackInfo& info) {
@@ -330,7 +299,11 @@ Napi::Value FormatContext::WriteFrameAsync(const Napi::CallbackInfo& info) {
   }
 
   FormatContext* self = this;
-  return PromiseWorker::Run(env, &async_ops_, std::move(pins), [self, packet]() {
+  std::vector<AsyncOpCounter*> ops = {&async_ops_};
+  if (packet) {
+    ops.push_back(&packet->async_ops_);
+  }
+  return PromiseWorker::Run(env, std::move(ops), std::move(pins), [self, packet]() {
     // Serializes FFmpeg calls on this context and pins it against close/free
     // - AVFormatContext is not safe for concurrent use (see ctx_mutex_)
     std::unique_lock<std::shared_timed_mutex> lifecycle(self->ctx_mutex_);
@@ -359,7 +332,11 @@ Napi::Value FormatContext::InterleavedWriteFrameAsync(const Napi::CallbackInfo& 
   }
 
   FormatContext* self = this;
-  return PromiseWorker::Run(env, &async_ops_, std::move(pins), [self, packet]() {
+  std::vector<AsyncOpCounter*> ops = {&async_ops_};
+  if (packet) {
+    ops.push_back(&packet->async_ops_);
+  }
+  return PromiseWorker::Run(env, std::move(ops), std::move(pins), [self, packet]() {
     // Serializes FFmpeg calls on this context and pins it against close/free
     // - AVFormatContext is not safe for concurrent use (see ctx_mutex_)
     std::unique_lock<std::shared_timed_mutex> lifecycle(self->ctx_mutex_);
@@ -484,6 +461,10 @@ Napi::Value FormatContext::CloseInputAsync(const Napi::CallbackInfo& info) {
   return PromiseWorker::Run(
       env, &async_ops_, {info.This().As<Napi::Object>()},
       [self]() {
+        // Joins the owner thread off the main thread, so a reader parked in a
+        // custom-IO callback that needs the event loop can still unwind
+        self->StopReader();
+
         // Keep the original interrupt+wait flow for readers as belt and
         // braces: the guard above already waited on the JS thread, but a
         // sync read may still have started since
@@ -620,18 +601,12 @@ Napi::Value FormatContext::FlushAsync(const Napi::CallbackInfo& info) {
   }
 
   FormatContext* self = this;
-  return PromiseWorker::Run(
-      env, &async_ops_, {info.This().As<Napi::Object>()},
-      [self]() {
-        // Serializes FFmpeg calls on this context and pins it against close/free
-        // - AVFormatContext is not safe for concurrent use (see ctx_mutex_)
-        std::unique_lock<std::shared_timed_mutex> lifecycle(self->ctx_mutex_);
-        if (self->ctx_ && self->ctx_->pb) {
-          avio_flush(self->ctx_->pb);
-        }
-        return 0;
-      },
-      [](Napi::Env env, int) -> Napi::Value { return env.Undefined(); });
+  return RunOnInput(env, {info.This().As<Napi::Object>()}, [self]() {
+    if (self->ctx_ && self->ctx_->pb) {
+      avio_flush(self->ctx_->pb);
+    }
+    return 0;
+  }, false);
 }
 
 Napi::Value FormatContext::SendRTSPPacketAsync(const Napi::CallbackInfo& info) {
@@ -668,10 +643,9 @@ Napi::Value FormatContext::SendRTSPPacketAsync(const Napi::CallbackInfo& info) {
   auto rtpData = std::make_shared<std::vector<uint8_t>>(data, data + len);
 
   FormatContext* self = this;
-  return PromiseWorker::Run(env, &async_ops_, {info.This().As<Napi::Object>()}, [self, stream_index, rtpData]() {
-    // Serializes FFmpeg calls on this context and pins it against close/free
-    // - AVFormatContext is not safe for concurrent use (see ctx_mutex_)
-    std::unique_lock<std::shared_timed_mutex> lifecycle(self->ctx_mutex_);
+  // talk-back shares the socket with the reader and FFmpeg's own keepalives,
+  // so it is written by the owner thread between two reads
+  return RunOnInput(env, {info.This().As<Napi::Object>()}, [self, stream_index, rtpData]() {
     if (!self->ctx_) {
       return AVERROR(EINVAL);
     }
@@ -735,7 +709,7 @@ Napi::Value FormatContext::SendRTSPPacketAsync(const Napi::CallbackInfo& info) {
     }
 
     return AVERROR(ENOTSUP); // Unknown transport
-  });
+  }, false);
 }
 
 } // namespace ffmpeg

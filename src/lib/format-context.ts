@@ -723,7 +723,14 @@ export class FormatContext extends OptionMember<NativeFormatContext> implements 
    *
    * @returns 0 on success, negative AVERROR on error:
    *   - AVERROR_EOF: End of file
-   *   - AVERROR_EAGAIN: Temporarily unavailable
+   *   - AVERROR_EXIT: Aborted by interrupt() or closeInput()
+   *
+   * The first call starts the context's own reader thread, which is the only
+   * thread touching the input from then on: it blocks in av_read_frame(),
+   * retries EAGAIN itself and hands packets over through a bounded queue, so
+   * a waiting read never occupies a libuv threadpool thread. seekFrame(),
+   * seekFile(), sendRTSPPacket() and findStreamInfo() run on that thread
+   * between two reads; the sync variants throw while it is active.
    *
    * @example
    * ```typescript

@@ -9,6 +9,7 @@ import {
   AV_SAMPLE_FMT_S16,
   AVFLAG_NONE,
   AVFMT_FLAG_GENPTS,
+  AVSEEK_FLAG_BACKWARD,
   AVFMT_FLAG_IGNIDX,
   AV_DISPOSITION_ATTACHED_PIC,
   AVIO_FLAG_WRITE,
@@ -1064,6 +1065,146 @@ describe('FormatContext', () => {
       assert.equal(ret, AVERROR_EXIT);
 
       packet.free();
+    });
+
+    it('should serve concurrent readFrame calls in order from the owner thread', async () => {
+      await ctx.openInput(inputVideoFile, null, null);
+      await ctx.findStreamInfo(null);
+
+      const packets = Array.from({ length: 6 }, () => {
+        const packet = new Packet();
+        packet.alloc();
+        return packet;
+      });
+
+      // every call registers a pending read before the reader has delivered
+      // anything - the queue must hand them out first come, first served
+      const results = await Promise.all(packets.map((packet) => ctx.readFrame(packet)));
+      assert.ok(results.every((r) => r === 0));
+
+      const perStream = new Map<number, bigint>();
+      for (const packet of packets) {
+        const previous = perStream.get(packet.streamIndex);
+        if (previous !== undefined) {
+          assert.ok(packet.dts >= previous, 'packets of one stream arrive in read order');
+        }
+        perStream.set(packet.streamIndex, packet.dts);
+        packet.free();
+      }
+    });
+
+    it('should reject sync reads while the async reader is active', async () => {
+      await ctx.openInput(inputVideoFile, null, null);
+      await ctx.findStreamInfo(null);
+
+      const packet = new Packet();
+      packet.alloc();
+
+      assert.equal(await ctx.readFrame(packet), 0);
+      assert.throws(() => ctx.readFrameSync(packet), /active async reader/);
+      assert.throws(() => ctx.seekFrameSync(-1, 0n, AVSEEK_FLAG_BACKWARD), /active async reader/);
+
+      packet.free();
+    });
+
+    it('should drop read-ahead packets on seek', async () => {
+      await ctx.openInput(inputVideoFile, null, null);
+      await ctx.findStreamInfo(null);
+
+      const packet = new Packet();
+      packet.alloc();
+
+      // first packet of stream 0, then let the owner thread fill its queue
+      let firstDts: bigint | undefined;
+      while (firstDts === undefined) {
+        assert.equal(await ctx.readFrame(packet), 0);
+        if (packet.streamIndex === 0) {
+          firstDts = packet.dts;
+        }
+        packet.unref();
+      }
+      for (let i = 0; i < 20; i++) {
+        assert.equal(await ctx.readFrame(packet), 0);
+        packet.unref();
+      }
+
+      assert.ok((await ctx.seekFrame(-1, 0n, AVSEEK_FLAG_BACKWARD)) >= 0);
+
+      // without the flush the next packet would be the 21st, not the first
+      let afterSeek: bigint | undefined;
+      while (afterSeek === undefined) {
+        assert.equal(await ctx.readFrame(packet), 0);
+        if (packet.streamIndex === 0) {
+          afterSeek = packet.dts;
+        }
+        packet.unref();
+      }
+      assert.ok(afterSeek <= firstDts, `seek returned to the start (${afterSeek} <= ${firstDts})`);
+
+      packet.free();
+    });
+
+    it('should settle a parked readFrame with AVERROR_EXIT on closeInput', async () => {
+      await ctx.openInput(inputVideoFile, null, null);
+      await ctx.findStreamInfo(null);
+
+      const packet = new Packet();
+      packet.alloc();
+
+      // drain the file so the reader parks on EOF, then a further read must
+      // not hang across the close
+      let ret = 0;
+      while (ret >= 0) {
+        ret = await ctx.readFrame(packet);
+        packet.unref();
+      }
+      const pending = ctx.readFrame(packet);
+      await ctx.closeInput();
+      assert.ok((await pending) < 0);
+
+      packet.free();
+    });
+
+    it('should refuse to free a packet while a muxer write still uses it', { timeout: 10000 }, async () => {
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+
+      // raw h264 writes no header, so the first write callback is the packet's
+      const ioCtx = new IOContext();
+      ioCtx.allocContextWithCallbacks(4096, 1, null, async (buffer: Buffer) => {
+        await gate;
+        return buffer.length;
+      });
+      ctx.allocOutputContext2(null, 'h264', null);
+      ctx.pb = ioCtx;
+      const stream = ctx.newStream(null);
+      assert.ok(stream);
+      stream.codecpar.codecType = AVMEDIA_TYPE_VIDEO;
+      stream.codecpar.codecId = AV_CODEC_ID_H264;
+      stream.codecpar.width = 640;
+      stream.codecpar.height = 480;
+      assert.ok((await ctx.writeHeader(null)) >= 0);
+
+      const packet = new Packet();
+      packet.alloc();
+      packet.data = Buffer.alloc(8192, 1);
+      packet.streamIndex = 0;
+
+      // the write parks on the gated callback with the packet on the
+      // threadpool; freeing it now used to be a use-after-free
+      const pending = ctx.interleavedWriteFrame(packet);
+      assert.throws(() => packet.free(), /busy/);
+
+      release();
+      assert.ok((await pending) >= 0);
+      packet.free();
+
+      // the format context leaves a custom pb alone, the wrapper frees it
+      ctx.freeContext();
+      ioCtx.freeContext();
+      ctx = null as any;
     });
   });
 

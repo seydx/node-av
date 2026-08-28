@@ -100,7 +100,12 @@ Napi::Value CodecContext::SendPacketAsync(const Napi::CallbackInfo& info) {
     pins.push_back(info[0].As<Napi::Object>());
   }
 
-  return PromiseWorker::Run(env, &async_ops_, std::move(pins), [ctx, pkt]() {
+  std::vector<AsyncOpCounter*> ops = {&async_ops_};
+  if (packet) {
+    ops.push_back(&packet->async_ops_);
+  }
+
+  return PromiseWorker::Run(env, std::move(ops), std::move(pins), [ctx, pkt]() {
     // Null check: sendPacket on an unallocated context resolves EINVAL
     // instead of crashing
     if (!ctx) {
@@ -132,7 +137,7 @@ Napi::Value CodecContext::ReceiveFrameAsync(const Napi::CallbackInfo& info) {
   AVFrame* avFrame = frame->Get();
 
   return PromiseWorker::Run(
-      env, &async_ops_, {info.This().As<Napi::Object>(), frameObj},
+      env, {&async_ops_, &frame->async_ops_}, {info.This().As<Napi::Object>(), frameObj},
       [ctx, avFrame]() {
         // Null check: receiveFrame on an unallocated context resolves EINVAL
         // instead of crashing
@@ -176,7 +181,12 @@ Napi::Value CodecContext::SendFrameAsync(const Napi::CallbackInfo& info) {
     pins.push_back(info[0].As<Napi::Object>());
   }
 
-  return PromiseWorker::Run(env, &async_ops_, std::move(pins), [ctx, avFrame]() {
+  std::vector<AsyncOpCounter*> ops = {&async_ops_};
+  if (frame) {
+    ops.push_back(&frame->async_ops_);
+  }
+
+  return PromiseWorker::Run(env, std::move(ops), std::move(pins), [ctx, avFrame]() {
     // Null check: sendFrame on an unallocated context resolves EINVAL
     // instead of crashing
     if (!ctx) {
@@ -216,7 +226,7 @@ Napi::Value CodecContext::ReceivePacketAsync(const Napi::CallbackInfo& info) {
   AVPacket* pkt = packet->Get();
 
   return PromiseWorker::Run(
-      env, &async_ops_, {info.This().As<Napi::Object>(), pktObj},
+      env, {&async_ops_, &packet->async_ops_}, {info.This().As<Napi::Object>(), pktObj},
       [ctx, pkt]() {
         // Null check: receivePacket on an unallocated context resolves EINVAL
         // instead of crashing

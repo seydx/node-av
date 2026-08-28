@@ -3,8 +3,9 @@
 
 #include <napi.h>
 #include <atomic>
-#include <mutex>
+#include <functional>
 #include <memory>
+#include <mutex>
 #include <shared_mutex>
 #include <vector>
 #include "common.h"
@@ -97,6 +98,8 @@ typedef struct RTSPState {
 
 namespace ffmpeg {
 
+class InputReader;
+
 class FormatContext : public Napi::ObjectWrap<FormatContext> {
 public:
   static thread_local Napi::FunctionReference constructor;
@@ -110,9 +113,21 @@ public:
 
 private:
   friend class AVOptionWrapper;
+  friend class InputReader;
 
   AVFormatContext* ctx_ = nullptr;
   bool is_output_ = false;
+
+  // Owner thread of an input context, started by the first async readFrame()
+  // and the only thread touching ctx_ from then on (see input_reader.h).
+  // Frees itself after Stop(); null while no reader is active. Atomic
+  // because the async close path clears it from a threadpool worker.
+  std::atomic<InputReader*> reader_{nullptr};
+
+  void StopReader();
+  // Input-side async work: a command on the owner thread when one is active,
+  // otherwise a threadpool worker under ctx_mutex_
+  Napi::Promise RunOnInput(Napi::Env env, std::vector<Napi::Object> pins, std::function<int()> work, bool flushQueue);
 
   Napi::Value AllocContext(const Napi::CallbackInfo& info);
   Napi::Value AllocOutputContext2(const Napi::CallbackInfo& info);
