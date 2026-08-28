@@ -552,8 +552,8 @@ export interface NativeFormatContext extends AsyncDisposable {
   freeContext(): void;
   openInput(url: string, fmt: NativeInputFormat | null, options: NativeDictionary | null): Promise<number>;
   openInputSync(url: string, fmt: NativeInputFormat | null, options: NativeDictionary | null): number;
-  closeInput(): Promise<void>;
-  closeInputSync(): void;
+  closeInput(detachPb?: boolean): Promise<void>;
+  closeInputSync(detachPb?: boolean): void;
   findStreamInfo(options: NativeDictionary[] | null): Promise<number>;
   findStreamInfoSync(options: NativeDictionary[] | null): number;
   readFrame(pkt: NativePacket): Promise<number>;

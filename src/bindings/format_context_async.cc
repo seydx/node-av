@@ -445,6 +445,10 @@ Napi::Value FormatContext::CloseInputAsync(const Napi::CallbackInfo& info) {
     return env.Null();
   }
 
+  // detachPb: forget a caller-owned pb once the reader is stopped, so
+  // avformat_close_input() leaves it alone (the IOContext wrapper frees it)
+  bool detachPb = info.Length() > 0 && info[0].ToBoolean().Value();
+
   // Interrupt BEFORE guarding: a reader blocked inside av_read_frame() only
   // returns once the AVIO interrupt callback fires - the op counter cannot
   // abort it, only wait for it. With the flag set, blocked readers unwind
@@ -460,10 +464,13 @@ Napi::Value FormatContext::CloseInputAsync(const Napi::CallbackInfo& info) {
   FormatContext* self = this;
   return PromiseWorker::Run(
       env, &async_ops_, {info.This().As<Napi::Object>()},
-      [self]() {
+      [self, detachPb]() {
         // Joins the owner thread off the main thread, so a reader parked in a
         // custom-IO callback that needs the event loop can still unwind
         self->StopReader();
+        if (detachPb && self->ctx_) {
+          self->ctx_->pb = nullptr;
+        }
 
         // Keep the original interrupt+wait flow for readers as belt and
         // braces: the guard above already waited on the JS thread, but a

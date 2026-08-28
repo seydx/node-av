@@ -395,7 +395,12 @@ Napi::Value FormatContext::CloseInputSync(const Napi::CallbackInfo& info) {
     return env.Undefined();
   }
 
-  StopReader();
+  if (!StopReaderSync(env)) {
+    return env.Undefined();
+  }
+  if (info.Length() > 0 && info[0].ToBoolean().Value() && ctx_) {
+    ctx_->pb = nullptr;
+  }
 
   // Request interrupt to cancel any pending av_read_frame()
   FormatContext::RequestInterrupt();

@@ -2688,13 +2688,10 @@ export class Demuxer implements AsyncDisposable, Disposable {
     }
     this.queueResolvers.clear();
 
-    // Clear pb reference to prevent use-after-free
-    if (this.ioContext) {
-      this.formatContext.pb = null;
-    }
-
-    // Close FormatContext - this may interrupt blocking readFrame()
-    await this.formatContext.closeInput();
+    // Close FormatContext - this may interrupt blocking readFrame(). A custom
+    // pb is detached inside, after the reader thread stopped: nulling it from
+    // here would pull it out from under a running av_read_frame()
+    await this.formatContext.closeInput(!!this.ioContext);
 
     // Wait for demux thread with timeout to avoid hanging on blocked reads
     if (this.demuxThread) {
@@ -2767,13 +2764,8 @@ export class Demuxer implements AsyncDisposable, Disposable {
     this.signalCleanup?.();
     this.signalCleanup = undefined;
 
-    // IMPORTANT: Clear pb reference FIRST to prevent use-after-free
-    if (this.ioContext) {
-      this.formatContext.pb = null;
-    }
-
-    // Close FormatContext
-    this.formatContext.closeInputSync();
+    // Close FormatContext; a custom pb is detached inside so it is not closed with the input
+    this.formatContext.closeInputSync(!!this.ioContext);
 
     this.demuxThreadActive = false;
 

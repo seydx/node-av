@@ -204,7 +204,9 @@ Napi::Value FormatContext::FreeContext(const Napi::CallbackInfo& info) {
 
   // The owner thread must be gone before the context is freed; stopping it
   // interrupts a parked read, which is the one abort freeContext() performs
-  StopReader();
+  if (!StopReaderSync(env)) {
+    return env.Undefined();
+  }
 
   // Freeing while a worker still uses the context on the threadpool would be
   // a use-after-free; wait bounded, then error instead of crashing. Blocked
@@ -882,6 +884,14 @@ void FormatContext::SetPb(const Napi::CallbackInfo& info, const Napi::Value& val
   if (!ctx) {
     return;
   }
+
+  // the owner thread dereferences ctx->pb in every av_read_frame(); swapping
+  // it underneath is a crash, closeInput(detachPb) detaches it after the
+  // reader has stopped
+  if (reader_) {
+    Napi::Error::New(env, "FormatContext has an active async reader - use closeInput(true) to detach the pb").ThrowAsJavaScriptException();
+    return;
+  }
   
   if (value.IsNull() || value.IsUndefined()) {
     ctx->pb = nullptr;
@@ -1074,6 +1084,15 @@ void FormatContext::StopReader() {
     return;
   }
   reader->Stop();
+}
+
+bool FormatContext::StopReaderSync(Napi::Env env) {
+  if (reader_ && ctx_ && (ctx_->flags & AVFMT_FLAG_CUSTOM_IO)) {
+    Napi::Error::New(env, "FormatContext has an active async reader on custom IO - use closeInput() instead of a sync close/free").ThrowAsJavaScriptException();
+    return false;
+  }
+  StopReader();
+  return true;
 }
 
 Napi::Promise FormatContext::RunOnInput(Napi::Env env, std::vector<Napi::Object> pins, std::function<int()> work, bool flushQueue) {

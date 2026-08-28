@@ -1,5 +1,6 @@
 import assert from 'node:assert';
 import { existsSync, unlinkSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { after, afterEach, beforeEach, describe, it } from 'node:test';
 
 import {
@@ -9,7 +10,11 @@ import {
   AV_SAMPLE_FMT_S16,
   AVFLAG_NONE,
   AVFMT_FLAG_GENPTS,
+  AVSEEK_CUR,
+  AVSEEK_END,
   AVSEEK_FLAG_BACKWARD,
+  AVSEEK_SET,
+  AVSEEK_SIZE,
   AVFMT_FLAG_IGNIDX,
   AV_DISPOSITION_ATTACHED_PIC,
   AVIO_FLAG_WRITE,
@@ -1163,6 +1168,57 @@ describe('FormatContext', () => {
       assert.ok((await pending) < 0);
 
       packet.free();
+    });
+
+    it('should refuse to swap pb while the async reader is active', async () => {
+      const buffer = await readFile(inputVideoFile);
+      let position = 0;
+      const ioCtx = new IOContext();
+      ioCtx.allocContextWithCallbacks(
+        4096,
+        0,
+        (size: number) => {
+          if (position >= buffer.length) {
+            return null;
+          }
+          const chunk = buffer.subarray(position, Math.min(position + size, buffer.length));
+          position += chunk.length;
+          return chunk;
+        },
+        null,
+        (offset: bigint, whence: number) => {
+          if (whence === AVSEEK_SIZE) {
+            return BigInt(buffer.length);
+          }
+          if (whence === AVSEEK_SET) {
+            position = Number(offset);
+          } else if (whence === AVSEEK_CUR) {
+            position += Number(offset);
+          } else if (whence === AVSEEK_END) {
+            position = buffer.length + Number(offset);
+          }
+          return BigInt(position);
+        },
+      );
+      ctx.allocContext();
+      ctx.pb = ioCtx;
+      await ctx.openInput('', null, null);
+      await ctx.findStreamInfo(null);
+
+      const packet = new Packet();
+      packet.alloc();
+      assert.equal(await ctx.readFrame(packet), 0);
+
+      // the reader thread dereferences pb on every read; the detach belongs
+      // to closeInput(true), which runs it after the thread stopped
+      assert.throws(() => {
+        ctx.pb = null;
+      }, /active async reader/);
+
+      await ctx.closeInput(true);
+      packet.free();
+      ioCtx.freeContext();
+      ctx = null as any;
     });
 
     it('should refuse to free a packet while a muxer write still uses it', { timeout: 10000 }, async () => {

@@ -125,6 +125,10 @@ private:
   std::atomic<InputReader*> reader_{nullptr};
 
   void StopReader();
+  // Sync variant for the main thread: a reader parked in a custom-IO callback
+  // needs the event loop to unwind, joining it here would deadlock, so that
+  // case throws and the caller has to use closeInput() instead
+  bool StopReaderSync(Napi::Env env);
   // Input-side async work: a command on the owner thread when one is active,
   // otherwise a threadpool worker under ctx_mutex_
   Napi::Promise RunOnInput(Napi::Env env, std::vector<Napi::Object> pins, std::function<int()> work, bool flushQueue);

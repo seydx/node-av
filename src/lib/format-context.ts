@@ -617,6 +617,10 @@ export class FormatContext extends OptionMember<NativeFormatContext> implements 
    *
    * Direct mapping to avformat_close_input().
    *
+   * @param detachPb - Forget a caller-owned pb (custom IOContext) once the
+   * reader thread has stopped, so it is not closed with the input. Setting
+   * `pb = null` yourself throws while an async reader is active.
+   *
    * @returns Promise that resolves when closed
    *
    * @example
@@ -627,8 +631,8 @@ export class FormatContext extends OptionMember<NativeFormatContext> implements 
    *
    * @see {@link openInput} To open input
    */
-  async closeInput(): Promise<void> {
-    return await this.native.closeInput();
+  async closeInput(detachPb = false): Promise<void> {
+    return await this.native.closeInput(detachPb);
   }
 
   /**
@@ -646,9 +650,11 @@ export class FormatContext extends OptionMember<NativeFormatContext> implements 
    * ```
    *
    * @see {@link closeInput} For async version
+   *
+   * @param detachPb - Forget a caller-owned pb once the reader stopped (see closeInput)
    */
-  closeInputSync(): void {
-    this.native.closeInputSync();
+  closeInputSync(detachPb = false): void {
+    this.native.closeInputSync(detachPb);
   }
 
   /**
