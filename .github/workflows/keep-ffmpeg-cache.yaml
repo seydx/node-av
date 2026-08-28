@@ -1,0 +1,99 @@
+name: "♻️ Keep FFmpeg caches alive"
+
+on:
+  schedule:
+    - cron: "0 4 */5 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  keys:
+    name: "Compute cache keys"
+    runs-on: ubuntu-latest
+    outputs:
+      windows-x64: ${{ steps.keys.outputs.windows-x64 }}
+      windows-arm64: ${{ steps.keys.outputs.windows-arm64 }}
+      linux-x64: ${{ steps.keys.outputs.linux-x64 }}
+      linux-arm64: ${{ steps.keys.outputs.linux-arm64 }}
+      macos-x64: ${{ steps.keys.outputs.macos-x64 }}
+      macos-arm64: ${{ steps.keys.outputs.macos-arm64 }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Derive keys from build-prebuilds.yaml
+        id: keys
+        run: |
+          WORKFLOW=.github/workflows/build-prebuilds.yaml
+          value() { grep -E "^  $1: \"" "$WORKFLOW" | head -1 | sed -E 's/.*: "([^"]*)".*/\1/'; }
+          WINDOWS=$(value CACHE_VERSION_WINDOWS)
+          LINUX=$(value CACHE_VERSION_LINUX)
+          MACOS=$(value CACHE_VERSION_MACOS)
+          XCODE=$(value XCODE_VERSION)
+          # the submodule pointer is part of the tree, no submodule checkout needed
+          HASH=$(git ls-tree HEAD --object-only externals/jellyfin-ffmpeg)
+          for v in WINDOWS LINUX MACOS XCODE HASH; do
+            [ -n "${!v}" ] || { echo "::error::could not derive $v"; exit 1; }
+          done
+          {
+            echo "windows-x64=ffmpeg-windows-x64-${WINDOWS}-${HASH}"
+            echo "windows-arm64=ffmpeg-windows-arm64-${WINDOWS}-${HASH}"
+            echo "linux-x64=ffmpeg-linux-x64-${LINUX}-${HASH}"
+            echo "linux-arm64=ffmpeg-linux-arm64-${LINUX}-${HASH}"
+            echo "macos-x64=ffmpeg-macos-x64-${MACOS}-xcode${XCODE}-${HASH}"
+            echo "macos-arm64=ffmpeg-macos-arm64-${MACOS}-xcode${XCODE}-${HASH}"
+          } | tee -a "$GITHUB_OUTPUT"
+
+  touch:
+    name: "Restore ${{ matrix.key }}"
+    needs: keys
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - key: windows-x64
+            runner: windows-2022
+            path: C:\ffmpeg-cache-x64
+          - key: windows-arm64
+            runner: windows-11-arm
+            path: C:\ffmpeg-cache-arm64
+          - key: linux-x64
+            runner: ubuntu-latest
+            path: /opt/ffbuild/prefix
+          - key: linux-arm64
+            runner: ubuntu-24.04-arm
+            path: /opt/ffbuild/prefix
+          - key: macos-x64
+            runner: macos-26
+            path: /opt/ffbuild/prefix
+          - key: macos-arm64
+            runner: macos-26
+            path: /opt/ffbuild/prefix
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Prepare directory
+        if: runner.os != 'Windows'
+        run: |
+          sudo mkdir -p /opt/ffbuild/prefix
+          sudo chown -R "$USER" /opt/ffbuild
+
+      - name: Restore FFmpeg cache
+        id: restore
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ${{ matrix.path }}
+            externals/jellyfin-ffmpeg/config*.h
+          key: ${{ needs.keys.outputs[matrix.key] }}
+
+      - name: Report
+        shell: bash
+        run: |
+          if [ "${{ steps.restore.outputs.cache-hit }}" = "true" ]; then
+            echo "kept ${{ needs.keys.outputs[matrix.key] }}"
+          else
+            echo "::warning::no cache for ${{ needs.keys.outputs[matrix.key] }}, the next release run builds FFmpeg for this platform"
+          fi
