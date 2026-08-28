@@ -17,6 +17,7 @@
                 "src/bindings/format_context.cc",
                 "src/bindings/format_context_async.cc",
                 "src/bindings/format_context_sync.cc",
+                "src/bindings/input_reader.cc",
                 "src/bindings/stream.cc",
                 "src/bindings/dictionary.cc",
                 "src/bindings/input_format.cc",
