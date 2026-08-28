@@ -1,6 +1,6 @@
 {
   "name": "node-av",
-  "version": "6.2.0-beta.19",
+  "version": "6.2.0-beta.20",
   "description": "FFmpeg bindings for Node.js",
   "author": "seydx (https://github.com/seydx/node-av)",
   "type": "module",
