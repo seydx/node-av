@@ -1776,8 +1776,6 @@ export class Decoder implements Disposable {
     this.inputQueue?.clear();
     this.outputQueue?.clear();
 
-    this.frame.free();
-
     this.audioResampler?.[Symbol.dispose]();
     this.audioResampler = undefined;
     this.resampledFrame?.free();
@@ -1789,6 +1787,7 @@ export class Decoder implements Disposable {
     this.scaledFrame = undefined;
 
     this.codecContext.freeContext();
+    this.frame.free();
 
     this.initialized = false;
   }

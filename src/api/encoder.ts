@@ -1940,8 +1940,6 @@ export class Encoder implements Disposable {
     this.inputQueue.clear();
     this.outputQueue.clear();
 
-    this.packet.free();
-
     this.audioFrameBuffer?.[Symbol.dispose]();
     this.audioFrameBuffer = undefined;
 
@@ -1956,6 +1954,7 @@ export class Encoder implements Disposable {
     this.scaledFrame = undefined;
 
     this.codecContext.freeContext();
+    this.packet.free();
 
     this.initialized = false;
   }
