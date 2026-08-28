@@ -52,9 +52,12 @@ public:
   using WorkFn = std::function<int()>;
   using ResolveFn = std::function<Napi::Value(Napi::Env, int)>;
 
-  PromiseWorker(Napi::Env env, AsyncOpCounter* ops, std::vector<Napi::Object> pins, WorkFn work, ResolveFn resolve = nullptr)
+  // Every counter in `ops` is held for the duration of Execute(): the owning
+  // object's own counter plus the counters of the packets/frames the work
+  // touches, so none of them can be freed underneath the worker
+  PromiseWorker(Napi::Env env, std::vector<AsyncOpCounter*> ops, std::vector<Napi::Object> pins, WorkFn work, ResolveFn resolve = nullptr)
     : AsyncWorker(env),
-      ops_(ops),
+      ops_(std::move(ops)),
       work_(std::move(work)),
       resolve_(std::move(resolve)),
       deferred_(Napi::Promise::Deferred::New(env)) {
@@ -63,10 +66,15 @@ public:
       pins_.emplace_back();
       pins_.back().Reset(obj, 1);
     }
-    if (ops_) {
-      ops_->Begin();
+    for (AsyncOpCounter* op : ops_) {
+      if (op) {
+        op->Begin();
+      }
     }
   }
+
+  PromiseWorker(Napi::Env env, AsyncOpCounter* ops, std::vector<Napi::Object> pins, WorkFn work, ResolveFn resolve = nullptr)
+    : PromiseWorker(env, std::vector<AsyncOpCounter*>{ops}, std::move(pins), std::move(work), std::move(resolve)) {}
 
   ~PromiseWorker() override {
     for (auto& ref : pins_) {
@@ -76,13 +84,10 @@ public:
 
   void Execute() override {
     result_ = work_();
-    // Release before OnOK: the FFmpeg object is not touched past this point,
-    // so a GuardAsyncOps() wait on the main thread can proceed even though
-    // the OnOK callback is still queued behind it.
-    if (ops_) {
-      ops_->End();
-      ops_ = nullptr;
-    }
+    // Release before OnOK: the FFmpeg objects are not touched past this
+    // point, so a GuardAsyncOps() wait on the main thread can proceed even
+    // though the OnOK callback is still queued behind it.
+    ReleaseOps();
   }
 
   void OnOK() override {
@@ -97,10 +102,7 @@ public:
   }
 
   void OnError(const Napi::Error& error) override {
-    if (ops_) {
-      ops_->End();
-      ops_ = nullptr;
-    }
+    ReleaseOps();
     if (!CanCallIntoJs(Env())) {
       return;
     }
@@ -110,15 +112,28 @@ public:
   Napi::Promise GetPromise() { return deferred_.Promise(); }
 
   // Create, queue and return the promise in one step
-  static Napi::Promise Run(Napi::Env env, AsyncOpCounter* ops, std::vector<Napi::Object> pins, WorkFn work, ResolveFn resolve = nullptr) {
-    auto* worker = new PromiseWorker(env, ops, std::move(pins), std::move(work), std::move(resolve));
+  static Napi::Promise Run(Napi::Env env, std::vector<AsyncOpCounter*> ops, std::vector<Napi::Object> pins, WorkFn work, ResolveFn resolve = nullptr) {
+    auto* worker = new PromiseWorker(env, std::move(ops), std::move(pins), std::move(work), std::move(resolve));
     auto promise = worker->GetPromise();
     worker->Queue();
     return promise;
   }
 
+  static Napi::Promise Run(Napi::Env env, AsyncOpCounter* ops, std::vector<Napi::Object> pins, WorkFn work, ResolveFn resolve = nullptr) {
+    return Run(env, std::vector<AsyncOpCounter*>{ops}, std::move(pins), std::move(work), std::move(resolve));
+  }
+
 private:
-  AsyncOpCounter* ops_;
+  void ReleaseOps() {
+    for (AsyncOpCounter* op : ops_) {
+      if (op) {
+        op->End();
+      }
+    }
+    ops_.clear();
+  }
+
+  std::vector<AsyncOpCounter*> ops_;
   WorkFn work_;
   ResolveFn resolve_;
   int result_ = 0;

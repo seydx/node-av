@@ -3,6 +3,7 @@
 
 #include <napi.h>
 #include "common.h"
+#include "promise_worker.h"
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -24,9 +25,18 @@ public:
 private:
   friend class Stream;
   friend class SyncQueue;
-
+  // Async workers that read or fill packet_ from the threadpool; they hold
+  // async_ops_ while running
+  friend class BitStreamFilterContext;
+  friend class CodecContext;
+  friend class FormatContext;
 
   AVPacket* packet_ = nullptr;
+
+  // In-flight threadpool operations touching packet_ (decoder/encoder I/O,
+  // bitstream filters, muxer writes). free()/unref()/alloc() wait on this so
+  // they cannot pull the packet out from under a worker (use-after-free).
+  AsyncOpCounter async_ops_;
 
   // Bytes of native payload currently reported to V8 via
   // napi_adjust_external_memory. Kept in sync by SyncExternalMemory().

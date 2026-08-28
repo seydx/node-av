@@ -96,6 +96,12 @@ Packet::~Packet() {
 Napi::Value Packet::Alloc(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
+  // Replacing the packet frees the old one - wait for in-flight async
+  // operations first
+  if (packet_ && !GuardAsyncOps(env, async_ops_, "Packet")) {
+    return env.Undefined();
+  }
+
   AVPacket* pkt = av_packet_alloc();
   if (!pkt) {
     Napi::Error::New(env, "Failed to allocate packet (ENOMEM)").ThrowAsJavaScriptException();
@@ -111,6 +117,12 @@ Napi::Value Packet::Alloc(const Napi::CallbackInfo& info) {
 
 Napi::Value Packet::Free(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
+  // Freeing while a worker still reads or fills the packet on the threadpool
+  // (a queued receivePacket, a muxer write) would be a use-after-free; wait
+  // bounded, then error instead of crashing
+  if (packet_ && !GuardAsyncOps(env, async_ops_, "Packet")) {
+    return env.Undefined();
+  }
   av_packet_free(&packet_);
   SyncExternalMemory(env);
   return env.Undefined();
@@ -141,7 +153,10 @@ Napi::Value Packet::Ref(const Napi::CallbackInfo& info) {
 
 Napi::Value Packet::Unref(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
-  
+
+  if (packet_ && !GuardAsyncOps(env, async_ops_, "Packet")) {
+    return env.Undefined();
+  }
   if (packet_) {
     av_packet_unref(packet_);
   }

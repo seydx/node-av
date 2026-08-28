@@ -34,6 +34,7 @@ private:
   friend class FCBuffersrcAddFrameWorker;
   friend class FCBuffersinkGetFrameWorker;
   friend class ScalerProcessWorker;
+  friend class CodecContext;
 
 
   AVFrame* frame_ = nullptr;

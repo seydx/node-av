@@ -28,6 +28,8 @@ Napi::Value BitStreamFilterContext::SendPacketAsync(const Napi::CallbackInfo& in
   AVPacket* packet = nullptr;
   bool hasPacket = false;
 
+  Packet* wrapper = nullptr;
+
   // Check if packet is provided (null packet means EOF)
   if (info.Length() > 0 && !info[0].IsNull() && !info[0].IsUndefined()) {
     if (!info[0].IsObject()) {
@@ -44,6 +46,7 @@ Napi::Value BitStreamFilterContext::SendPacketAsync(const Napi::CallbackInfo& in
     }
 
     packet = pkt->Get();
+    wrapper = pkt;
     hasPacket = true;
   }
 
@@ -54,7 +57,12 @@ Napi::Value BitStreamFilterContext::SendPacketAsync(const Napi::CallbackInfo& in
     pins.push_back(info[0].As<Napi::Object>());
   }
 
-  return PromiseWorker::Run(env, &async_ops_, std::move(pins), [ctx, packet]() {
+  std::vector<AsyncOpCounter*> ops = {&async_ops_};
+  if (wrapper) {
+    ops.push_back(&wrapper->async_ops_);
+  }
+
+  return PromiseWorker::Run(env, std::move(ops), std::move(pins), [ctx, packet]() {
     // Null check to prevent use-after-free crashes
     if (!ctx) {
       return AVERROR(EINVAL);
@@ -102,7 +110,7 @@ Napi::Value BitStreamFilterContext::ReceivePacketAsync(const Napi::CallbackInfo&
   AVPacket* pkt = packet->Get();
 
   return PromiseWorker::Run(
-      env, &async_ops_, {info.This().As<Napi::Object>(), info[0].As<Napi::Object>()},
+      env, {&async_ops_, &packet->async_ops_}, {info.This().As<Napi::Object>(), info[0].As<Napi::Object>()},
       [ctx, pkt]() {
         // Null checks to prevent use-after-free crashes
         if (!ctx || !pkt) {
