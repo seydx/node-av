@@ -4,10 +4,6 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Changed
-
-- **Windows MinGW builds are discontinued.** Only the MSVC prebuilds (`@seydx/node-av-win32-{x64,arm64}-msvc`) are published and loaded; a Node.js compiled under MSYS2/MinGW now gets the MSVC build too, and the bundled FFmpeg binary is always the standard Windows build. The MinGW CI job is commented out, not deleted.
-
 ## [6.2.0-beta.20] - 2026-08-28
 
 ### Added
@@ -22,6 +18,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- **Windows MinGW builds are discontinued.** Only the MSVC prebuilds (`@seydx/node-av-win32-{x64,arm64}-msvc`) are published and loaded; a Node.js compiled under MSYS2/MinGW now gets the MSVC build too, and the bundled FFmpeg binary is always the standard Windows build.
 - **`Packet.timeBase` returns a `Rational`** (like `Frame.timeBase`) instead of the raw native object, so it stringifies as `num/den` and offers the arithmetic helpers ([#284](https://github.com/seydx/node-av/issues/284)). The setters on both `Packet` and `Frame` accept any `{ num, den }` object as before.
 - **Demuxer read errors surface as errors, not as end-of-file.** An RTSP disconnect or I/O failure used to end `packets()` exactly like a finished file — outputs were finalized as complete and reconnect logic had nothing to trigger on. Read errors other than EOF now throw an `FFmpegError` from `packets()`/`packetsSync()` (buffered packets drain first) and reject `pipeline().completion`; `interrupt()`, `stop()` and abort signals still end cleanly.
 - **`findStreamInfoSync()` takes a `Dictionary[]`**, aligned with the async variant. The old single-`Dictionary` form violated FFmpeg's per-stream array contract and read out of bounds on multi-stream inputs; both variants now build a proper per-stream options array (your dictionaries are copied, never consumed).
