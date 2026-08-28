@@ -4,7 +4,6 @@ import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 
-import { type } from 'node:os';
 import { log } from './ffmpeg.js';
 
 const require = createRequire(import.meta.url);
@@ -15,22 +14,21 @@ const tryLoadPrebuilt = () => {
   const arch = process.arch;
 
   if (platform === 'win32') {
-    const useMingW = type() !== 'Windows_NT';
-    if (useMingW) {
-      try {
-        const packageName = `@seydx/node-av-${platform}-${arch}-mingw`;
-        // Check if the package is installed (don't check for .node file yet - it may be extracted by postinstall)
-        const packageJsonPath = require.resolve(`${packageName}/package.json`);
-        if (existsSync(packageJsonPath)) {
-          log(`Using prebuilt binary from ${packageName}`);
-          return true;
-        }
-      } catch {
-        // Package not installed
-      }
-    }
+    // MinGW builds are discontinued, Windows ships MSVC only
+    // const useMingW = type() !== 'Windows_NT';
+    // if (useMingW) {
+    //   try {
+    //     const packageName = `@seydx/node-av-${platform}-${arch}-mingw`;
+    //     const packageJsonPath = require.resolve(`${packageName}/package.json`);
+    //     if (existsSync(packageJsonPath)) {
+    //       log(`Using prebuilt binary from ${packageName}`);
+    //       return true;
+    //     }
+    //   } catch {
+    //     // Package not installed
+    //   }
+    // }
 
-    // Fallback to MSVC
     try {
       const packageName = `@seydx/node-av-${platform}-${arch}-msvc`;
       // Check if the package is installed (don't check for .node file yet - it may be extracted by postinstall)

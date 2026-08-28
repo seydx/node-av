@@ -64,356 +64,358 @@ jobs:
       - name: Check gyp files are in sync
         run: node scripts/check-gyp-sync.js
 
-  build_windows_mingw:
-    name: "Windows MinGW ${{ matrix.os.arch }}"
-    runs-on: ${{ matrix.os.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - name: CLANG64
-            arch: x64
-            runner: windows-2022
-            msystem: CLANG64
-            toolchain: mingw-w64-clang-x86_64-toolchain
-            nasm: mingw-w64-clang-x86_64-nasm
-            build_script: ./msys2/build.sh
-          - name: CLANGARM64
-            arch: arm64
-            runner: windows-11-arm
-            msystem: CLANGARM64
-            toolchain: mingw-w64-clang-aarch64-toolchain
-            nasm: mingw-w64-clang-aarch64-nasm
-            build_script: ./msys2/buildarm64.sh
-    defaults:
-      run:
-        shell: msys2 {0}
-    steps:
-      - uses: msys2/setup-msys2@v2
-        with:
-          update: true
-          msystem: ${{ matrix.os.msystem }}
-          install: >-
-            git
-            curl
-            wget
-            zip
-            ${{ matrix.os.toolchain }}
-            quilt
-            diffstat
-            ${{ matrix.os.nasm }}
-            mingw-w64-${{ matrix.os.msystem == 'CLANG64' && 'clang-x86_64' || 'clang-aarch64' }}-python
-            mingw-w64-${{ matrix.os.msystem == 'CLANG64' && 'clang-x86_64' || 'clang-aarch64' }}-nodejs
-            mingw-w64-${{ matrix.os.msystem == 'CLANG64' && 'clang-x86_64' || 'clang-aarch64' }}-gcc
+  # MinGW builds are discontinued (MSVC only). The job is kept commented
+  # out so it can be revived without archaeology.
+  #   build_windows_mingw:
+  #     name: "Windows MinGW ${{ matrix.os.arch }}"
+  #     runs-on: ${{ matrix.os.runner }}
+  #     strategy:
+  #       fail-fast: false
+  #       matrix:
+  #         os:
+  #           - name: CLANG64
+  #             arch: x64
+  #             runner: windows-2022
+  #             msystem: CLANG64
+  #             toolchain: mingw-w64-clang-x86_64-toolchain
+  #             nasm: mingw-w64-clang-x86_64-nasm
+  #             build_script: ./msys2/build.sh
+  #           - name: CLANGARM64
+  #             arch: arm64
+  #             runner: windows-11-arm
+  #             msystem: CLANGARM64
+  #             toolchain: mingw-w64-clang-aarch64-toolchain
+  #             nasm: mingw-w64-clang-aarch64-nasm
+  #             build_script: ./msys2/buildarm64.sh
+  #     defaults:
+  #       run:
+  #         shell: msys2 {0}
+  #     steps:
+  #       - uses: msys2/setup-msys2@v2
+  #         with:
+  #           update: true
+  #           msystem: ${{ matrix.os.msystem }}
+  #           install: >-
+  #             git
+  #             curl
+  #             wget
+  #             zip
+  #             ${{ matrix.os.toolchain }}
+  #             quilt
+  #             diffstat
+  #             ${{ matrix.os.nasm }}
+  #             mingw-w64-${{ matrix.os.msystem == 'CLANG64' && 'clang-x86_64' || 'clang-aarch64' }}-python
+  #             mingw-w64-${{ matrix.os.msystem == 'CLANG64' && 'clang-x86_64' || 'clang-aarch64' }}-nodejs
+  #             mingw-w64-${{ matrix.os.msystem == 'CLANG64' && 'clang-x86_64' || 'clang-aarch64' }}-gcc
 
-      - uses: actions/checkout@v7
-        with:
-          submodules: true
+  #       - uses: actions/checkout@v7
+  #         with:
+  #           submodules: true
 
-      - uses: actions/setup-node@v7
-        with:
-          node-version: "24"
+  #       - uses: actions/setup-node@v7
+  #         with:
+  #           node-version: "24"
 
-      - name: Read FFmpeg version
-        id: ffmpeg-version
-        shell: bash
-        run: |
-          FFMPEG_VERSION=$(cat externals/jellyfin-ffmpeg/FFMPEG_VERSION)
-          echo "version=$FFMPEG_VERSION" >> $GITHUB_OUTPUT
-          echo "FFmpeg version: $FFMPEG_VERSION"
+  #       - name: Read FFmpeg version
+  #         id: ffmpeg-version
+  #         shell: bash
+  #         run: |
+  #           FFMPEG_VERSION=$(cat externals/jellyfin-ffmpeg/FFMPEG_VERSION)
+  #           echo "version=$FFMPEG_VERSION" >> $GITHUB_OUTPUT
+  #           echo "FFmpeg version: $FFMPEG_VERSION"
 
-      - name: Get Jellyfin FFmpeg commit hash
-        id: ffmpeg-hash
-        shell: bash
-        run: |
-          if [ -n "${{ env.JELLYFIN_FFMPEG_HASH }}" ]; then
-            echo "hash=${{ env.JELLYFIN_FFMPEG_HASH }}" >> $GITHUB_OUTPUT
-          else
-            echo "hash=$(git -C externals/jellyfin-ffmpeg rev-parse HEAD)" >> $GITHUB_OUTPUT
-          fi
+  #       - name: Get Jellyfin FFmpeg commit hash
+  #         id: ffmpeg-hash
+  #         shell: bash
+  #         run: |
+  #           if [ -n "${{ env.JELLYFIN_FFMPEG_HASH }}" ]; then
+  #             echo "hash=${{ env.JELLYFIN_FFMPEG_HASH }}" >> $GITHUB_OUTPUT
+  #           else
+  #             echo "hash=$(git -C externals/jellyfin-ffmpeg rev-parse HEAD)" >> $GITHUB_OUTPUT
+  #           fi
 
-      - name: Prepare directories
-        run: |
-          mkdir -p /${{ matrix.os.msystem == 'CLANG64' && 'clang64' || 'clangarm64' }}/ffbuild/lib/pkgconfig
-          mkdir -p /${{ matrix.os.msystem == 'CLANG64' && 'clang64' || 'clangarm64' }}/ffbuild/include
-          mkdir -p /${{ matrix.os.msystem == 'CLANG64' && 'clang64' || 'clangarm64' }}/ffbuild/bin
+  #       - name: Prepare directories
+  #         run: |
+  #           mkdir -p /${{ matrix.os.msystem == 'CLANG64' && 'clang64' || 'clangarm64' }}/ffbuild/lib/pkgconfig
+  #           mkdir -p /${{ matrix.os.msystem == 'CLANG64' && 'clang64' || 'clangarm64' }}/ffbuild/include
+  #           mkdir -p /${{ matrix.os.msystem == 'CLANG64' && 'clang64' || 'clangarm64' }}/ffbuild/bin
 
-      - name: Restore FFmpeg cache
-        id: cache-ffmpeg
-        uses: actions/cache@v6
-        with:
-          path: |
-            C:\ffmpeg-cache-${{ matrix.os.arch }}
-            externals/jellyfin-ffmpeg/config*.h
-          key: ffmpeg-windows-${{ matrix.os.arch }}-${{ env.CACHE_VERSION_WINDOWS }}-${{ steps.ffmpeg-hash.outputs.hash }}
+  #       - name: Restore FFmpeg cache
+  #         id: cache-ffmpeg
+  #         uses: actions/cache@v6
+  #         with:
+  #           path: |
+  #             C:\ffmpeg-cache-${{ matrix.os.arch }}
+  #             externals/jellyfin-ffmpeg/config*.h
+  #           key: ffmpeg-windows-${{ matrix.os.arch }}-${{ env.CACHE_VERSION_WINDOWS }}-${{ steps.ffmpeg-hash.outputs.hash }}
 
-      - name: Copy cache to MSYS2 location
-        if: steps.cache-ffmpeg.outputs.cache-hit == 'true'
-        shell: msys2 {0}
-        run: |
-          CACHE_DIR="C:/ffmpeg-cache-${{ matrix.os.arch }}"
-          MSYS_PREFIX="/${{ matrix.os.msystem == 'CLANG64' && 'clang64' || 'clangarm64' }}/ffbuild"
+  #       - name: Copy cache to MSYS2 location
+  #         if: steps.cache-ffmpeg.outputs.cache-hit == 'true'
+  #         shell: msys2 {0}
+  #         run: |
+  #           CACHE_DIR="C:/ffmpeg-cache-${{ matrix.os.arch }}"
+  #           MSYS_PREFIX="/${{ matrix.os.msystem == 'CLANG64' && 'clang64' || 'clangarm64' }}/ffbuild"
 
-          if [ -d "${CACHE_DIR}" ]; then
-            echo "Restoring FFmpeg cache from ${CACHE_DIR} to ${MSYS_PREFIX}"
-            rm -rf "${MSYS_PREFIX}" 2>/dev/null || true
-            mkdir -p "${MSYS_PREFIX}"
-            cp -r "${CACHE_DIR}"/* "${MSYS_PREFIX}/"
-            echo "Cache restored successfully"
-          else
-            echo "Cache directory ${CACHE_DIR} not found!"
-            exit 1
-          fi
+  #           if [ -d "${CACHE_DIR}" ]; then
+  #             echo "Restoring FFmpeg cache from ${CACHE_DIR} to ${MSYS_PREFIX}"
+  #             rm -rf "${MSYS_PREFIX}" 2>/dev/null || true
+  #             mkdir -p "${MSYS_PREFIX}"
+  #             cp -r "${CACHE_DIR}"/* "${MSYS_PREFIX}/"
+  #             echo "Cache restored successfully"
+  #           else
+  #             echo "Cache directory ${CACHE_DIR} not found!"
+  #             exit 1
+  #           fi
 
-      - name: Build FFmpeg
-        id: build-ffmpeg
-        if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
-        shell: msys2 {0}
-        run: |
-          # Clear out MSYS2 ffbuild to avoid conflicts
-          rm -rf /${{ matrix.os.msystem == 'CLANG64' && 'clang64' || 'clangarm64' }}/ffbuild
-          mkdir -p /${{ matrix.os.msystem == 'CLANG64' && 'clang64' || 'clangarm64' }}/ffbuild/lib/pkgconfig
-          mkdir -p /${{ matrix.os.msystem == 'CLANG64' && 'clang64' || 'clangarm64' }}/ffbuild/include
-          mkdir -p /${{ matrix.os.msystem == 'CLANG64' && 'clang64' || 'clangarm64' }}/ffbuild/bin
+  #       - name: Build FFmpeg
+  #         id: build-ffmpeg
+  #         if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
+  #         shell: msys2 {0}
+  #         run: |
+  #           # Clear out MSYS2 ffbuild to avoid conflicts
+  #           rm -rf /${{ matrix.os.msystem == 'CLANG64' && 'clang64' || 'clangarm64' }}/ffbuild
+  #           mkdir -p /${{ matrix.os.msystem == 'CLANG64' && 'clang64' || 'clangarm64' }}/ffbuild/lib/pkgconfig
+  #           mkdir -p /${{ matrix.os.msystem == 'CLANG64' && 'clang64' || 'clangarm64' }}/ffbuild/include
+  #           mkdir -p /${{ matrix.os.msystem == 'CLANG64' && 'clang64' || 'clangarm64' }}/ffbuild/bin
 
-          # Harden source downloads. The stock DLAGENTS pass --retry, but curl only
-          # retries transient HTTP/timeout failures - a TLS handshake abort (curl 35),
-          # which upstream hosts like downloads.xiph.org throw regularly, aborts the
-          # whole build on the first try. --retry-all-errors covers those too.
-          cat >> /etc/makepkg.conf <<'MAKEPKG_DLAGENTS'
+  #           # Harden source downloads. The stock DLAGENTS pass --retry, but curl only
+  #           # retries transient HTTP/timeout failures - a TLS handshake abort (curl 35),
+  #           # which upstream hosts like downloads.xiph.org throw regularly, aborts the
+  #           # whole build on the first try. --retry-all-errors covers those too.
+  #           cat >> /etc/makepkg.conf <<'MAKEPKG_DLAGENTS'
 
-          DLAGENTS=('file::/usr/bin/curl -qgC - -o %o %u'
-                    'ftp::/usr/bin/curl -qgfC - --ftp-pasv --connect-timeout 30 --retry 5 --retry-delay 5 --retry-all-errors -o %o %u'
-                    'http::/usr/bin/curl -qgb "" -fLC - --connect-timeout 30 --retry 5 --retry-delay 5 --retry-all-errors -o %o %u'
-                    'https::/usr/bin/curl -qgb "" -fLC - --connect-timeout 30 --retry 5 --retry-delay 5 --retry-all-errors -o %o %u'
-                    'rsync::/usr/bin/rsync --no-motd -z %u %o'
-                    'scp::/usr/bin/scp -C %u %o')
-          MAKEPKG_DLAGENTS
+  #           DLAGENTS=('file::/usr/bin/curl -qgC - -o %o %u'
+  #                     'ftp::/usr/bin/curl -qgfC - --ftp-pasv --connect-timeout 30 --retry 5 --retry-delay 5 --retry-all-errors -o %o %u'
+  #                     'http::/usr/bin/curl -qgb "" -fLC - --connect-timeout 30 --retry 5 --retry-delay 5 --retry-all-errors -o %o %u'
+  #                     'https::/usr/bin/curl -qgb "" -fLC - --connect-timeout 30 --retry 5 --retry-delay 5 --retry-all-errors -o %o %u'
+  #                     'rsync::/usr/bin/rsync --no-motd -z %u %o'
+  #                     'scp::/usr/bin/scp -C %u %o')
+  #           MAKEPKG_DLAGENTS
 
-          cd externals/jellyfin-ffmpeg/msys2
+  #           cd externals/jellyfin-ffmpeg/msys2
 
-          # Run Jellyfin build script
-          if [ "${{ matrix.os.arch }}" = "arm64" ]; then
-            ./buildarm64.sh
-          else
-            ./build.sh
-          fi
+  #           # Run Jellyfin build script
+  #           if [ "${{ matrix.os.arch }}" = "arm64" ]; then
+  #             ./buildarm64.sh
+  #           else
+  #             ./build.sh
+  #           fi
 
-          PREFIX="/${{ matrix.os.msystem == 'CLANG64' && 'clang64' || 'clangarm64' }}/ffbuild"
+  #           PREFIX="/${{ matrix.os.msystem == 'CLANG64' && 'clang64' || 'clangarm64' }}/ffbuild"
 
-          # Install FFmpeg libraries
-          cd ..
-          make install
+  #           # Install FFmpeg libraries
+  #           cd ..
+  #           make install
 
-          # Copy FFmpeg libraries to main lib directory
-          if [ -d "${PREFIX}/jellyfin-ffmpeg/lib" ]; then
-            cp ${PREFIX}/jellyfin-ffmpeg/lib/*.a ${PREFIX}/lib/ 2>/dev/null || true
-            cp -r ${PREFIX}/jellyfin-ffmpeg/include/* ${PREFIX}/include/ 2>/dev/null || true
+  #           # Copy FFmpeg libraries to main lib directory
+  #           if [ -d "${PREFIX}/jellyfin-ffmpeg/lib" ]; then
+  #             cp ${PREFIX}/jellyfin-ffmpeg/lib/*.a ${PREFIX}/lib/ 2>/dev/null || true
+  #             cp -r ${PREFIX}/jellyfin-ffmpeg/include/* ${PREFIX}/include/ 2>/dev/null || true
 
-            if [ -d "${PREFIX}/jellyfin-ffmpeg/lib/pkgconfig" ]; then
-              mkdir -p ${PREFIX}/lib/pkgconfig
-              cp ${PREFIX}/jellyfin-ffmpeg/lib/pkgconfig/*.pc ${PREFIX}/lib/pkgconfig/ 2>/dev/null || true
-            fi
-          fi
+  #             if [ -d "${PREFIX}/jellyfin-ffmpeg/lib/pkgconfig" ]; then
+  #               mkdir -p ${PREFIX}/lib/pkgconfig
+  #               cp ${PREFIX}/jellyfin-ffmpeg/lib/pkgconfig/*.pc ${PREFIX}/lib/pkgconfig/ 2>/dev/null || true
+  #             fi
+  #           fi
 
-          echo "Verifying config files from FFmpeg build..."
-          if [ ! -f config.h ]; then
-            echo "Error: config.h not found in FFmpeg build directory!"
-            exit 1
-          fi
+  #           echo "Verifying config files from FFmpeg build..."
+  #           if [ ! -f config.h ]; then
+  #             echo "Error: config.h not found in FFmpeg build directory!"
+  #             exit 1
+  #           fi
 
-          if [ ! -f config_components.h ]; then
-            echo "Error: config_components.h not found in FFmpeg build directory!"
-            exit 1
-          fi
+  #           if [ ! -f config_components.h ]; then
+  #             echo "Error: config_components.h not found in FFmpeg build directory!"
+  #             exit 1
+  #           fi
 
-          # List all config files for debugging
-          ls -la config*.h || true
-          echo "✓ Config files verified in externals/jellyfin-ffmpeg/"
+  #           # List all config files for debugging
+  #           ls -la config*.h || true
+  #           echo "✓ Config files verified in externals/jellyfin-ffmpeg/"
 
-      - name: Copy FFmpeg build to cache-friendly location
-        if: steps.cache-ffmpeg.outputs.cache-hit != 'true' && steps.build-ffmpeg.outcome == 'success'
-        shell: msys2 {0}
-        run: |
-          MSYS_PREFIX="/${{ matrix.os.msystem == 'CLANG64' && 'clang64' || 'clangarm64' }}/ffbuild"
-          CACHE_DIR="C:/ffmpeg-cache-${{ matrix.os.arch }}"
+  #       - name: Copy FFmpeg build to cache-friendly location
+  #         if: steps.cache-ffmpeg.outputs.cache-hit != 'true' && steps.build-ffmpeg.outcome == 'success'
+  #         shell: msys2 {0}
+  #         run: |
+  #           MSYS_PREFIX="/${{ matrix.os.msystem == 'CLANG64' && 'clang64' || 'clangarm64' }}/ffbuild"
+  #           CACHE_DIR="C:/ffmpeg-cache-${{ matrix.os.arch }}"
 
-          if [ -d "${MSYS_PREFIX}" ]; then
-            echo "Copying FFmpeg build to cache location"
-            rm -rf "${CACHE_DIR}" 2>/dev/null || true
-            mkdir -p "${CACHE_DIR}"
-            cp -r "${MSYS_PREFIX}"/* "${CACHE_DIR}/"
-            echo "FFmpeg build cached successfully"
-          else
-            echo "FFmpeg build directory does not exist!"
-            exit 1
-          fi
-      - name: Save FFmpeg cache
-        if: steps.cache-ffmpeg.outputs.cache-hit != 'true' && steps.build-ffmpeg.outcome == 'success'
-        uses: actions/cache/save@v6
-        with:
-          path: |
-            C:\ffmpeg-cache-${{ matrix.os.arch }}
-            externals/jellyfin-ffmpeg/config*.h
-          key: ffmpeg-windows-${{ matrix.os.arch }}-${{ env.CACHE_VERSION_WINDOWS }}-${{ steps.ffmpeg-hash.outputs.hash }}
+  #           if [ -d "${MSYS_PREFIX}" ]; then
+  #             echo "Copying FFmpeg build to cache location"
+  #             rm -rf "${CACHE_DIR}" 2>/dev/null || true
+  #             mkdir -p "${CACHE_DIR}"
+  #             cp -r "${MSYS_PREFIX}"/* "${CACHE_DIR}/"
+  #             echo "FFmpeg build cached successfully"
+  #           else
+  #             echo "FFmpeg build directory does not exist!"
+  #             exit 1
+  #           fi
+  #       - name: Save FFmpeg cache
+  #         if: steps.cache-ffmpeg.outputs.cache-hit != 'true' && steps.build-ffmpeg.outcome == 'success'
+  #         uses: actions/cache/save@v6
+  #         with:
+  #           path: |
+  #             C:\ffmpeg-cache-${{ matrix.os.arch }}
+  #             externals/jellyfin-ffmpeg/config*.h
+  #           key: ffmpeg-windows-${{ matrix.os.arch }}-${{ env.CACHE_VERSION_WINDOWS }}-${{ steps.ffmpeg-hash.outputs.hash }}
 
-      - name: Upload FFmpeg cache as artifact
-        if: inputs.upload_caches == true
-        uses: actions/upload-artifact@v7
-        with:
-          name: ffmpeg-cache-windows-${{ matrix.os.arch }}
-          path: C:\ffmpeg-cache-${{ matrix.os.arch }}
-          retention-days: 7
+  #       - name: Upload FFmpeg cache as artifact
+  #         if: inputs.upload_caches == true
+  #         uses: actions/upload-artifact@v7
+  #         with:
+  #           name: ffmpeg-cache-windows-${{ matrix.os.arch }}
+  #           path: C:\ffmpeg-cache-${{ matrix.os.arch }}
+  #           retention-days: 7
 
-      - name: Package FFmpeg binary
-        shell: msys2 {0}
-        run: |
-          if [ "${{ matrix.os.msystem }}" = "CLANG64" ]; then
-            FFMPEG_BIN="/clang64/ffbuild/jellyfin-ffmpeg/bin/ffmpeg.exe"
-          else
-            FFMPEG_BIN="/clangarm64/ffbuild/jellyfin-ffmpeg/bin/ffmpeg.exe"
-          fi
+  #       - name: Package FFmpeg binary
+  #         shell: msys2 {0}
+  #         run: |
+  #           if [ "${{ matrix.os.msystem }}" = "CLANG64" ]; then
+  #             FFMPEG_BIN="/clang64/ffbuild/jellyfin-ffmpeg/bin/ffmpeg.exe"
+  #           else
+  #             FFMPEG_BIN="/clangarm64/ffbuild/jellyfin-ffmpeg/bin/ffmpeg.exe"
+  #           fi
 
-          if [ -f "$FFMPEG_BIN" ]; then
-            mkdir -p ffmpeg-binary-win-${{ matrix.os.arch }}-jellyfin
-            cp "$FFMPEG_BIN" ffmpeg-binary-win-${{ matrix.os.arch }}-jellyfin/ffmpeg.exe
-            llvm-strip ffmpeg-binary-win-${{ matrix.os.arch }}-jellyfin/ffmpeg.exe
-            echo "Packaged FFmpeg binary for win-${{ matrix.os.arch }}-jellyfin"
-          else
-            echo "Warning: FFmpeg binary not found at $FFMPEG_BIN"
-          fi
+  #           if [ -f "$FFMPEG_BIN" ]; then
+  #             mkdir -p ffmpeg-binary-win-${{ matrix.os.arch }}-jellyfin
+  #             cp "$FFMPEG_BIN" ffmpeg-binary-win-${{ matrix.os.arch }}-jellyfin/ffmpeg.exe
+  #             llvm-strip ffmpeg-binary-win-${{ matrix.os.arch }}-jellyfin/ffmpeg.exe
+  #             echo "Packaged FFmpeg binary for win-${{ matrix.os.arch }}-jellyfin"
+  #           else
+  #             echo "Warning: FFmpeg binary not found at $FFMPEG_BIN"
+  #           fi
 
-      - name: Install Node dependencies
-        run: npm install --ignore-scripts
+  #       - name: Install Node dependencies
+  #         run: npm install --ignore-scripts
 
-      - name: Setup custom node-gyp
-        shell: msys2 {0}
-        run: |
-          # Install and configure custom node-gyp from submodule
-          pushd externals/node-gyp
-          npm install
-          npm link
-          popd
+  #       - name: Setup custom node-gyp
+  #         shell: msys2 {0}
+  #         run: |
+  #           # Install and configure custom node-gyp from submodule
+  #           pushd externals/node-gyp
+  #           npm install
+  #           npm link
+  #           popd
 
-          # Verify node-gyp is available
-          which node-gyp
-          node-gyp --version
+  #           # Verify node-gyp is available
+  #           which node-gyp
+  #           node-gyp --version
 
-      - name: Build Native Addon
-        shell: msys2 {0}
-        run: |
-          cp binding-jellyfin.gyp binding.gyp
+  #       - name: Build Native Addon
+  #         shell: msys2 {0}
+  #         run: |
+  #           cp binding-jellyfin.gyp binding.gyp
 
-          if [ "${{ matrix.os.msystem }}" = "CLANG64" ]; then
-            PREFIX="/clang64/ffbuild"
-          else
-            PREFIX="/clangarm64/ffbuild"
-          fi
+  #           if [ "${{ matrix.os.msystem }}" = "CLANG64" ]; then
+  #             PREFIX="/clang64/ffbuild"
+  #           else
+  #             PREFIX="/clangarm64/ffbuild"
+  #           fi
 
-          # Set environment for MSYS2/Clang build
-          export CC="clang"
-          export CXX="clang++"
-          export AR="llvm-ar"
+  #           # Set environment for MSYS2/Clang build
+  #           export CC="clang"
+  #           export CXX="clang++"
+  #           export AR="llvm-ar"
 
-          # Set pkg-config path
-          export PKG_CONFIG_PATH="${PREFIX}/lib/pkgconfig:${PKG_CONFIG_PATH}"
+  #           # Set pkg-config path
+  #           export PKG_CONFIG_PATH="${PREFIX}/lib/pkgconfig:${PKG_CONFIG_PATH}"
 
-          # Set include and lib paths
-          export CFLAGS="-I${PREFIX}/include"
-          export CXXFLAGS="-I${PREFIX}/include"
-          export LDFLAGS="-L${PREFIX}/lib"
+  #           # Set include and lib paths
+  #           export CFLAGS="-I${PREFIX}/include"
+  #           export CXXFLAGS="-I${PREFIX}/include"
+  #           export LDFLAGS="-L${PREFIX}/lib"
 
-          # Use our custom node-gyp directly for better control
-          NODE_GYP_PATH="$(pwd)/externals/node-gyp/bin/node-gyp.js"
-          NODE_GYP_WIN_PATH="$(cygpath -w $NODE_GYP_PATH)"
+  #           # Use our custom node-gyp directly for better control
+  #           NODE_GYP_PATH="$(pwd)/externals/node-gyp/bin/node-gyp.js"
+  #           NODE_GYP_WIN_PATH="$(cygpath -w $NODE_GYP_PATH)"
 
-          # Use --nodedir to point to MSYS2's Node.js installation
-          NODE_PATH="/$(echo ${{ matrix.os.msystem }} | tr '[:upper:]' '[:lower:]')"
-          NODE_WIN_PATH="$(cygpath -w $NODE_PATH)"
+  #           # Use --nodedir to point to MSYS2's Node.js installation
+  #           NODE_PATH="/$(echo ${{ matrix.os.msystem }} | tr '[:upper:]' '[:lower:]')"
+  #           NODE_WIN_PATH="$(cygpath -w $NODE_PATH)"
 
-          # In MSYS2, make is usually called mingw32-make
-          # Use --make to point to the correct make binary
-          MAKE_PATH="/${{ matrix.os.msystem == 'CLANG64' && 'clang64' || 'clangarm64' }}/bin/mingw32-make.exe"
-          MAKE_WIN_PATH="$(cygpath -w $MAKE_PATH)"
+  #           # In MSYS2, make is usually called mingw32-make
+  #           # Use --make to point to the correct make binary
+  #           MAKE_PATH="/${{ matrix.os.msystem == 'CLANG64' && 'clang64' || 'clangarm64' }}/bin/mingw32-make.exe"
+  #           MAKE_WIN_PATH="$(cygpath -w $MAKE_PATH)"
 
-          node "${NODE_GYP_WIN_PATH}" rebuild \
-            --verbose \
-            --arch=${{ matrix.os.arch }} \
-            --nodedir="${NODE_WIN_PATH}" \
-            --make="${MAKE_WIN_PATH}" \
-            --release
+  #           node "${NODE_GYP_WIN_PATH}" rebuild \
+  #             --verbose \
+  #             --arch=${{ matrix.os.arch }} \
+  #             --nodedir="${NODE_WIN_PATH}" \
+  #             --make="${MAKE_WIN_PATH}" \
+  #             --release
 
-          # Create prebuilds directory structure
-          PREBUILD_DIR="prebuilds/win32-${{ matrix.os.arch }}-mingw"
-          mkdir -p "$PREBUILD_DIR"
+  #           # Create prebuilds directory structure
+  #           PREBUILD_DIR="prebuilds/win32-${{ matrix.os.arch }}-mingw"
+  #           mkdir -p "$PREBUILD_DIR"
 
-          # Find the built .node file and copy it with consistent naming
-          NODE_FILE=$(find build/Release -name "*.node" -type f | head -1)
-          if [ -n "$NODE_FILE" ]; then
-            cp "$NODE_FILE" "$PREBUILD_DIR/node-av.node"
-            echo "Copied $(basename $NODE_FILE) -> node-av.node"
+  #           # Find the built .node file and copy it with consistent naming
+  #           NODE_FILE=$(find build/Release -name "*.node" -type f | head -1)
+  #           if [ -n "$NODE_FILE" ]; then
+  #             cp "$NODE_FILE" "$PREBUILD_DIR/node-av.node"
+  #             echo "Copied $(basename $NODE_FILE) -> node-av.node"
 
-            # Strip the binary
-            llvm-strip "$PREBUILD_DIR/node-av.node"
+  #             # Strip the binary
+  #             llvm-strip "$PREBUILD_DIR/node-av.node"
 
-            # Copy binary for tests
-            mkdir -p binary
-            cp "$PREBUILD_DIR/node-av.node" binary/node-av.node
-            echo "Copied binary for tests"
+  #             # Copy binary for tests
+  #             mkdir -p binary
+  #             cp "$PREBUILD_DIR/node-av.node" binary/node-av.node
+  #             echo "Copied binary for tests"
 
-            # Copy FFmpeg binary to binary folder
-            if [ -f "ffmpeg-binary-win-${{ matrix.os.arch }}-jellyfin/ffmpeg.exe" ]; then
-              cp "ffmpeg-binary-win-${{ matrix.os.arch }}-jellyfin/ffmpeg.exe" binary/ffmpeg.exe
-              echo "Copied FFmpeg binary for tests"
-            fi
-          else
-            echo "Error: No .node file found in build/Release"
-            exit 1
-          fi
+  #             # Copy FFmpeg binary to binary folder
+  #             if [ -f "ffmpeg-binary-win-${{ matrix.os.arch }}-jellyfin/ffmpeg.exe" ]; then
+  #               cp "ffmpeg-binary-win-${{ matrix.os.arch }}-jellyfin/ffmpeg.exe" binary/ffmpeg.exe
+  #               echo "Copied FFmpeg binary for tests"
+  #             fi
+  #           else
+  #             echo "Error: No .node file found in build/Release"
+  #             exit 1
+  #           fi
 
-      - name: Check DLL dependencies
-        shell: msys2 {0}
-        run: |
-          echo "=== Checking node-av.node dependencies ==="
-          if [ -f "build/Release/node-av.node" ]; then
-            objdump -p "build/Release/node-av.node" | grep "DLL Name:"
-          fi
+  #       - name: Check DLL dependencies
+  #         shell: msys2 {0}
+  #         run: |
+  #           echo "=== Checking node-av.node dependencies ==="
+  #           if [ -f "build/Release/node-av.node" ]; then
+  #             objdump -p "build/Release/node-av.node" | grep "DLL Name:"
+  #           fi
 
-          echo ""
-          echo "=== Checking FFmpeg binary dependencies ==="
-          if [ -f "binary/ffmpeg.exe" ]; then
-            objdump -p "binary/ffmpeg.exe" | grep "DLL Name:"
-          fi
+  #           echo ""
+  #           echo "=== Checking FFmpeg binary dependencies ==="
+  #           if [ -f "binary/ffmpeg.exe" ]; then
+  #             objdump -p "binary/ffmpeg.exe" | grep "DLL Name:"
+  #           fi
 
-      # Cache the Whisper test models so runners don't re-download them from
-      # Hugging Face on every build (parallel jobs sharing the runner IP pool
-      # get rate-limited with HTTP 429).
-      - name: Cache Whisper Models
-        uses: actions/cache@v6
-        with:
-          path: models
-          key: whisper-models-v1
+  #       # Cache the Whisper test models so runners don't re-download them from
+  #       # Hugging Face on every build (parallel jobs sharing the runner IP pool
+  #       # get rate-limited with HTTP 429).
+  #       - name: Cache Whisper Models
+  #         uses: actions/cache@v6
+  #         with:
+  #           path: models
+  #           key: whisper-models-v1
 
-      - name: Run Tests
-        env:
-          AV_FROM_SOURCE: 1
-        run: npm run test:all
+  #       - name: Run Tests
+  #         env:
+  #           AV_FROM_SOURCE: 1
+  #         run: npm run test:all
 
-      - name: Upload Prebuild
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: prebuild-windows-mingw-${{ matrix.os.arch }}
-          path: prebuilds/
-          if-no-files-found: ignore
+  #       - name: Upload Prebuild
+  #         if: always()
+  #         uses: actions/upload-artifact@v7
+  #         with:
+  #           name: prebuild-windows-mingw-${{ matrix.os.arch }}
+  #           path: prebuilds/
+  #           if-no-files-found: ignore
 
-      - name: Upload FFmpeg binary
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: ffmpeg-v${{ steps.ffmpeg-version.outputs.version }}-win-${{ matrix.os.arch }}-jellyfin.zip
-          path: ffmpeg-binary-win-${{ matrix.os.arch }}-jellyfin/
-          if-no-files-found: ignore
+  #       - name: Upload FFmpeg binary
+  #         if: always()
+  #         uses: actions/upload-artifact@v7
+  #         with:
+  #           name: ffmpeg-v${{ steps.ffmpeg-version.outputs.version }}-win-${{ matrix.os.arch }}-jellyfin.zip
+  #           path: ffmpeg-binary-win-${{ matrix.os.arch }}-jellyfin/
+  #           if-no-files-found: ignore
 
   build_windows_msvc:
     name: "Windows MSVC ${{ matrix.os.arch }}"
@@ -1113,7 +1115,7 @@ jobs:
   cleanup_caches:
     name: "Cleanup stale FFmpeg caches"
     runs-on: ubuntu-latest
-    needs: [build_windows_mingw, build_windows_msvc, build_linux, build_macos]
+    needs: [build_windows_msvc, build_linux, build_macos]
     if: always() && github.event_name != 'pull_request'
     permissions:
       actions: write
@@ -1127,9 +1129,8 @@ jobs:
         run: |
           # The submodule pointer is part of the tree - no submodule checkout needed
           HASH="${JELLYFIN_FFMPEG_HASH:-$(git ls-tree HEAD --object-only externals/jellyfin-ffmpeg)}"
-          KEEP="ffmpeg-windows-x64-${CACHE_VERSION_WINDOWS}-${HASH}
-          ffmpeg-windows-arm64-${CACHE_VERSION_WINDOWS}-${HASH}
-          ffmpeg-linux-x64-${CACHE_VERSION_LINUX}-${HASH}
+          # no windows keys: the MinGW job is disabled, its caches are stale
+          KEEP="ffmpeg-linux-x64-${CACHE_VERSION_LINUX}-${HASH}
           ffmpeg-linux-arm64-${CACHE_VERSION_LINUX}-${HASH}
           ffmpeg-macos-x64-${CACHE_VERSION_MACOS}-xcode${XCODE_VERSION}-${HASH}
           ffmpeg-macos-arm64-${CACHE_VERSION_MACOS}-xcode${XCODE_VERSION}-${HASH}"

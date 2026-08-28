@@ -13,8 +13,9 @@ jobs:
     name: "Compute cache keys"
     runs-on: ubuntu-latest
     outputs:
-      windows-x64: ${{ steps.keys.outputs.windows-x64 }}
-      windows-arm64: ${{ steps.keys.outputs.windows-arm64 }}
+      # windows: MinGW builds are discontinued, MSVC uses a prebuilt FFmpeg
+      # windows-x64: ${{ steps.keys.outputs.windows-x64 }}
+      # windows-arm64: ${{ steps.keys.outputs.windows-arm64 }}
       linux-x64: ${{ steps.keys.outputs.linux-x64 }}
       linux-arm64: ${{ steps.keys.outputs.linux-arm64 }}
       macos-x64: ${{ steps.keys.outputs.macos-x64 }}
@@ -27,18 +28,18 @@ jobs:
         run: |
           WORKFLOW=.github/workflows/build-prebuilds.yaml
           value() { grep -E "^  $1: \"" "$WORKFLOW" | head -1 | sed -E 's/.*: "([^"]*)".*/\1/'; }
-          WINDOWS=$(value CACHE_VERSION_WINDOWS)
+          # WINDOWS=$(value CACHE_VERSION_WINDOWS)
           LINUX=$(value CACHE_VERSION_LINUX)
           MACOS=$(value CACHE_VERSION_MACOS)
           XCODE=$(value XCODE_VERSION)
           # the submodule pointer is part of the tree, no submodule checkout needed
           HASH=$(git ls-tree HEAD --object-only externals/jellyfin-ffmpeg)
-          for v in WINDOWS LINUX MACOS XCODE HASH; do
+          for v in LINUX MACOS XCODE HASH; do
             [ -n "${!v}" ] || { echo "::error::could not derive $v"; exit 1; }
           done
           {
-            echo "windows-x64=ffmpeg-windows-x64-${WINDOWS}-${HASH}"
-            echo "windows-arm64=ffmpeg-windows-arm64-${WINDOWS}-${HASH}"
+            # echo "windows-x64=ffmpeg-windows-x64-${WINDOWS}-${HASH}"
+            # echo "windows-arm64=ffmpeg-windows-arm64-${WINDOWS}-${HASH}"
             echo "linux-x64=ffmpeg-linux-x64-${LINUX}-${HASH}"
             echo "linux-arm64=ffmpeg-linux-arm64-${LINUX}-${HASH}"
             echo "macos-x64=ffmpeg-macos-x64-${MACOS}-xcode${XCODE}-${HASH}"
@@ -53,12 +54,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - key: windows-x64
-            runner: windows-2022
-            path: C:\ffmpeg-cache-x64
-          - key: windows-arm64
-            runner: windows-11-arm
-            path: C:\ffmpeg-cache-arm64
+          # - key: windows-x64
+          #   runner: windows-2022
+          #   path: C:\ffmpeg-cache-x64
+          # - key: windows-arm64
+          #   runner: windows-11-arm
+          #   path: C:\ffmpeg-cache-arm64
           - key: linux-x64
             runner: ubuntu-latest
             path: /opt/ffbuild/prefix

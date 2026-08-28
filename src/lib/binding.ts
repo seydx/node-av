@@ -7,7 +7,6 @@
 
 import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { type } from 'node:os';
 import { resolve } from 'node:path';
 
 import { getDirname } from '../utils/electron.js';
@@ -392,21 +391,19 @@ function loadBinding(): NativeBinding {
   if (!loadLocal) {
     // For Windows, pick the binary matching the Node.js runtime's toolchain.
     if (platform === 'win32') {
-      // os.type() reports the OS, not the build toolchain: the official Node.js
-      // for Windows is MSVC-built and always returns 'Windows_NT'. It only differs
-      // (e.g. 'MINGW64_NT-*', 'MSYS_NT-*') when Node itself was compiled under
-      // MSYS2/MinGW, so MSVC is the primary path and MinGW the niche one.
-      const useMingW = type() !== 'Windows_NT';
-      if (useMingW) {
-        try {
-          const packageName = `@seydx/node-av-${platformArch}-mingw`;
-          return require(`${packageName}/node-av.node`);
-        } catch (err) {
-          errors.push(new Error(`MinGW package not found or loading failed: ${err}`));
-        }
-      }
+      // MinGW builds are discontinued: a Node.js compiled under MSYS2/MinGW
+      // (os.type() 'MINGW64_NT-*') used to get its own package, now every
+      // Windows runtime loads the MSVC build.
+      // const useMingW = type() !== 'Windows_NT';
+      // if (useMingW) {
+      //   try {
+      //     const packageName = `@seydx/node-av-${platformArch}-mingw`;
+      //     return require(`${packageName}/node-av.node`);
+      //   } catch (err) {
+      //     errors.push(new Error(`MinGW package not found or loading failed: ${err}`));
+      //   }
+      // }
 
-      // Default for standard (MSVC-built) Windows Node.js.
       try {
         const packageName = `@seydx/node-av-${platformArch}-msvc`;
         return require(`${packageName}/node-av.node`);

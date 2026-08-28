@@ -98,9 +98,7 @@
     "@seydx/node-av-darwin-x64": "6.2.0-beta.20",
     "@seydx/node-av-linux-arm64": "6.2.0-beta.20",
     "@seydx/node-av-linux-x64": "6.2.0-beta.20",
-    "@seydx/node-av-win32-arm64-mingw": "6.2.0-beta.20",
     "@seydx/node-av-win32-arm64-msvc": "6.2.0-beta.20",
-    "@seydx/node-av-win32-x64-mingw": "6.2.0-beta.20",
     "@seydx/node-av-win32-x64-msvc": "6.2.0-beta.20"
   },
   "peerDependencies": {

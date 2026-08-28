@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **Windows MinGW builds are discontinued.** Only the MSVC prebuilds (`@seydx/node-av-win32-{x64,arm64}-msvc`) are published and loaded; a Node.js compiled under MSYS2/MinGW now gets the MSVC build too, and the bundled FFmpeg binary is always the standard Windows build. The MinGW CI job is commented out, not deleted.
+
 ## [6.2.0-beta.20] - 2026-08-28
 
 ### Added

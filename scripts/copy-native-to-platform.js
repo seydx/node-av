@@ -13,7 +13,8 @@ const root = resolve(__dirname, '..');
 const platform = process.platform;
 const arch = process.arch;
 
-const toolchains = platform === 'win32' ? ['mingw', 'msvc'] : [null];
+// MinGW builds are discontinued, Windows ships MSVC only
+const toolchains = platform === 'win32' ? ['msvc'] : [null];
 const source = resolve(root, 'build', 'Release', 'node-av.node');
 
 if (!existsSync(source)) {

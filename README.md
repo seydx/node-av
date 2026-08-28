@@ -10,7 +10,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Ready-blue.svg)](https://www.typescriptlang.org/)
 [![FFmpeg](https://img.shields.io/badge/FFmpeg-8.1.1-green.svg)](https://ffmpeg.org)
-[![Platform](https://img.shields.io/badge/platform-Windows%20(MSVC%20%7C%20MinGW)%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](https://github.com/seydx/node-av)
+[![Platform](https://img.shields.io/badge/platform-Windows%20(MSVC)%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](https://github.com/seydx/node-av)
 
 Native Node.js bindings for FFmpeg with full TypeScript support - including type-safe options (autocomplete + validation) for every codec, format, filter, and bitstream filter, generated from FFmpeg's own metadata. Provides direct access to FFmpeg's C APIs through N-API. Includes both raw FFmpeg bindings for full control and higher-level abstractions. Automatic resource management via Disposable pattern, hardware acceleration support and prebuilt binaries for Windows, Linux, and macOS.
 
@@ -562,7 +562,7 @@ Prebuilt binaries are available for multiple platforms:
 
 - **macOS**: x64, ARM64
 - **Linux**: x64, ARM64
-- **Windows**: x64, ARM64 (automatic MSVC/MinGW selection)
+- **Windows**: x64, ARM64 (MSVC)
 
 ### Cross-Platform Packaging (CI/CD)
 
@@ -576,9 +576,7 @@ npm install --os=win32 --cpu=x64
 ```
 
 npm filters the platform-specific `optionalDependencies` by these flags, and the
-postinstall hook honors them for the bundled FFmpeg binary as well. Cross-compiled
-Windows installs default to the MSVC build; pass `--libc=mingw` to select the MinGW
-(jellyfin) build instead.
+postinstall hook honors them for the bundled FFmpeg binary as well.
 
 ## Troubleshooting
 

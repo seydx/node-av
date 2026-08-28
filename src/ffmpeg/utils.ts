@@ -52,11 +52,13 @@ export function getPlatformType(): string {
  * @internal
  */
 export function useMingwToolchain(): boolean {
-  if (process.env.npm_config_os) {
-    return process.env.npm_config_libc === 'mingw';
-  }
-
-  return getPlatformType() !== 'Windows_NT';
+  // MinGW builds are discontinued, so no install picks the jellyfin zip anymore
+  // if (process.env.npm_config_os) {
+  //   return process.env.npm_config_libc === 'mingw';
+  // }
+  //
+  // return getPlatformType() !== 'Windows_NT';
+  return false;
 }
 
 /**
