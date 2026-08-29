@@ -1,6 +1,6 @@
 {
   "name": "node-av",
-  "version": "6.2.0-beta.20",
+  "version": "6.2.0-beta.21",
   "description": "FFmpeg bindings for Node.js",
   "author": "seydx (https://github.com/seydx/node-av)",
   "type": "module",
@@ -94,12 +94,12 @@
     "unzipper": "^0.12.5"
   },
   "optionalDependencies": {
-    "@seydx/node-av-darwin-arm64": "6.2.0-beta.20",
-    "@seydx/node-av-darwin-x64": "6.2.0-beta.20",
-    "@seydx/node-av-linux-arm64": "6.2.0-beta.20",
-    "@seydx/node-av-linux-x64": "6.2.0-beta.20",
-    "@seydx/node-av-win32-arm64-msvc": "6.2.0-beta.20",
-    "@seydx/node-av-win32-x64-msvc": "6.2.0-beta.20"
+    "@seydx/node-av-darwin-arm64": "6.2.0-beta.21",
+    "@seydx/node-av-darwin-x64": "6.2.0-beta.21",
+    "@seydx/node-av-linux-arm64": "6.2.0-beta.21",
+    "@seydx/node-av-linux-x64": "6.2.0-beta.21",
+    "@seydx/node-av-win32-arm64-msvc": "6.2.0-beta.21",
+    "@seydx/node-av-win32-x64-msvc": "6.2.0-beta.21"
   },
   "peerDependencies": {
     "werift": "^0.24.3"
