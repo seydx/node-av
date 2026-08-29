@@ -734,6 +734,7 @@ export const AV_PKT_DATA_RTCP_SR = 39 as AVPacketSideDataType;
 export const AV_PKT_DATA_EXIF = 40 as AVPacketSideDataType;
 export const AV_PKT_DATA_DYNAMIC_HDR_SMPTE_2094_APP5 = 41 as AVPacketSideDataType;
 export const AV_PKT_DATA_HEVC_CONF = 42 as AVPacketSideDataType;
+export const AV_PKT_DATA_RTP_TIMESTAMP = 43 as AVPacketSideDataType;
 
 // libavcodec/packet.h
 export type AVSideDataParamChangeFlags = number & { readonly [__ffmpeg_brand]: 'AVSideDataParamChangeFlags' };

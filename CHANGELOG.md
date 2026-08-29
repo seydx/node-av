@@ -4,10 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-## [6.2.0-beta.20] - 2026-08-28
+## [6.2.0-beta.21] - 2026-08-29
 
 ### Added
 
+- **`AV_PKT_DATA_RTP_TIMESTAMP` packet side data.** The bundled FFmpeg's RTP demuxer now attaches the raw 32-bit RTP timestamp (little-endian `uint32`) to every packet it emits, so RTSP consumers can correlate packets across sessions by the sender's clock instead of the rebased `pts`. Read it with `packet.getSideData(AV_PKT_DATA_RTP_TIMESTAMP)`.
 - **`RTPStream` / `WebRTCStream` / `FMP4Stream` accept a pre-composited frame source.** Besides a URL or `Demuxer`, `create()` now takes `{ video?, audio?: AsyncIterable<Frame | null> }` (the shared `MediaFrameSource` type) and encodes those frames straight to RTP/WebRTC/fragmented MP4 — no demuxer or decoder. This makes composited output (e.g. a picture-in-picture `overlay` from `FilterComplexAPI`) streamable to a browser directly, over WebRTC or MSE. WebRTC negotiation advertises the encoder's target codecs (H.264 video / OPUS audio); `FMP4Stream` encodes to H.264/AAC and interleaves both streams into its single fragmented container (`getCodecString()` works before `start()` for frame sources). See the new `examples/api-webrtc-pip.ts` and `examples/api-fmp4-pip.ts`.
 - **`WebRTCStream` answers RTCP PLI with a fresh keyframe** (via the new `RTPStream.requestVideoKeyframe()`), and `setOffer()` now starts the stream automatically after negotiation (calling `start()` yourself remains valid — it is idempotent, including concurrent calls). The frame-source video encoder bounds its GOP to ~2s and prefers a `packetization-mode=1` H264 payload when a browser offers multiple variants, so receivers that join or lose packets mid-stream resync quickly. When the peer disconnects (tab closed/reloaded — detected via ICE consent, RFC 7675), the session stops itself and fires `onClose` instead of encoding into the void.
 - **`FilterComplexGraph.create()` accepts a `HardwareContext`.** Each `chain()` then builds with hardware-aware filter selection like `FilterPreset.chain(hw)` — e.g. `scale` → `scale_vaapi`/`scale_vt` and `overlay` → `overlay_vaapi`/`overlay_videotoolbox` — so a full-GPU multi-input graph (hardware decode → composite → hardware encode) is a matter of passing the context. `examples/api-webrtc-pip.ts` gained a `--hw` flag demonstrating it (with a runtime fallback to software when the build lacks the hardware overlay filter, e.g. `overlay_videotoolbox` requires an FFmpeg build with Metal).

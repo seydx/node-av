@@ -8994,6 +8994,8 @@ export interface FilterOptionsMap {
     force_divisible_by?: number;
     /** reset SAR to 1 and scale to square pixels if scaling proportionally */
     reset_sar?: boolean;
+    /** Do not process frames at all if parameters match */
+    passthrough?: boolean;
   };
   /**
    * Scale Videotoolbox frames
