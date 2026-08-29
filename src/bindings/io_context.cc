@@ -1,9 +1,100 @@
 #include "io_context.h"
 #include <libavutil/error.h>
 #include <libavutil/mem.h>
-#include <future>
+#include <cstdint>
 #include <cstring>
+#include <future>
 #include <thread>
+
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
+#include <sys/mman.h>
+#ifndef MAP_ANONYMOUS
+#define MAP_ANONYMOUS MAP_ANON
+#endif
+#endif
+
+namespace {
+
+// Large, short-lived muxer writes can create severe process-heap retention
+// under sustained fMP4 workloads. Page-backed storage bypasses that heap and is
+// returned to the OS by the external Buffer finalizer.
+constexpr size_t kPageBackedWriteThreshold = 64 * 1024;
+
+uint8_t* AllocatePageBackedBuffer(size_t length) {
+#ifdef _WIN32
+  void* allocation = VirtualAlloc(nullptr, length, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+#else
+  void* allocation = mmap(nullptr, length, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  if (allocation == MAP_FAILED) {
+    allocation = nullptr;
+  }
+#endif
+
+  if (!allocation) {
+    return nullptr;
+  }
+
+  return static_cast<uint8_t*>(allocation);
+}
+
+void FreePageBackedBuffer(uint8_t* data, size_t length) {
+#ifdef _WIN32
+  VirtualFree(data, 0, MEM_RELEASE);
+#else
+  munmap(data, length);
+#endif
+}
+
+void FinalizePageBackedBuffer(napi_env env, void* data, void* hint) {
+  const size_t length = static_cast<size_t>(reinterpret_cast<uintptr_t>(hint));
+  Napi::MemoryManagement::AdjustExternalMemory(env, -static_cast<int64_t>(length));
+  FreePageBackedBuffer(static_cast<uint8_t*>(data), length);
+}
+
+Napi::Buffer<uint8_t> CopyWriteBuffer(Napi::Env env, const uint8_t* source, size_t length) {
+  if (length < kPageBackedWriteThreshold) {
+    return Napi::Buffer<uint8_t>::Copy(env, source, length);
+  }
+
+  uint8_t* data = AllocatePageBackedBuffer(length);
+  if (!data) {
+    // Allocation failure must not turn a recoverable write into an I/O error.
+    return Napi::Buffer<uint8_t>::Copy(env, source, length);
+  }
+
+  memcpy(data, source, length);
+
+  napi_value value;
+  void* const finalize_hint = reinterpret_cast<void*>(static_cast<uintptr_t>(length));
+  const napi_status status =
+    napi_create_external_buffer(env, length, data, FinalizePageBackedBuffer, finalize_hint, &value);
+
+  if (status == napi_ok) {
+    // Ownership transfers to Node only after the external Buffer exists.
+    Napi::MemoryManagement::AdjustExternalMemory(env, static_cast<int64_t>(length));
+    return Napi::Buffer<uint8_t>(env, value);
+  }
+
+  if (status == napi_no_external_buffers_allowed) {
+    // Some embedders disallow external buffers. Preserve compatibility by
+    // copying there, then release the temporary mapping exactly once even if
+    // Buffer::Copy leaves an empty value and a pending JavaScript exception.
+    Napi::Buffer<uint8_t> buffer = Napi::Buffer<uint8_t>::Copy(env, data, length);
+    FreePageBackedBuffer(data, length);
+    return buffer;
+  }
+
+  // Node never accepted ownership on any other failure.
+  FreePageBackedBuffer(data, length);
+  return Napi::Buffer<uint8_t>();
+}
+
+} // namespace
 
 namespace ffmpeg {
 
@@ -195,7 +286,10 @@ int IOContext::WritePacket(void* opaque, const uint8_t* buf, int buf_size) {
       Napi::Env env(data->env);
       Napi::HandleScope scope(env);
 
-      Napi::Buffer<uint8_t> buffer = Napi::Buffer<uint8_t>::Copy(env, const_cast<uint8_t*>(buf), buf_size);
+      Napi::Buffer<uint8_t> buffer = CopyWriteBuffer(env, buf, static_cast<size_t>(buf_size));
+      if (buffer.IsEmpty()) {
+        return AVERROR(EIO);
+      }
       Napi::Value result = data->write_callback_direct.Call({buffer});
 
       if (result.IsNumber()) {
@@ -218,7 +312,11 @@ int IOContext::WritePacket(void* opaque, const uint8_t* buf, int buf_size) {
 
   auto callback = [promisePtr, buf, buf_size](Napi::Env env, Napi::Function jsCallback) {
     try {
-      Napi::Buffer<uint8_t> buffer = Napi::Buffer<uint8_t>::Copy(env, const_cast<uint8_t*>(buf), buf_size);
+      Napi::Buffer<uint8_t> buffer = CopyWriteBuffer(env, buf, static_cast<size_t>(buf_size));
+      if (buffer.IsEmpty()) {
+        promisePtr->set_value(AVERROR(EIO));
+        return;
+      }
       Napi::Value result = jsCallback.Call({buffer});
 
       // Check if result is a Promise (has .then method)
