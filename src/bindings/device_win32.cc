@@ -332,6 +332,7 @@ std::vector<DeviceMode> enumerateDeviceModes(const std::string& deviceName) {
     mode.minFrameRate = fps.first;
     mode.maxFrameRate = fps.second;
     mode.pixelFormat = key.pixelFormat;
+    mode.codecId = key.pixelFormat == AV_PIX_FMT_NONE ? AV_CODEC_ID_NONE : AV_CODEC_ID_RAWVIDEO;
     modes.push_back(mode);
   }
 
