@@ -369,6 +369,7 @@ export class Demuxer implements AsyncDisposable, Disposable {
   private packetQueues = new Map<number | 'all', Packet[]>(); // streamIndex or 'all' -> queue
   private packetQueueConsumers = new Map<number | 'all', number>(); // active consumer count per queue key
   private queueResolvers = new Map<number | 'all', (() => void)[]>(); // Promise resolvers for waiting consumers (multiple per key)
+  private drainResolver: (() => void) | null = null; // Promise resolver for the demux thread parked on a full queue
   private demuxThreadActive = false;
   private demuxEof = false;
   private lastError: FFmpegError | null = null; // read error that ended the demux loop (null = clean EOF)
@@ -1812,6 +1813,9 @@ export class Demuxer implements AsyncDisposable, Disposable {
 
         // Try to get packet from queue
         let packet = queue.shift();
+        if (packet) {
+          this.wakeDemuxThread();
+        }
 
         // If queue is empty, wait for next packet
         if (!packet) {
@@ -1860,6 +1864,8 @@ export class Demuxer implements AsyncDisposable, Disposable {
             }
             continue;
           }
+
+          this.wakeDemuxThread();
         }
 
         // Apply keyframe filtering if needed
@@ -1896,6 +1902,9 @@ export class Demuxer implements AsyncDisposable, Disposable {
             p.free();
           }
         }
+
+        // The demux thread may be waiting on this queue, so wake it to check the remaining ones.
+        this.wakeDemuxThread();
       } else {
         this.packetQueueConsumers.set(queueKey, remaining);
       }
@@ -2123,6 +2132,19 @@ export class Demuxer implements AsyncDisposable, Disposable {
   }
 
   /**
+   * Wake the demux thread if it is parked waiting for a full queue to drain.
+   *
+   * @internal
+   */
+  private wakeDemuxThread(): void {
+    const resolve = this.drainResolver;
+    if (resolve) {
+      this.drainResolver = null;
+      resolve();
+    }
+  }
+
+  /**
    * Interrupt a blocking read without closing the demuxer.
    *
    * Aborts any in-progress `av_read_frame()` (e.g. on a quiet RTSP/network source
@@ -2152,6 +2174,7 @@ export class Demuxer implements AsyncDisposable, Disposable {
     this.formatContext.interrupt();
     // Signal EOF to consumers and wake any generator parked on an empty queue.
     this.demuxEof = true;
+    this.wakeDemuxThread();
     for (const resolvers of this.queueResolvers.values()) {
       for (const resolve of resolvers) {
         resolve();
@@ -2294,7 +2317,11 @@ export class Demuxer implements AsyncDisposable, Disposable {
           if (!queueFull) {
             break;
           }
-          await new Promise(setImmediate);
+
+          // Wait until a consumer frees a slot or the demuxer shuts down. Polling here would keep a CPU core busy.
+          const { promise: drained, resolve: onDrain } = Promise.withResolvers<void>();
+          this.drainResolver = onDrain;
+          await drained;
         }
 
         if (abandoned || !this.demuxThreadActive || this.isClosed) {
@@ -2344,6 +2371,7 @@ export class Demuxer implements AsyncDisposable, Disposable {
   private async stopDemuxThread(): Promise<void> {
     this.demuxThreadActive = false;
     this.demuxEof = true;
+    this.wakeDemuxThread();
 
     // Wake up any waiting generators
     for (const resolvers of this.queueResolvers.values()) {
@@ -2678,6 +2706,7 @@ export class Demuxer implements AsyncDisposable, Disposable {
 
     // Set EOF flag so generators know to exit
     this.demuxEof = true;
+    this.wakeDemuxThread();
 
     // Wake up all waiting generators BEFORE closing format context
     // This ensures generators can exit cleanly even if readFrame() is blocking
