@@ -783,6 +783,26 @@ describe('Demuxer', () => {
 
       await media.close();
     });
+
+    it('should not busy-wait while a slow consumer leaves the packet queue full', { timeout: 15000 }, async () => {
+      const media = await Demuxer.open(getInputFile('bunny-30s.mp4'));
+      openInstances.push(media);
+
+      // Take one packet, then stall long enough for the demux thread to fill the queue.
+      const packets = media.packets();
+      using first = (await packets.next()).value;
+      assert.ok(first, 'Should have received a packet');
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      // A waiting demux thread leaves the event loop idle. Polling with setImmediate keeps it fully busy.
+      const start = performance.eventLoopUtilization();
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      const { utilization } = performance.eventLoopUtilization(start);
+      assert.ok(utilization < 0.5, `Event loop should be idle while the queue is full (utilization ${utilization.toFixed(2)})`);
+
+      await packets.return(undefined);
+      await media.close();
+    });
   });
 
   describe('read errors', () => {
