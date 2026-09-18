@@ -2797,6 +2797,7 @@ export class Demuxer implements AsyncDisposable, Disposable {
     this.formatContext.closeInputSync(!!this.ioContext);
 
     this.demuxThreadActive = false;
+    this.wakeDemuxThread();
 
     for (const queue of this.packetQueues.values()) {
       for (const packet of queue) {
