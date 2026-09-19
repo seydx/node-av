@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Opt-in backward DTS rejection for `Muxer` and `FMP4Stream`.** `maxDtsCorrection` specifies a maximum backward correction in microseconds. Larger regressions raise an error before monotonic clamping. The default is zero (disabled), preserving tolerance of reconnects and camera clock changes. This is a session-recovery policy, not a substitute for timestamp-independent buffering limits.
+
 ## [6.2.0-beta.22] - 2026-08-29
 
 ### Added

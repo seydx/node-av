@@ -82,6 +82,16 @@ interface WriteJob {
  */
 export interface MuxerOptions<F extends MuxerFormat | (string & {}) = MuxerFormat | (string & {})> {
   /**
+   * Opt-in maximum backward DTS correction in microseconds. A larger
+   * correction raises an error before monotonic clamping. Recreate a live
+   * session to establish a fresh A/V timeline after such an error.
+   * Zero preserves the existing permissive timestamp correction.
+   *
+   * @default 0
+   */
+  maxDtsCorrection?: number;
+
+  /**
    * Input media for automatic metadata and property copying.
    *
    * When provided, Muxer will automatically copy:
@@ -383,6 +393,10 @@ export class Muxer implements AsyncDisposable, Disposable {
    * @internal
    */
   private constructor(options?: MuxerOptions) {
+    const maxDtsCorrection = options?.maxDtsCorrection ?? 0;
+    if (!Number.isSafeInteger(maxDtsCorrection) || maxDtsCorrection < 0) {
+      throw new RangeError('maxDtsCorrection must be a non-negative safe integer');
+    }
     this.options = {
       copyInitialNonkeyframes: false,
       exitOnError: true,
@@ -2701,6 +2715,15 @@ export class Muxer implements AsyncDisposable, Disposable {
     // 2. Set packet timeBase
     // av_interleaved_write_frame uses this for sorting!
     pkt.timeBase = dstTb;
+
+    // Inspect the rescaled DTS before either correction can hide a large
+    // regression by collapsing the resumed timeline into one-tick increments.
+    if (this.options.maxDtsCorrection && pkt.dts !== AV_NOPTS_VALUE && streamInfo.lastMuxDts !== AV_NOPTS_VALUE) {
+      const regression = streamInfo.lastMuxDts - pkt.dts;
+      if (regression > 0n && avCompareTs(regression, dstTb, BigInt(this.options.maxDtsCorrection), AV_TIME_BASE_Q) > 0) {
+        throw new Error(`Timestamp discontinuity on stream ${streamIndex}: backward DTS exceeds ${this.options.maxDtsCorrection} microseconds`);
+      }
+    }
 
     // 3. Fix DTS > PTS (invalid relationship)
     // FFmpeg formula: median of (pts, dts, last_mux_dts+1)

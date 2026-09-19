@@ -134,6 +134,15 @@ interface ParsedBox {
  */
 export interface FMP4StreamOptions {
   /**
+   * Opt-in maximum backward DTS correction in microseconds. Zero preserves
+   * existing behavior; choose a positive value only when the owner wants
+   * to recreate sessions on timestamp regressions instead of clamping them.
+   *
+   * @default 0
+   */
+  maxDtsCorrection?: number;
+
+  /**
    * Callback invoked for fMP4 data (chunks or complete boxes).
    *
    * @param data - fMP4 data information with buffer and box details
@@ -438,6 +447,7 @@ export class FMP4Stream {
       bufferSize: options.bufferSize ?? 2 * 1024 * 1024,
       boxMode: options.boxMode ?? false,
       maxQueuedFragments: options.maxQueuedFragments ?? 16,
+      maxDtsCorrection: options.maxDtsCorrection ?? 0,
       movFlags: options.movFlags ?? '+frag_keyframe+separate_moof+default_base_moof+empty_moov',
     };
 
@@ -992,6 +1002,7 @@ export class FMP4Stream {
       format: 'mp4',
       bufferSize: this.options.bufferSize,
       exitOnError: false,
+      maxDtsCorrection: this.options.maxDtsCorrection,
       configure: (fmt) => {
         const tag = this.options.video?.tag;
         if (!tag) {
