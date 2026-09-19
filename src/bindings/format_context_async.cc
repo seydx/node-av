@@ -316,6 +316,8 @@ Napi::Value FormatContext::WriteFrameAsync(const Napi::CallbackInfo& info) {
 
 Napi::Value FormatContext::InterleavedWriteFrameAsync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
+  size_t limit;
+  if (!ParseInterleaveLimit(info, limit)) return env.Undefined();
 
   Packet* packet = nullptr;
   std::vector<Napi::Object> pins = {info.This().As<Napi::Object>()};
@@ -336,14 +338,14 @@ Napi::Value FormatContext::InterleavedWriteFrameAsync(const Napi::CallbackInfo& 
   if (packet) {
     ops.push_back(&packet->async_ops_);
   }
-  return PromiseWorker::Run(env, std::move(ops), std::move(pins), [self, packet]() {
+  return PromiseWorker::Run(env, std::move(ops), std::move(pins), [self, packet, limit]() {
     // Serializes FFmpeg calls on this context and pins it against close/free
     // - AVFormatContext is not safe for concurrent use (see ctx_mutex_)
     std::unique_lock<std::shared_timed_mutex> lifecycle(self->ctx_mutex_);
     if (!self->ctx_) {
       return AVERROR(EINVAL);
     }
-    return av_interleaved_write_frame(self->ctx_, packet ? packet->Get() : nullptr);
+    return self->WriteInterleavedFrame(packet ? packet->Get() : nullptr, limit);
   });
 }
 

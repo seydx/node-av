@@ -97,6 +97,8 @@ Napi::Value FormatContext::WriteFrameSync(const Napi::CallbackInfo& info) {
 
 Napi::Value FormatContext::InterleavedWriteFrameSync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
+  size_t limit;
+  if (!ParseInterleaveLimit(info, limit)) return env.Undefined();
   // Serializes FFmpeg calls on this context and pins it against close/free
   // - AVFormatContext is not safe for concurrent use (see ctx_mutex_)
   std::unique_lock<std::shared_timed_mutex> lifecycle(ctx_mutex_, std::defer_lock);
@@ -120,7 +122,7 @@ Napi::Value FormatContext::InterleavedWriteFrameSync(const Napi::CallbackInfo& i
   }
 
   // Direct synchronous call to av_interleaved_write_frame
-  int result = av_interleaved_write_frame(ctx_, packet ? packet->Get() : nullptr);
+  int result = WriteInterleavedFrame(packet ? packet->Get() : nullptr, limit);
 
   return Napi::Number::New(env, result);
 }

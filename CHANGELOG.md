@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **FMP4 streams bound native interleaving memory independently of timestamps** ([#351](https://github.com/seydx/node-av/issues/351)). `maxInterleaveBytes` caps the native interleaving queue at 64 MiB by default; exceeding it ends the session through `onClose(error)` so its owner can recreate the stream. Zero disables the limit; generic `Muxer` instances retain their previous behavior unless opted in. Low-level `FormatContext.interleavedWriteFrame()` and its synchronous variant accept the byte budget as an optional second argument. The limit includes backing buffers, side data and packet metadata, not codec/container-private buffering. Timestamp correction is unchanged. FMP4 cleanup releases input/codecs even if closing a failed muxer repeats its worker error; `onClose` reports the original error while `stop()` completes normally.
+
 ## [6.2.0-beta.22] - 2026-08-29
 
 ### Added

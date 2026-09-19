@@ -10,10 +10,34 @@
 #include "common.h"
 #include <napi.h>
 #include <memory>
+#include <cmath>
 
 namespace ffmpeg {
 
 thread_local Napi::FunctionReference FormatContext::constructor;
+
+bool FormatContext::ParseInterleaveLimit(const Napi::CallbackInfo& info, size_t& limit) {
+  limit = 0;
+  if (info.Length() < 2 || info[1].IsUndefined()) return true;
+  if (info[1].IsNumber()) {
+    const double value = info[1].As<Napi::Number>().DoubleValue();
+    if (std::isfinite(value) && value >= 0 && value <= 9007199254740991.0 && std::floor(value) == value) {
+      limit = static_cast<size_t>(value);
+      return true;
+    }
+  }
+  Napi::RangeError::New(info.Env(), "maxInterleaveBytes must be a non-negative safe integer").ThrowAsJavaScriptException();
+  return false;
+}
+
+int FormatContext::WriteInterleavedFrame(AVPacket* packet, size_t limit) {
+  if (!interleave_budget_.Admit(ctx_, packet, limit)) {
+    // Match av_interleaved_write_frame's ownership contract on failure too.
+    av_packet_unref(packet);
+    return AVERROR(ENOMEM);
+  }
+  return av_interleaved_write_frame(ctx_, packet);
+}
 
 Napi::Object FormatContext::Init(Napi::Env env, Napi::Object exports) {
   Napi::Function func = DefineClass(env, "FormatContext", {

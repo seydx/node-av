@@ -570,8 +570,8 @@ export interface NativeFormatContext extends AsyncDisposable {
   writeHeaderSync(options: NativeDictionary | null): number;
   writeFrame(pkt: NativePacket | null): Promise<number>;
   writeFrameSync(pkt: NativePacket | null): number;
-  interleavedWriteFrame(pkt: NativePacket | null): Promise<number>;
-  interleavedWriteFrameSync(pkt: NativePacket | null): number;
+  interleavedWriteFrame(pkt: NativePacket | null, maxInterleaveBytes?: number): Promise<number>;
+  interleavedWriteFrameSync(pkt: NativePacket | null, maxInterleaveBytes?: number): number;
   writeTrailer(): Promise<number>;
   writeTrailerSync(): number;
   flush(): Promise<void>;

@@ -1080,6 +1080,10 @@ export class FormatContext extends OptionMember<NativeFormatContext> implements 
    *
    * @param pkt - Packet to write (null to flush)
    *
+   * @param maxInterleaveBytes - Native queued-packet budget (payload, side data and metadata).
+   * Zero disables it. A packet that would exceed it is consumed and returns AVERROR_ENOMEM;
+   * close the context or explicitly flush before continuing. Null flushes are always allowed.
+   *
    * @returns 0 on success, negative AVERROR on error:
    *   - AVERROR_EINVAL: Invalid packet
    *   - AVERROR_EIO: I/O error
@@ -1098,8 +1102,8 @@ export class FormatContext extends OptionMember<NativeFormatContext> implements 
    *
    * @see {@link writeFrame} For direct writing
    */
-  async interleavedWriteFrame(pkt: Packet | null): Promise<number> {
-    return await this.native.interleavedWriteFrame(pkt ? pkt.getNative() : null);
+  async interleavedWriteFrame(pkt: Packet | null, maxInterleaveBytes = 0): Promise<number> {
+    return await this.native.interleavedWriteFrame(pkt ? pkt.getNative() : null, maxInterleaveBytes);
   }
 
   /**
@@ -1112,6 +1116,9 @@ export class FormatContext extends OptionMember<NativeFormatContext> implements 
    * Direct mapping to av_interleaved_write_frame().
    *
    * @param pkt - Packet to write (null to flush)
+   *
+   * @param maxInterleaveBytes - Native queued-packet budget; zero disables it.
+   * Exceeding it consumes the packet and returns AVERROR_ENOMEM. Null flushes are always allowed.
    *
    * @returns 0 on success, negative AVERROR on error:
    *   - AVERROR_EINVAL: Invalid parameters
@@ -1131,8 +1138,8 @@ export class FormatContext extends OptionMember<NativeFormatContext> implements 
    *
    * @see {@link interleavedWriteFrame} For async version
    */
-  interleavedWriteFrameSync(pkt: Packet | null): number {
-    return this.native.interleavedWriteFrameSync(pkt ? pkt.getNative() : null);
+  interleavedWriteFrameSync(pkt: Packet | null, maxInterleaveBytes = 0): number {
+    return this.native.interleavedWriteFrameSync(pkt ? pkt.getNative() : null, maxInterleaveBytes);
   }
 
   /**

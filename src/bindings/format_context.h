@@ -10,6 +10,7 @@
 #include <vector>
 #include "common.h"
 #include "promise_worker.h"
+#include "interleave_budget.h"
 
 extern "C" {
 #include <libavformat/avformat.h>
@@ -117,6 +118,9 @@ private:
 
   AVFormatContext* ctx_ = nullptr;
   bool is_output_ = false;
+  InterleaveBudget interleave_budget_;
+  bool ParseInterleaveLimit(const Napi::CallbackInfo& info, size_t& limit);
+  int WriteInterleavedFrame(AVPacket* packet, size_t limit);
 
   // Owner thread of an input context, started by the first async readFrame()
   // and the only thread touching ctx_ from then on (see input_reader.h).

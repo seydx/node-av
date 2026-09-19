@@ -11,6 +11,7 @@ import {
   AV_TIME_BASE_Q,
   AVERROR_EAGAIN,
   AVERROR_EOF,
+  AVERROR_ENOMEM,
   AVFMT_FLAG_CUSTOM_IO,
   AVFMT_GLOBALHEADER,
   AVFMT_NOFILE,
@@ -81,6 +82,16 @@ interface WriteJob {
  * Options for Muxer creation.
  */
 export interface MuxerOptions<F extends MuxerFormat | (string & {}) = MuxerFormat | (string & {})> {
+  /**
+   * Native interleaving queue budget in bytes, including packet metadata and
+   * backing buffers. Zero disables the limit. A packet that would exceed it
+   * fails with ENOMEM, even when exitOnError is false. Close the muxer on error.
+   * Does not bound codec or container-private buffers.
+   *
+   * @default 0
+   */
+  maxInterleaveBytes?: number;
+
   /**
    * Input media for automatic metadata and property copying.
    *
@@ -383,6 +394,10 @@ export class Muxer implements AsyncDisposable, Disposable {
    * @internal
    */
   private constructor(options?: MuxerOptions) {
+    const maxInterleaveBytes = options?.maxInterleaveBytes ?? 0;
+    if (!Number.isSafeInteger(maxInterleaveBytes) || maxInterleaveBytes < 0) {
+      throw new RangeError('maxInterleaveBytes must be a non-negative safe integer');
+    }
     this.options = {
       copyInitialNonkeyframes: false,
       exitOnError: true,
@@ -2432,7 +2447,10 @@ export class Muxer implements AsyncDisposable, Disposable {
 
       // Write the packet (muxer takes ownership and will unref it)
       // NOTE: Caller must clone packet if they need to keep it (e.g., for SyncQueue)
-      const ret = await this.formatContext.interleavedWriteFrame(pkt);
+      const ret = await this.formatContext.interleavedWriteFrame(pkt, this.options.maxInterleaveBytes);
+      if (ret === AVERROR_ENOMEM && this.options.maxInterleaveBytes) {
+        FFmpegError.throwIfError(ret, 'Interleaving queue memory limit exceeded');
+      }
 
       // Handle write errors
       if (ret < 0 && ret !== AVERROR_EOF) {
@@ -2500,7 +2518,10 @@ export class Muxer implements AsyncDisposable, Disposable {
 
       // Write the packet (muxer takes ownership and will unref it)
       // NOTE: Caller must clone packet if they need to keep it (e.g., for SyncQueue)
-      const ret = this.formatContext.interleavedWriteFrameSync(pkt);
+      const ret = this.formatContext.interleavedWriteFrameSync(pkt, this.options.maxInterleaveBytes);
+      if (ret === AVERROR_ENOMEM && this.options.maxInterleaveBytes) {
+        FFmpegError.throwIfError(ret, 'Interleaving queue memory limit exceeded');
+      }
 
       FFmpegError.throwIfError(ret, 'Failed to write packet');
     } finally {
