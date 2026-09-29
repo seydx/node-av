@@ -513,8 +513,15 @@ export class RTPStream {
 
     let videoOutputIsHevc = videoStream?.codecpar.codecId === AV_CODEC_ID_HEVC;
 
-    // Setup video transcoding if needed
-    if (videoStream && !this.isVideoCodecSupported(videoStream.codecpar.codecId)) {
+    // A matching codec alone does not satisfy negotiated RTP output limits.
+    // In particular, HomeKit can request a much smaller stream for remote viewing.
+    const videoConstraintsRequireEncoding =
+      videoStream &&
+      ((this.options.video.width !== undefined && this.options.video.width !== videoStream.codecpar.width) ||
+        (this.options.video.height !== undefined && this.options.video.height !== videoStream.codecpar.height) ||
+        (this.options.video.fps !== undefined && this.options.video.fps !== videoStream.avgFrameRate.num / videoStream.avgFrameRate.den) ||
+        (this.options.video.bitrate !== undefined && this.options.video.bitrate > 0));
+    if (videoStream && (!this.isVideoCodecSupported(videoStream.codecpar.codecId) || videoConstraintsRequireEncoding)) {
       // Check if we need hardware acceleration
       if (this.options.hardware === 'auto') {
         this.hardwareContext = HardwareContext.auto();
@@ -539,7 +546,7 @@ export class RTPStream {
       const needsFps = this.options.video.fps !== undefined && isFinite(currentFps) && this.options.video.fps !== currentFps;
 
       // Get first supported codec
-      const targetCodecId = this.options.supportedVideoCodecs[0];
+      const targetCodecId = this.options.supportedVideoCodecs[0] ?? videoStream.codecpar.codecId;
       if (!targetCodecId) {
         throw new Error('No supported video codec specified for transcoding');
       }
@@ -630,13 +637,18 @@ export class RTPStream {
     this.throwIfStopRequested();
 
     // Setup audio if available and needs transcoding
-    if (audioStream && !this.isAudioCodecSupported(audioStream.codecpar.codecId)) {
+    const audioConstraintsRequireEncoding =
+      audioStream &&
+      ((this.options.audio.sampleRate !== undefined && this.options.audio.sampleRate !== audioStream.codecpar.sampleRate) ||
+        (this.options.audio.channels !== undefined && this.options.audio.channels !== audioStream.codecpar.channels) ||
+        Object.keys(this.options.audio.encoderOptions ?? {}).length > 0);
+    if (audioStream && (!this.isAudioCodecSupported(audioStream.codecpar.codecId) || audioConstraintsRequireEncoding)) {
       this.audioDecoder = await Decoder.create(audioStream, {
         exitOnError: false,
       });
 
       // Get first supported audio codec
-      const targetCodecId = this.options.supportedAudioCodecs[0];
+      const targetCodecId = this.options.supportedAudioCodecs[0] ?? audioStream.codecpar.codecId;
       if (!targetCodecId) {
         throw new Error('No supported audio codec specified for transcoding');
       }

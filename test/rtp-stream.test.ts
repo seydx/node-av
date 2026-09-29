@@ -2,7 +2,7 @@ import assert from 'node:assert';
 import { writeFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 
-import { FF_ENCODER_LIBX264 } from '../src/index.js';
+import { FF_ENCODER_LIBOPUS, FF_ENCODER_LIBX264 } from '../src/index.js';
 import { getInputFile, getOutputFile, prepareTestEnvironment, stallingFrameSource } from './index.js';
 
 import type { RtpPacket } from 'werift';
@@ -77,6 +77,31 @@ function increments(timestamps: number[]): number[] {
 }
 
 describe('RTPStream', skipWerift, () => {
+  it('repacketizes matching Opus to the negotiated channel count and packet duration', async () => {
+    const { RTPStream } = await import('../src/webrtc/index.js');
+    let packets = 0;
+    let resolveEnded!: () => void;
+    let rejectEnded!: (error: Error) => void;
+    const ended = new Promise<void>((resolve, reject) => {
+      resolveEnded = resolve;
+      rejectEnded = reject;
+    });
+    // Three seconds of synthetic 48 kHz stereo Opus in 60 ms packets.
+    const stream = RTPStream.create(getInputFile('opus-60ms.ogg'), {
+      supportedAudioCodecs: [FF_ENCODER_LIBOPUS],
+      audio: { sampleRate: 24000, channels: 1, encoderOptions: { frame_duration: 20 } },
+      onAudioPacket: () => packets++,
+      onClose: (error) => (error ? rejectEnded(error) : resolveEnded()),
+    });
+    try {
+      await stream.start();
+      await withTimeout(ended, 15000);
+      assert.ok(packets >= 145 && packets <= 155, `expected ~150 20 ms packets, got ${packets}`);
+    } finally {
+      await stream.stop();
+    }
+  });
+
   describe('RTP timestamps', () => {
     it('derives passthrough timestamps from packet PTS (24 fps input, not the old 20 fps default)', async () => {
       // video.mp4: h264, 24 fps, no B-frames => exactly 3750 ticks per frame.
@@ -162,6 +187,29 @@ describe('RTPStream', skipWerift, () => {
   });
 
   describe('bitrate cap', () => {
+    it('honors negotiated limits even when the input is already H264', async () => {
+      const { RTPStream } = await import('../src/webrtc/index.js');
+      let sawPacket!: () => void;
+      const firstPacket = new Promise<void>((resolve) => (sawPacket = resolve));
+      const stream = RTPStream.create(getInputFile('video.mp4'), {
+        supportedVideoCodecs: [FF_ENCODER_LIBX264],
+        video: { width: 320, height: 180, fps: 10, bitrate: 132_000 },
+        onVideoPacket: () => sawPacket(),
+      });
+      await stream.start();
+      try {
+        await withTimeout(firstPacket, 15000);
+        const encoder = (stream as unknown as { videoEncoder?: { codecContext: { width: number; height: number; bitRate: bigint; rcMaxRate: bigint } } }).videoEncoder;
+        assert.ok(encoder, 'matching H264 must not bypass negotiated limits');
+        assert.equal(encoder.codecContext.width, 320);
+        assert.equal(encoder.codecContext.height, 180);
+        assert.equal(encoder.codecContext.bitRate, 132000n);
+        assert.equal(encoder.codecContext.rcMaxRate, 132000n);
+      } finally {
+        await stream.stop();
+      }
+    });
+
     it('applies the negotiated bitrate as a VBV cap on the transcode path', async () => {
       const { RTPStream } = await import('../src/webrtc/index.js');
 
