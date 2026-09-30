@@ -144,6 +144,50 @@ async function getGeneratedStream(): Promise<Buffer> {
 }
 
 describe('FMP4Stream', () => {
+  it('reopens an input with missing video dimensions before creating the MP4 header', async (t) => {
+    const originalOpen = Demuxer.open.bind(Demuxer);
+    let opens = 0;
+    t.mock.method(Demuxer, 'open', async (...args: Parameters<typeof Demuxer.open>) => {
+      const input = await originalOpen(inputFile, args[1]);
+      if (++opens === 1) {
+        input.video()!.codecpar.width = 0;
+        input.video()!.codecpar.height = 0;
+      }
+      return input;
+    });
+    const stream = FMP4Stream.create('rtsp://test.invalid/live', { boxMode: true });
+    try {
+      await stream.start();
+      const init = await withTimeout(stream.initSegment);
+      assert.equal(opens, 2);
+      assert.ok(init.length > 0);
+      assert.ok(stream.getInput()!.video()!.codecpar.width > 0);
+    } finally {
+      await stream.stop();
+    }
+  });
+
+  it('closes the first input when the refreshed RTSP description fails', async (t) => {
+    const originalOpen = Demuxer.open.bind(Demuxer);
+    let firstInput: Demuxer | undefined;
+    let opens = 0;
+    t.mock.method(Demuxer, 'open', async () => {
+      if (++opens > 1) throw new Error('refresh failed');
+      firstInput = await originalOpen(inputFile);
+      firstInput.video()!.codecpar.width = 0;
+      firstInput.video()!.codecpar.height = 0;
+      return firstInput;
+    });
+    const stream = FMP4Stream.create('rtsp://test.invalid/live', { boxMode: true });
+    try {
+      await assert.rejects(stream.start(), /refresh failed/);
+      assert.equal(opens, 2);
+      assert.equal(firstInput!.isInputOpen, false);
+    } finally {
+      await stream.stop();
+    }
+  });
+
   describe('box parser', () => {
     it('should produce identical output for pathological chunkings of a real stream', async () => {
       const full = await getGeneratedStream();

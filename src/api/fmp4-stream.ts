@@ -787,6 +787,21 @@ export class FMP4Stream {
       }
       const openSignal = this.signal ? AbortSignal.any([this.signal, this.startAbort.signal]) : this.startAbort.signal;
       this.input = await Demuxer.open(this.inputUrl, { ...this.inputOptions, signal: openSignal });
+      const initialVideo = this.input.video();
+      if (/^rtsps?:/i.test(this.inputUrl) && initialVideo && (!initialVideo.codecpar.width || !initialVideo.codecpar.height)) {
+        // A live producer can correct its advertised codec after the first
+        // packets arrive. Keep it alive while obtaining a fresh description.
+        const initialInput = this.input;
+        try {
+          this.input = await Demuxer.open(this.inputUrl, {
+            ...this.inputOptions,
+            signal: openSignal,
+            options: { ...this.inputOptions.options, analyzeduration: 10000000, probesize: 5000000 },
+          });
+        } finally {
+          await initialInput.close();
+        }
+      }
     }
     this.throwIfStopRequested();
 
