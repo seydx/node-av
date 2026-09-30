@@ -1422,6 +1422,40 @@ describe('IOContext', () => {
       io.freeContext();
     });
 
+    it('keeps large direct-callback write buffers valid after the native write returns', () => {
+      const retained: Buffer[] = [];
+      const io = new IOContext();
+      io.allocContextWithCallbacks(128 * 1024, 1, undefined, (buffer: Buffer) => {
+        retained.push(buffer);
+        return buffer.length;
+      });
+
+      const payload = Buffer.alloc(512 * 1024, 0x5a);
+      io.writeSync(payload);
+      io.flushSync();
+      io.freeContext();
+
+      assert.ok(retained.some((buffer) => buffer.length >= 64 * 1024), 'test must exercise the page-backed path');
+      assert.ok(Buffer.concat(retained).equals(payload), 'retained callback buffers must preserve the complete payload');
+    });
+
+    it('keeps large thread-safe-callback write buffers valid after the native write returns', async () => {
+      const retained: Buffer[] = [];
+      const io = new IOContext();
+      io.allocContextWithCallbacks(128 * 1024, 1, undefined, (buffer: Buffer) => {
+        retained.push(buffer);
+        return buffer.length;
+      });
+
+      const payload = Buffer.alloc(512 * 1024, 0xa5);
+      await io.write(payload);
+      await io.flush();
+      io.freeContext();
+
+      assert.ok(retained.some((buffer) => buffer.length >= 64 * 1024), 'test must exercise the page-backed path');
+      assert.ok(Buffer.concat(retained).equals(payload), 'retained callback buffers must preserve the complete payload');
+    });
+
     it('should support combined async read and seek callbacks', async () => {
       const fileBuffer = await readFile(testVideoFile);
       let position = 0;
