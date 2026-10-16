@@ -1,7 +1,7 @@
 import assert from 'node:assert';
 import { describe, it } from 'node:test';
 
-import { DeviceAPI } from '../src/api/device.js';
+import { AV_CODEC_ID_NONE, AV_PIX_FMT_NONE, DeviceAPI } from '../src/index.js';
 import { skipInCI } from './index.js';
 
 describe('Device', () => {
@@ -190,6 +190,8 @@ describe('Device', () => {
           assert(typeof mode.minFrameRate === 'number');
           assert(typeof mode.maxFrameRate === 'number');
           assert(typeof mode.pixelFormat === 'number');
+          assert(typeof mode.codecId === 'number');
+          assert(mode.pixelFormat !== AV_PIX_FMT_NONE || mode.codecId !== AV_CODEC_ID_NONE, 'Capture mode must identify a raw pixel format or codec');
           assert(mode.width > 0);
           assert(mode.height > 0);
           assert(mode.minFrameRate > 0);

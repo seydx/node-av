@@ -70,6 +70,7 @@ static Napi::Array DeviceModesToJS(Napi::Env env, const std::vector<DeviceMode>&
     modeObj.Set("minFrameRate", Napi::Number::New(env, modes[i].minFrameRate));
     modeObj.Set("maxFrameRate", Napi::Number::New(env, modes[i].maxFrameRate));
     modeObj.Set("pixelFormat", Napi::Number::New(env, static_cast<int>(modes[i].pixelFormat)));
+    modeObj.Set("codecId", Napi::Number::New(env, static_cast<int>(modes[i].codecId)));
     result[i] = modeObj;
   }
 
