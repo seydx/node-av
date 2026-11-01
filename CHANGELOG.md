@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [6.2.0] - 2026-11-01
+
 ### Performance
 
 - **`Muxer` writes packets with less overhead.** The timestamp fixup reads each timestamp once and per-stream state once per stream instead of from native code on every access; remuxing is 7–14 % faster with identical output.
