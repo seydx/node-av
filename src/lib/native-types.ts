@@ -1109,6 +1109,7 @@ export interface NativeDeviceMode {
   minFrameRate: number;
   maxFrameRate: number;
   pixelFormat: AVPixelFormat;
+  codecId: AVCodecID;
 }
 
 /**

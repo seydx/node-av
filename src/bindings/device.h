@@ -8,6 +8,7 @@
 extern "C" {
 #include <libavutil/pixfmt.h>
 #include <libavutil/samplefmt.h>
+#include <libavcodec/codec_id.h>
 }
 
 namespace ffmpeg {
@@ -30,6 +31,7 @@ struct DeviceMode {
   double minFrameRate;
   double maxFrameRate;
   AVPixelFormat pixelFormat = AV_PIX_FMT_NONE;  // FFmpeg AVPixelFormat enum value
+  AVCodecID codecId = AV_CODEC_ID_NONE;         // Compressed capture format, or RAWVIDEO
 };
 
 struct AudioDeviceMode {

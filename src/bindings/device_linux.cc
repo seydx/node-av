@@ -28,21 +28,28 @@ static struct AlsaSilencer {
 
 namespace ffmpeg {
 
-// V4L2 fourcc → FFmpeg AVPixelFormat
-static AVPixelFormat v4l2FormatToAV(uint32_t fourcc) {
+struct VideoFormat {
+  AVPixelFormat pixelFormat;
+  AVCodecID codecId;
+};
+
+// V4L2 fourcc → FFmpeg raw pixel format or compressed codec.
+static VideoFormat v4l2FormatToAV(uint32_t fourcc) {
   switch (fourcc) {
-    case V4L2_PIX_FMT_YUYV:    return AV_PIX_FMT_YUYV422;
-    case V4L2_PIX_FMT_UYVY:    return AV_PIX_FMT_UYVY422;
-    case V4L2_PIX_FMT_YUV420:  return AV_PIX_FMT_YUV420P;
-    case V4L2_PIX_FMT_YVU420:  return AV_PIX_FMT_YUV420P;
-    case V4L2_PIX_FMT_NV12:    return AV_PIX_FMT_NV12;
-    case V4L2_PIX_FMT_NV21:    return AV_PIX_FMT_NV21;
-    case V4L2_PIX_FMT_RGB24:   return AV_PIX_FMT_RGB24;
-    case V4L2_PIX_FMT_BGR24:   return AV_PIX_FMT_BGR24;
-    case V4L2_PIX_FMT_RGB32:   return AV_PIX_FMT_RGBA;
-    case V4L2_PIX_FMT_BGR32:   return AV_PIX_FMT_BGRA;
-    case V4L2_PIX_FMT_GREY:    return AV_PIX_FMT_GRAY8;
-    default:                   return AV_PIX_FMT_NONE;
+    case V4L2_PIX_FMT_YUYV:    return {AV_PIX_FMT_YUYV422, AV_CODEC_ID_RAWVIDEO};
+    case V4L2_PIX_FMT_UYVY:    return {AV_PIX_FMT_UYVY422, AV_CODEC_ID_RAWVIDEO};
+    case V4L2_PIX_FMT_YUV420:  return {AV_PIX_FMT_YUV420P, AV_CODEC_ID_RAWVIDEO};
+    case V4L2_PIX_FMT_YVU420:  return {AV_PIX_FMT_YUV420P, AV_CODEC_ID_RAWVIDEO};
+    case V4L2_PIX_FMT_NV12:    return {AV_PIX_FMT_NV12, AV_CODEC_ID_RAWVIDEO};
+    case V4L2_PIX_FMT_NV21:    return {AV_PIX_FMT_NV21, AV_CODEC_ID_RAWVIDEO};
+    case V4L2_PIX_FMT_RGB24:   return {AV_PIX_FMT_RGB24, AV_CODEC_ID_RAWVIDEO};
+    case V4L2_PIX_FMT_BGR24:   return {AV_PIX_FMT_BGR24, AV_CODEC_ID_RAWVIDEO};
+    case V4L2_PIX_FMT_RGB32:   return {AV_PIX_FMT_RGBA, AV_CODEC_ID_RAWVIDEO};
+    case V4L2_PIX_FMT_BGR32:   return {AV_PIX_FMT_BGRA, AV_CODEC_ID_RAWVIDEO};
+    case V4L2_PIX_FMT_GREY:    return {AV_PIX_FMT_GRAY8, AV_CODEC_ID_RAWVIDEO};
+    case V4L2_PIX_FMT_MJPEG:
+    case V4L2_PIX_FMT_JPEG:    return {AV_PIX_FMT_NONE, AV_CODEC_ID_MJPEG};
+    default:                   return {AV_PIX_FMT_NONE, AV_CODEC_ID_NONE};
   }
 }
 
@@ -214,10 +221,12 @@ std::vector<DeviceMode> enumerateDeviceModes(const std::string& deviceName) {
   struct ModeKey {
     int w, h;
     AVPixelFormat pixelFormat;
+    AVCodecID codecId;
     bool operator<(const ModeKey& o) const {
       if (w != o.w) return w < o.w;
       if (h != o.h) return h < o.h;
-      return pixelFormat < o.pixelFormat;
+      if (pixelFormat != o.pixelFormat) return pixelFormat < o.pixelFormat;
+      return codecId < o.codecId;
     }
   };
   std::map<ModeKey, std::pair<double, double>> modeMap;
@@ -228,7 +237,7 @@ std::vector<DeviceMode> enumerateDeviceModes(const std::string& deviceName) {
   fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
   for (fmt.index = 0; ioctl(fd, VIDIOC_ENUM_FMT, &fmt) == 0; fmt.index++) {
-    AVPixelFormat pixFmt = v4l2FormatToAV(fmt.pixelformat);
+    VideoFormat videoFormat = v4l2FormatToAV(fmt.pixelformat);
 
     struct v4l2_frmsizeenum frmsize;
     memset(&frmsize, 0, sizeof(frmsize));
@@ -262,7 +271,7 @@ std::vector<DeviceMode> enumerateDeviceModes(const std::string& deviceName) {
         }
 
         if (maxFps > 0) {
-          ModeKey key{w, h, pixFmt};
+          ModeKey key{w, h, videoFormat.pixelFormat, videoFormat.codecId};
           auto it = modeMap.find(key);
           if (it == modeMap.end()) {
             modeMap[key] = {minFps, maxFps};
@@ -284,6 +293,7 @@ std::vector<DeviceMode> enumerateDeviceModes(const std::string& deviceName) {
     mode.minFrameRate = fps.first;
     mode.maxFrameRate = fps.second;
     mode.pixelFormat = key.pixelFormat;
+    mode.codecId = key.codecId;
     modes.push_back(mode);
   }
 
