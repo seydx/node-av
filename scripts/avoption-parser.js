@@ -1,8 +1,14 @@
 /**
- * Shared AVOption source parser for codecs, (de)muxers and bitstream filters.
- * Each component struct points at an AVClass via `.p.priv_class`, which points
- * at an `AVOption[]` via `.option`. We only extract name, help, AV_OPT_TYPE and
- * .unit (enum grouping) — defaults/min/max/flags are ignored.
+ * Shared AVOption source parser for codecs, filters, (de)muxers and bitstream filters.
+ * Each component struct points at an AVClass via `.p.priv_class`, which points at an
+ * `AVOption[]` via `.option`. We only extract name, help, AV_OPT_TYPE and .unit
+ * (enum grouping); defaults/min/max/flags are ignored.
+ *
+ * createSourceIndex() indexes every AVClass and AVOption array of a library, so a
+ * component can use a class or option array from another file (ff_mpv_enc_class,
+ * ff_rtsp_options, ...). Components, classes and arrays defined by function-like
+ * macros (PCM/raw demuxers, biquad filters, AudioToolbox encoders, ...) are found by
+ * expanding the macro invocations.
  */
 
 import { readFileSync, readdirSync } from 'node:fs';
@@ -31,11 +37,63 @@ export function walk(dir, acc = [], exts = ['.c', '.h']) {
   return acc;
 }
 
+// Index just past the string or char literal that starts at `i`.
+function skipLiteral(text, i) {
+  const quote = text[i++];
+  while (i < text.length && text[i] !== quote && text[i] !== '\n') {
+    if (text[i] === '\\') i++;
+    i++;
+  }
+  return i + 1;
+}
+
+// Remove C comments, leaving string and char literals intact. A block comment becomes
+// one space, as in the C translation phases, so a comment spanning lines inside a
+// #define does not cut the macro body short.
+function stripComments(src) {
+  let out = '';
+  let i = 0;
+  let last = 0;
+  while (i < src.length) {
+    const c = src[i];
+    if (c === '"' || c === "'") {
+      i = skipLiteral(src, i);
+    } else if (c === '/' && src[i + 1] === '*') {
+      const end = src.indexOf('*/', i + 2);
+      out += src.slice(last, i) + ' ';
+      i = last = end < 0 ? src.length : end + 2;
+    } else if (c === '/' && src[i + 1] === '/') {
+      const end = src.indexOf('\n', i);
+      out += src.slice(last, i);
+      i = last = end < 0 ? src.length : end;
+    } else {
+      i++;
+    }
+  }
+  return out + src.slice(last);
+}
+
+// Index of the brace that closes the one at `open`, or -1.
+function matchBrace(text, open) {
+  let depth = 0;
+  for (let i = open; i < text.length; i++) {
+    const c = text[i];
+    if (c === '"' || c === "'") {
+      i = skipLiteral(text, i) - 1;
+    } else if (c === '{') {
+      depth++;
+    } else if (c === '}' && --depth === 0) {
+      return i;
+    }
+  }
+  return -1;
+}
+
 // Collect object- and function-like #define macros (joining \-continuations).
 // A non-empty body is never clobbered by an empty redefinition (#if/#else).
-export function collectDefines(src, into) {
+function collectDefines(src, into) {
   const joined = src.replace(/\\\r?\n/g, ' ');
-  const re = /^[ \t]*#define[ \t]+([A-Za-z_]\w*)(\([^)]*\))?[ \t]+(.+)$/gm;
+  const re = /^[ \t]*#[ \t]*define[ \t]+([A-Za-z_]\w*)(\([^)]*\))?[ \t]*(.*)$/gm;
   let m;
   while ((m = re.exec(joined)) !== null) {
     const name = m[1];
@@ -52,13 +110,24 @@ export function collectDefines(src, into) {
   }
 }
 
-// Numeric #defines (e.g. AMV_OPTIONS_OFFSET 4) for `.option = array + OFFSET`.
-function collectNumericDefines(src) {
-  const out = new Map();
-  const re = /^[ \t]*#define[ \t]+([A-Z_][A-Z0-9_]*)[ \t]+(\d+)[ \t]*$/gm;
-  let m;
-  while ((m = re.exec(src)) !== null) out.set(m[1], Number(m[2]));
-  return out;
+// Macro table that reads through to a shared (header) table without copying it.
+class MacroScope {
+  constructor(parent) {
+    this.parent = parent;
+    this.own = new Map();
+  }
+
+  get(name) {
+    return this.own.get(name) ?? this.parent?.get(name);
+  }
+
+  has(name) {
+    return this.own.has(name) || !!this.parent?.has(name);
+  }
+
+  set(name, value) {
+    this.own.set(name, value);
+  }
 }
 
 const stringize = (s) => '"' + s.trim().replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
@@ -68,16 +137,12 @@ function readArgs(text, open) {
   const args = [];
   let depth = 0;
   let cur = '';
-  let i = open;
-  for (; i < text.length; i++) {
+  for (let i = open; i < text.length; i++) {
     const c = text[i];
-    if (c === '"') {
-      const start = i++;
-      while (i < text.length && text[i] !== '"') {
-        if (text[i] === '\\') i++;
-        i++;
-      }
-      cur += text.slice(start, i + 1);
+    if (c === '"' || c === "'") {
+      const end = skipLiteral(text, i);
+      cur += text.slice(i, end);
+      i = end - 1;
       continue;
     }
     if (c === '(' || c === '{' || c === '[') {
@@ -101,56 +166,120 @@ function readArgs(text, open) {
   return { args: null, end: open };
 }
 
-function substituteFunc(macro, args) {
-  let body = macro.body;
+// Substitute the arguments into a function-like macro body: `#param` stringizes,
+// `a ## b` pastes, `...`/`name...` collect the variadic arguments. As in C, an
+// argument is macro-expanded first unless it is an operand of # or ##, so
+// `NAME_ ## enabled` with enabled = CONFIG_X pastes the CONFIG_X value.
+function substituteFunc(macro, args, defines) {
+  const values = new Map();
   macro.params.forEach((p, idx) => {
-    const a = args[idx] ?? '';
-    body = body.replace(new RegExp('#\\s*\\b' + p + '\\b', 'g'), stringize(a)); // #param
-    body = body.replace(new RegExp('\\b' + p + '\\b', 'g'), a); // bare param
+    if (p === '...') values.set('__VA_ARGS__', args.slice(idx).join(', '));
+    else if (p.endsWith('...')) values.set(p.slice(0, -3).trim(), args.slice(idx).join(', '));
+    else values.set(p, args[idx] ?? '');
   });
-  return body.replace(/\s*##\s*/g, ''); // token paste
+  const expanded = new Map();
+  const expandedValue = (p) => {
+    if (!expanded.has(p)) expanded.set(p, expandMacros(values.get(p), defines));
+    return expanded.get(p);
+  };
+  const body = macro.body;
+  let out = '';
+  let afterPaste = false;
+  let i = 0;
+  while (i < body.length) {
+    const c = body[i];
+    if (/\s/.test(c)) {
+      out += c;
+      i++;
+      continue;
+    }
+    if (c === '#' && body[i + 1] === '#') {
+      out = out.trimEnd();
+      i += 2;
+      while (i < body.length && /\s/.test(body[i])) i++;
+      afterPaste = true;
+      continue;
+    }
+    if (c === '"' || c === "'") {
+      const end = skipLiteral(body, i);
+      out += body.slice(i, end);
+      i = end;
+    } else if (c === '#') {
+      const m = /^#\s*([A-Za-z_]\w*)/.exec(body.slice(i, i + 80));
+      if (m && values.has(m[1])) {
+        out += stringize(values.get(m[1]));
+        i += m[0].length;
+      } else {
+        out += c;
+        i++;
+      }
+    } else if (/[A-Za-z_]/.test(c)) {
+      let j = i + 1;
+      while (j < body.length && /\w/.test(body[j])) j++;
+      const ident = body.slice(i, j);
+      if (values.has(ident)) {
+        let k = j;
+        while (k < body.length && /\s/.test(body[k])) k++;
+        out += afterPaste || body.startsWith('##', k) ? values.get(ident) : expandedValue(ident);
+      } else {
+        out += ident;
+      }
+      i = j;
+    } else {
+      out += c;
+      i++;
+    }
+    afterPaste = false;
+  }
+  return out;
 }
 
-// One string-aware expansion pass. Returns { out, changed }.
+// One literal-aware expansion pass. Returns { out, changed }.
 function expandOnce(text, defines) {
   let out = '';
   let i = 0;
   let changed = false;
   while (i < text.length) {
     const c = text[i];
-    if (c === '"') {
-      const start = i++;
-      while (i < text.length && text[i] !== '"') {
-        if (text[i] === '\\') i++;
-        i++;
-      }
-      i++;
-      out += text.slice(start, i);
+    if (c === '"' || c === "'") {
+      const end = skipLiteral(text, i);
+      out += text.slice(i, end);
+      i = end;
+      continue;
+    }
+    if (/[0-9]/.test(c)) {
+      // a number (0x1F, 1e10, 10LL): never a macro name
+      let j = i + 1;
+      while (j < text.length && /[\w.]/.test(text[j])) j++;
+      out += text.slice(i, j);
+      i = j;
       continue;
     }
     if (/[A-Za-z_]/.test(c)) {
       let j = i + 1;
-      while (j < text.length && /[A-Za-z0-9_]/.test(text[j])) j++;
+      while (j < text.length && /\w/.test(text[j])) j++;
       const ident = text.slice(i, j);
       const macro = defines.get(ident);
-      if (macro) {
-        if (macro.params) {
-          let k = j;
-          while (k < text.length && /\s/.test(text[k])) k++;
-          if (text[k] === '(') {
-            const { args, end } = readArgs(text, k);
-            if (args) {
-              out += substituteFunc(macro, args);
-              i = end;
-              changed = true;
-              continue;
-            }
+      if (macro?.params) {
+        let k = j;
+        while (k < text.length && /\s/.test(text[k])) k++;
+        if (text[k] === '(') {
+          const { args, end } = readArgs(text, k);
+          if (args) {
+            out += substituteFunc(macro, args, defines);
+            i = end;
+            changed = true;
+            continue;
           }
-          out += ident;
-          i = j;
-          continue;
         }
+      } else if (macro && macro.body !== ident) {
         out += macro.body;
+        i = j;
+        changed = true;
+        continue;
+      } else if (!macro && /^CONFIG_[A-Z0-9_]+$/.test(ident)) {
+        // configure switches (config_components.h): assume a full build
+        out += '1';
         i = j;
         changed = true;
         continue;
@@ -167,7 +296,7 @@ function expandOnce(text, defines) {
 
 function expandMacros(body, defines) {
   let cur = body;
-  for (let guard = 0; guard < 12; guard++) {
+  for (let guard = 0; guard < 16; guard++) {
     const { out, changed } = expandOnce(cur, defines);
     cur = out;
     if (!changed) break;
@@ -175,63 +304,84 @@ function expandMacros(body, defines) {
   return cur;
 }
 
-// Header (.h) macro table. Per-.c defines are merged on top later so same-named
-// local macros (e.g. COMMON_OPTIONS) don't collide across files.
-export function buildHeaderMacros(files) {
-  const headerMacros = new Map();
-  for (const f of files) {
-    if (f.endsWith('.h')) collectDefines(readFileSync(f, 'utf8'), headerMacros);
+// All `<type> name = {...}` / `<type> name[] = {...}` definitions in a source text.
+function findDefinitions(src, type) {
+  const re = new RegExp(`\\b${type}\\s+(\\w+)\\s*(\\[[^\\]]*\\])?\\s*=\\s*\\{`, 'g');
+  const defs = [];
+  let m;
+  while ((m = re.exec(src)) !== null) {
+    const open = m.index + m[0].length - 1;
+    const close = matchBrace(src, open);
+    if (close < 0) continue;
+    defs.push({ name: m[1], isArray: !!m[2], body: src.slice(open + 1, close) });
+    re.lastIndex = close;
   }
-  return headerMacros;
+  return defs;
 }
 
-// All top-level {...} groups in a string (brace-depth aware).
+// All top-level {...} groups in a string (brace-depth aware, skips literals).
 function topLevelGroups(s) {
   const groups = [];
-  let depth = 0;
-  let start = -1;
   for (let i = 0; i < s.length; i++) {
     const c = s[i];
-    if (c === '{') {
-      if (depth === 0) start = i + 1;
-      depth++;
-    } else if (c === '}') {
-      depth--;
-      if (depth === 0 && start >= 0) {
-        groups.push(s.slice(start, i));
-        start = -1;
-      }
+    if (c === '"' || c === "'") {
+      i = skipLiteral(s, i) - 1;
+    } else if (c === '{') {
+      const close = matchBrace(s, i);
+      if (close < 0) break;
+      groups.push(s.slice(i + 1, close));
+      i = close;
     }
   }
   return groups;
 }
 
+// "a" "b" -> "ab" (adjacent literals, e.g. from `#name "_seed"` in an option macro).
+const STRSEQ = /"((?:[^"\\]|\\.)*)"(?:\s*"((?:[^"\\]|\\.)*)")*/g;
 const STRLIT = /"((?:[^"\\]|\\.)*)"/g;
+const joinLiterals = (seq) => [...seq.matchAll(STRLIT)].map((m) => m[1]).join('');
 
 function parseEntry(entry) {
   const typeMatch = entry.match(/AV_OPT_TYPE_([A-Z0-9_]+)/);
   if (!typeMatch) return null;
   const token = typeMatch[1];
   const prefix = entry.slice(0, typeMatch.index);
-  STRLIT.lastIndex = 0;
-  const strings = [];
-  let sm;
-  while ((sm = STRLIT.exec(prefix)) !== null) strings.push(sm[1]);
-  const unitMatch = entry.match(/\.unit\s*=\s*"([^"]+)"/);
+  const strings = [...prefix.matchAll(STRSEQ)].map((m) => joinLiterals(m[0]));
+  // .unit = "x", or positionally after name, help, offset, type, default, min, max, flags
+  const unitMatch = entry.match(/\.unit\s*=\s*((?:"(?:[^"\\]|\\.)*"\s*)+)/);
+  let unit = unitMatch ? joinLiterals(unitMatch[1]) : null;
+  if (!unit) {
+    const fields = readArgs(`(${entry})`, 0).args ?? [];
+    if (/^(?:"(?:[^"\\]|\\.)*"\s*)+$/.test(fields[8] ?? '')) unit = joinLiterals(fields[8]);
+  }
   return {
     name: strings[0] ?? null,
     help: strings[1] ?? null,
     token,
-    unit: unitMatch ? unitMatch[1] : null,
+    unit,
     isConst: token === 'CONST',
     isArray: /AV_OPT_TYPE_FLAG_ARRAY/.test(entry),
   };
 }
 
+// `table[N].field` in an option entry (afireqsrc names its presets so) -> the first
+// string literal of element N of `table` in `src`.
+function inlineTableNames(body, src) {
+  return body.replace(/\b(\w+)\s*\[\s*(\d+)\s*\]\s*\.\s*\w+/g, (ref, table, n) => {
+    const def = new RegExp(`\\b${table}\\s*\\[[^\\]]*\\]\\s*=\\s*\\{`).exec(src);
+    const open = def ? def.index + def[0].length - 1 : -1;
+    const element = def && topLevelGroups(src.slice(open + 1, matchBrace(src, open)))[Number(n)];
+    const lit = element?.trim().match(/^"((?:[^"\\]|\\.)*)"/);
+    return lit ? lit[0] : ref;
+  });
+}
+
 // Parse an AVOption array body. `offset` skips leading entries for classes that
-// point into the middle of a shared array (`.option = options + OFFSET`).
-export function parseOptionArray(rawBody, macros, offset = 0) {
-  const body = expandMacros(rawBody, macros);
+// point into the middle of a shared array (`.option = options + OFFSET`). `src` is
+// the source text the array comes from, for names taken from other tables.
+function parseOptionArray(rawBody, macros, offset = 0, src = null) {
+  let body = expandMacros(rawBody, macros);
+  if (src) body = inlineTableNames(body, src);
   const entries = topLevelGroups(body).map(parseEntry).filter(Boolean).slice(offset);
 
   const constsByUnit = new Map();
@@ -246,9 +396,11 @@ export function parseOptionArray(rawBody, macros, offset = 0) {
   for (const e of entries) {
     if (e.isConst || !e.name) continue;
     const enumVals = e.unit ? constsByUnit.get(e.unit) : undefined;
-    // FLAGS are combinable token lists; a non-FLAGS unit is a single-choice enum.
+    // FLAGS are combinable token lists, and an array option is a list of its element
+    // values: both suggest the named constants but take any string. Any other option
+    // with a unit is a single-choice enum.
     let kind;
-    if (e.token === 'FLAGS') kind = 'flags';
+    if (e.token === 'FLAGS' || (e.isArray && enumVals?.length)) kind = 'flags';
     else if (enumVals?.length) kind = 'enum';
     else if (e.isArray) kind = 'string';
     else kind = mapKind(e.token, false);
@@ -261,102 +413,224 @@ export function parseOptionArray(rawBody, macros, offset = 0) {
   return out;
 }
 
-const classDefRe = /(?:const\s+)?AVClass\s+(\w+)\s*=\s*\{([\s\S]*?)\n\}\s*;/g;
-const arrayDefRe = /(?:const\s+)?AVOption\s+(\w+)\s*\[\s*\]\s*=\s*\{([\s\S]*?)\n\}\s*;/g;
+const DEFINING = /\b(?:FFCodec|FFFilter|FFInputFormat|FFOutputFormat|FFBitStreamFilter|AVClass|AVOption)\b/;
 
-// Build a per-file resolver: priv_class variable name -> parsed options.
-export function makeClassResolver(src, localMacros) {
-  const numericDefines = collectNumericDefines(src);
+// Source text without preprocessor lines, so a macro body is never taken for a definition.
+const codeOf = (text) => text.replace(/\\\r?\n/g, ' ').replace(/^[ \t]*#.*$/gm, '');
 
-  const classToArray = new Map();
-  let cm;
-  classDefRe.lastIndex = 0;
-  while ((cm = classDefRe.exec(src)) !== null) {
-    const opt = cm[2].match(/\.option\s*=\s*(\w+)\s*(?:\+\s*(\w+))?/);
-    if (opt) {
-      const tok = opt[2];
-      const offset = tok ? (/^\d+$/.test(tok) ? Number(tok) : (numericDefines.get(tok) ?? 0)) : 0;
-      classToArray.set(cm[1], { array: opt[1], offset });
+// Expand the function-like macros invoked at file scope (outside any braces) and keep
+// the expansions that define a component, class or option array. Taking every
+// file-scope invocation also covers macros that only reach a definition through
+// other macros (ADPCM_ENCODER -> ADPCM_ENCODER_3 -> ... -> `FFCodec ff_..._encoder`).
+function expandDefiningMacros(code, macros) {
+  let generated = '';
+  let depth = 0;
+  let pos = 0;
+  const re = /\b([A-Za-z_]\w*)\s*\(/g;
+  let m;
+  while ((m = re.exec(code)) !== null) {
+    if (!macros.get(m[1])?.params) continue;
+    // advance the brace depth up to the invocation, skipping literals
+    for (; pos < m.index; pos++) {
+      const c = code[pos];
+      if (c === '"' || c === "'") pos = skipLiteral(code, pos) - 1;
+      else if (c === '{') depth++;
+      else if (c === '}') depth--;
     }
+    if (pos > m.index || depth !== 0) continue;
+    const { args, end } = readArgs(code, m.index + m[0].length - 1);
+    if (!args) continue;
+    const expansion = expandMacros(`${m[1]}(${args.join(', ')})`, macros);
+    if (DEFINING.test(expansion)) generated += '\n' + expansion + ';\n';
+    re.lastIndex = pos = end;
+  }
+  return generated;
+}
+
+/**
+ * Index the AVClasses and AVOption arrays of a set of source files.
+ *
+ * `sources` holds every file with its code (no comments or preprocessor lines) plus
+ * the expansion of its component-defining macro invocations (`src`), and its macro
+ * scope (`macros`). `resolveComponent(c)` returns the options of a findComponents()
+ * entry's priv_class (its own array plus the options of child classes like
+ * framesync), or null without a class; `resolveArray(name)` parses a named array.
+ * `warnings` collects what could not be resolved (ambiguous or missing definitions).
+ */
+export function createSourceIndex(files, { macroHeaders = [] } = {}) {
+  const texts = files.map((file) => ({ file, text: stripComments(readFileSync(file, 'utf8')) }));
+  // Headers of other libraries only contribute macros (libavformat uses CODEC2_AVOPTIONS
+  // from libavcodec/codec2utils.h); the library's own headers take precedence.
+  const headerMacros = new Map();
+  for (const file of macroHeaders) collectDefines(stripComments(readFileSync(file, 'utf8')), headerMacros);
+  for (const { file, text } of texts) if (file.endsWith('.h')) collectDefines(text, headerMacros);
+
+  const sources = texts.map(({ file, text }) => {
+    const macros = new MacroScope(headerMacros);
+    collectDefines(text, macros);
+    const code = codeOf(text);
+    const includes = [...text.matchAll(/^[ \t]*#[ \t]*include[ \t]+"([^"]+)"/gm)].map((m) => '/' + m[1]);
+    return { file, src: code + expandDefiningMacros(code, macros), macros, includes };
+  });
+
+  const classes = new Map(); // name -> [{ name, source, body }]
+  const arrays = new Map(); // name -> [{ name, source, body }]
+  const add = (map, name, entry) => map.set(name, [...(map.get(name) ?? []), entry]);
+  for (const source of sources) {
+    if (!DEFINING.test(source.src)) continue;
+    for (const d of findDefinitions(source.src, 'AVClass')) add(classes, d.name, { name: d.name, source, body: d.body });
+    for (const d of findDefinitions(source.src, 'AVOption')) if (d.isArray) add(arrays, d.name, { name: d.name, source, body: d.body });
   }
 
-  const resolveOffset = (tok) => (tok ? (/^\d+$/.test(tok) ? Number(tok) : (numericDefines.get(tok) ?? 0)) : 0);
-  // Parse an options expression: `arr`, `&arr[OFF]`, `arr + OFF`, `&arr`.
-  const parseOptExpr = (expr) => {
-    expr = expr.trim();
-    let m;
-    if ((m = expr.match(/^&\s*(\w+)\s*\[\s*(\w+)\s*\]$/))) return { array: m[1], offset: resolveOffset(m[2]) };
-    if ((m = expr.match(/^(\w+)\s*\+\s*(\w+)$/))) return { array: m[1], offset: resolveOffset(m[2]) };
-    if ((m = expr.match(/^&?\s*(\w+)$/))) return { array: m[1], offset: 0 };
+  const warnings = new Set();
+  // Same file first, then the headers it includes, else the one definition in the library.
+  const pick = (map, name, source, what) => {
+    const entries = map.get(name);
+    if (!entries) return null;
+    const local = entries.find((e) => e.source === source) ?? entries.find((e) => source.includes.some((inc) => e.source.file.endsWith(inc)));
+    if (local) return local;
+    const distinct = new Set(entries.map((e) => e.body));
+    if (distinct.size === 1) return entries[0];
+    warnings.add(`ambiguous ${what} ${name} for ${source.file}: ${entries.map((e) => e.source.file).join(', ')}`);
     return null;
   };
-  const setClass = (classVar, expr) => {
-    if (classToArray.has(classVar)) return;
-    const link = parseOptExpr(expr);
-    if (link) classToArray.set(classVar, link);
+
+  const offsetOf = (token, macros) => {
+    if (!token) return 0;
+    const v = expandMacros(token, macros).trim();
+    // an integer constant expression, e.g. (CONFIG_EROSION_FILTER || CONFIG_DILATION_FILTER)
+    if (/^[\d\s()+\-*/%|&!<>=~^]+$/.test(v)) return Number(new Function(`return (${v});`)());
+    warnings.add(`unresolved option offset ${token}`);
+    return 0;
   };
 
-  // libavfilter defines most classes via macros instead of a literal AVClass:
-  //   AVFILTER_DEFINE_CLASS(foo)               -> foo_class, .option = foo_options
-  //   AVFILTER_DEFINE_CLASS_EXT(foo, d, opt)   -> foo_class, .option = opt
-  //   FRAMESYNC_DEFINE_CLASS(foo, ctx, field)  -> foo_class, .option = foo_options
-  //   FRAMESYNC_DEFINE_CLASS_EXT(foo,c,f, opt) -> foo_class, .option = opt
-  let dm;
-  const plainRe = /(?:AVFILTER|FRAMESYNC)_DEFINE_CLASS\s*\(\s*(\w+)\b/g;
-  while ((dm = plainRe.exec(src)) !== null) setClass(`${dm[1]}_class`, `${dm[1]}_options`);
-  const avExtRe = /AVFILTER_DEFINE_CLASS_EXT\s*\(\s*(\w+)\s*,\s*(?:"[^"]*"|[^,]+)\s*,\s*([^)]*)\)/g;
-  while ((dm = avExtRe.exec(src)) !== null) setClass(`${dm[1]}_class`, dm[2]);
-  const fsExtRe = /FRAMESYNC_DEFINE_CLASS_EXT\s*\(\s*(\w+)\s*,[^,]*,[^,]*,\s*([^)]*)\)/g;
-  while ((dm = fsExtRe.exec(src)) !== null) setClass(`${dm[1]}_class`, dm[2]);
+  // `.option = arr`, `&arr[OFF]`, `arr + OFF`, `&arr`.
+  const linkOf = (cls) => {
+    if (cls.link !== undefined) return cls.link;
+    const optMatch = cls.body.match(/\.option\s*=\s*([^,}]+)/);
+    let link = null;
+    if (optMatch && optMatch[1].trim() !== 'NULL') {
+      const expr = expandMacros(optMatch[1], cls.source.macros).trim();
+      let m;
+      if ((m = expr.match(/^&\s*(\w+)\s*\[\s*([^\]]+?)\s*\]$/))) link = { array: m[1], offset: offsetOf(m[2], cls.source.macros) };
+      else if ((m = expr.match(/^(\w+)\s*\+\s*(.+)$/))) link = { array: m[1], offset: offsetOf(m[2], cls.source.macros) };
+      else if ((m = expr.match(/^&?\s*(\w+)$/))) link = { array: m[1], offset: 0 };
+      else warnings.add(`unparsed .option = ${expr}`);
+    }
+    const iterMatch = cls.body.match(/\.child_class_iterate\s*=\s*&?\s*(\w+)/);
+    cls.link = { ...link, children: iterMatch ? childClassesOf(iterMatch[1], cls.source) : [] };
+    return cls.link;
+  };
 
-  // Collect AVOption array bodies: literal `AVOption x[] = {...}` definitions...
-  const arrayBodies = new Map();
-  let am;
-  arrayDefRe.lastIndex = 0;
-  while ((am = arrayDefRe.exec(src)) !== null) if (!arrayBodies.has(am[1])) arrayBodies.set(am[1], am[2]);
+  // Classes returned by a child_class_iterate function (e.g. framesync's). The
+  // function is looked up in the class's own file first, as it is often static.
+  const childCache = new Map();
+  const childClassesOf = (fn, owner) => {
+    const cacheKey = `${owner.file}\0${fn}`;
+    if (childCache.has(cacheKey)) return childCache.get(cacheKey);
+    const found = [];
+    const re = new RegExp(`\\b${fn}\\s*\\(\\s*void\\s*\\*\\s*\\*\\s*\\w+\\s*\\)\\s*\\{`);
+    for (const source of [owner, ...sources.filter((x) => x !== owner)]) {
+      const m = re.exec(source.src);
+      if (!m) continue;
+      const open = m.index + m[0].length - 1;
+      const fnBody = source.src.slice(open, matchBrace(source.src, open));
+      for (const [, name] of fnBody.matchAll(/&\s*(\w+)/g)) if (classes.has(name)) found.push({ name, source });
+      break;
+    }
+    childCache.set(cacheKey, found);
+    return found;
+  };
 
-  // ...plus arrays produced by a function-like macro (e.g. f_select.c:
-  // DEFINE_OPTIONS(select, FLAGS) -> static const AVOption select_options[] = {...}).
-  for (const [mname, macro] of localMacros) {
-    if (!macro.params || !/AVOption\b[\s\S]*\[\s*\]/.test(macro.body)) continue;
-    const callRe = new RegExp(`\\b${mname}\\s*\\(`, 'g');
-    let im;
-    while ((im = callRe.exec(src)) !== null) {
-      const lineStart = src.lastIndexOf('\n', im.index) + 1;
-      if (src.slice(lineStart, im.index).includes('#define')) continue; // skip the macro definition itself
-      const { args } = readArgs(src, src.indexOf('(', im.index));
-      if (!args) continue;
-      const expanded = expandMacros(`${mname}(${args.join(',')})`, localMacros);
-      const em = expanded.match(/AVOption\s+(\w+)\s*\[\s*\]\s*=\s*\{/);
-      if (!em) continue;
-      const open = em.index + em[0].length - 1;
-      let depth = 0;
-      let body = null;
-      for (let i = open; i < expanded.length; i++) {
-        if (expanded[i] === '{') depth++;
-        else if (expanded[i] === '}' && --depth === 0) {
-          body = expanded.slice(open + 1, i);
-          break;
-        }
+  const parsed = new Map();
+  const parseArray = (arr, offset, requester) => {
+    // A header's array is parsed with the macros of the file that includes it.
+    const macros = arr.source.file.endsWith('.h') ? requester.macros : arr.source.macros;
+    const cacheKey = `${arr.source.file}\0${arr.name}\0${offset}\0${macros === requester.macros ? requester.file : ''}`;
+    if (!parsed.has(cacheKey)) parsed.set(cacheKey, parseOptionArray(arr.body, macros, offset, arr.source.src));
+    return parsed.get(cacheKey);
+  };
+
+  const resolveClass = (classVar, source) => {
+    const cls = pick(classes, classVar, source, 'class');
+    return cls ? resolveClassEntry(cls, classVar) : null;
+  };
+
+  const resolveClassEntry = (cls, label) => {
+    const link = linkOf(cls);
+    let opts = {};
+    if (link.array) {
+      const arr = pick(arrays, link.array, cls.source, 'option array');
+      if (arr) opts = { ...parseArray(arr, link.offset, cls.source) };
+      else warnings.add(`option array ${link.array} of ${label} not found`);
+    }
+    for (const child of link.children) {
+      for (const [k, v] of Object.entries(resolveClass(child.name, child.source) ?? {})) if (!(k in opts)) opts[k] = v;
+    }
+    return opts;
+  };
+
+  // Options of a component found by findComponents(): its priv_class variable, or a
+  // class it defines in place (bintext.c: `.p.priv_class = CLASS("...")`, a compound
+  // literal). null when the component has no class.
+  const resolveComponent = (c) => {
+    if (c.privClass) return resolveClass(c.privClass, c.source);
+    if (c.privClassBody) return resolveClassEntry({ source: c.source, body: c.privClassBody }, c.name);
+    return null;
+  };
+
+  // Options of a named array (e.g. avcodec_options in options_table.h).
+  const resolveArray = (name) => {
+    const arr = arrays.get(name)?.[0];
+    return arr ? parseOptionArray(arr.body, arr.source.macros) : {};
+  };
+
+  return { sources, resolveComponent, resolveArray, warnings };
+}
+
+// The initializer text of a designated field (`.p.name = <value>,`) up to its
+// top-level comma, or null.
+function fieldValue(body, field) {
+  const m = new RegExp(`${field.replace(/\./g, '\\.')}\\s*=\\s*`).exec(body);
+  if (!m) return null;
+  let depth = 0;
+  let i = m.index + m[0].length;
+  for (; i < body.length; i++) {
+    const c = body[i];
+    if (c === '"' || c === "'") i = skipLiteral(body, i) - 1;
+    else if (c === '(' || c === '{' || c === '[') depth++;
+    else if (c === ')' || c === '}' || c === ']') {
+      if (depth-- === 0) break;
+    } else if (c === ',' && depth === 0) break;
+  }
+  return body.slice(m.index + m[0].length, i).trim();
+}
+
+// Name and priv_class of each `<type> ff_*` component definition in the indexed
+// sources, in source order; `nameRe` matches (and filters) the variable name.
+export function findComponents(index, type, nameRe) {
+  const out = [];
+  for (const source of index.sources) {
+    if (!source.src.includes(type)) continue;
+    for (const d of findDefinitions(source.src, type)) {
+      const varMatch = d.name.match(nameRe);
+      if (!varMatch) continue;
+      // a literal, or a macro holding one (vf_colorconstancy.c: .p.name = GREY_EDGE)
+      const nameExpr = fieldValue(d.body, '.p.name');
+      const nameMatch = nameExpr && expandMacros(nameExpr, source.macros).match(/^\s*((?:"(?:[^"\\]|\\.)*"\s*)+)$/);
+      if (!nameMatch) continue;
+      const privExpr = fieldValue(d.body, '.p.priv_class') ?? fieldValue(d.body, '.priv_class');
+      const privVar = privExpr?.match(/^&?\s*(\w+)$/)?.[1];
+      let privClassBody = null;
+      if (privExpr && !privVar) {
+        const expanded = expandMacros(privExpr, source.macros);
+        const open = expanded.indexOf('{');
+        if (open >= 0 && /\.option\b/.test(expanded)) privClassBody = expanded.slice(open + 1);
       }
-      if (body && !arrayBodies.has(em[1])) arrayBodies.set(em[1], body);
+      out.push({ source, varMatch, name: joinLiterals(nameMatch[1]), body: d.body, privClass: privVar ?? null, privClassBody });
     }
   }
-
-  const cache = new Map();
-  const getArray = (arrayVar, offset) => {
-    const cacheKey = `${arrayVar}+${offset}`;
-    if (cache.has(cacheKey)) return cache.get(cacheKey);
-    const body = arrayBodies.get(arrayVar);
-    const parsed = body != null ? parseOptionArray(body, localMacros, offset) : null;
-    cache.set(cacheKey, parsed);
-    return parsed;
-  };
-
-  return (classVar) => {
-    const link = classToArray.get(classVar);
-    return link ? getArray(link.array, link.offset) : null;
-  };
+  return out;
 }
 
 const isIdent = (s) => /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(s);
@@ -371,6 +645,31 @@ export const docAnchor = (name) => name.replace(/[^A-Za-z0-9]/g, (c) => '_' + c.
 // like "<psy-rd>" aren't parsed as (unclosed) HTML tags.
 const jsdoc = (s) => (s ? s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\*\//g, '*​/') : '');
 const quote = (v) => `'${v.replace(/'/g, "\\'")}'`;
+
+// The lint line length; long help texts are wrapped to stay within it.
+const MAX_LINE = 170;
+
+// Word-wrap one doc line into ` * ` lines at `indent`.
+const wrapDoc = (text, indent) => {
+  const width = MAX_LINE - indent.length - 3;
+  const lines = [];
+  let cur = '';
+  for (const word of jsdoc(text).split(/\s+/).filter(Boolean)) {
+    if (cur && cur.length + 1 + word.length > width) {
+      lines.push(cur);
+      cur = word;
+    } else {
+      cur = cur ? `${cur} ${word}` : word;
+    }
+  }
+  return [...lines, cur].map((l) => `${indent} * ${l}`.trimEnd()).join('\n') + '\n';
+};
+
+// A one-line JSDoc comment, or a wrapped block when that would be too long.
+const docComment = (text, indent) => {
+  const line = `${indent}/** ${jsdoc(text)} */`;
+  return line.length <= MAX_LINE ? line + '\n' : `${indent}/**\n${wrapDoc(text, indent)}${indent} */\n`;
+};
 
 // Modes: 'strict' (codecs/BSF) rejects invalid keys/values; 'lenient' (containers)
 // also accepts loose primitives for protocol/child options; 'expr' (filters) keeps
@@ -409,12 +708,12 @@ export function renderMap(name, components, mode = 'strict', componentDoc = null
     const doc = componentDoc?.(component);
     if (doc) {
       out += '  /**\n';
-      for (const line of doc.split('\n')) out += `   * ${jsdoc(line)}\n`;
+      for (const line of doc.split('\n')) out += wrapDoc(line, '  ');
       out += '   */\n';
     }
     out += `  ${key(component)}: {\n`;
     for (const [opt, desc] of Object.entries(components[component])) {
-      if (desc.help) out += `    /** ${jsdoc(desc.help)} */\n`;
+      if (desc.help) out += docComment(desc.help, '    ');
       out += `    ${key(opt)}?: ${renderType(desc, mode)};\n`;
     }
     out += '  };\n';
@@ -426,7 +725,7 @@ export function renderMap(name, components, mode = 'strict', componentDoc = null
 export function renderFlat(name, options, mode = 'strict') {
   let out = `export interface ${name} {\n`;
   for (const [opt, desc] of Object.entries(options)) {
-    if (desc.help) out += `  /** ${jsdoc(desc.help)} */\n`;
+    if (desc.help) out += docComment(desc.help, '  ');
     out += `  ${key(opt)}?: ${renderType(desc, mode)};\n`;
   }
   return out + '}\n';

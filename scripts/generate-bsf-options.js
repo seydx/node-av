@@ -5,50 +5,27 @@
  * parsing each FFBitStreamFilter's `.p.priv_class` AVOption array in libavcodec.
  */
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { buildHeaderMacros, collectDefines, docAnchor, fileHeader, makeClassResolver, renderMap, walk } from './avoption-parser.js';
+import { createSourceIndex, docAnchor, fileHeader, findComponents, renderMap, walk } from './avoption-parser.js';
 import { getFFmpegPath } from './utils.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const LAVC = join(getFFmpegPath(''), 'libavcodec');
 
-const files = walk(LAVC);
-const headerMacros = buildHeaderMacros(files);
+// libavutil's headers for shared macros (AV_STRINGIFY, ...)
+const index = createSourceIndex(walk(LAVC), { macroHeaders: walk(join(getFFmpegPath(''), 'libavutil'), [], ['.h']) });
 
 const bsfs = {};
 const allNames = new Set();
-const bsfRe = /(?:const\s+)?FFBitStreamFilter\s+ff_(\w+)_bsf\s*=\s*\{([\s\S]*?)\n\}\s*;/g;
 
-for (const f of files) {
-  const src = readFileSync(f, 'utf8');
-  if (!src.includes('FFBitStreamFilter')) continue;
-
-  let resolve = null;
-  if (src.includes('priv_class')) {
-    const localMacros = new Map(headerMacros);
-    collectDefines(src, localMacros);
-    resolve = makeClassResolver(src, localMacros);
-  }
-
-  let m;
-  bsfRe.lastIndex = 0;
-  while ((m = bsfRe.exec(src)) !== null) {
-    const body = m[2];
-    const nameMatch = body.match(/\.p\.name\s*=\s*"([^"]+)"/);
-    if (!nameMatch) continue;
-    const name = nameMatch[1];
-    allNames.add(name);
-
-    if (!resolve) continue;
-    const privMatch = body.match(/priv_class\s*=\s*&?(\w+)/);
-    if (!privMatch) continue;
-    const opts = resolve(privMatch[1]);
-    if (!opts || Object.keys(opts).length === 0) continue;
-    bsfs[name] = opts;
-  }
+for (const b of findComponents(index, 'FFBitStreamFilter', /^ff_\w+_bsf$/)) {
+  allNames.add(b.name);
+  const opts = index.resolveComponent(b);
+  if (!opts || Object.keys(opts).length === 0 || b.name in bsfs) continue;
+  bsfs[b.name] = opts;
 }
 
 const header = fileHeader(['Auto-generated bitstream-filter option types.', 'Generated from FFmpeg libavcodec AVOption sources (see scripts/generate-bsf-options.js).']);
@@ -85,4 +62,5 @@ const outPath = join(__dirname, '..', 'src', 'constants', 'bsf-options.ts');
 writeFileSync(outPath, out);
 
 console.log(`[bsf] ${allNames.size} bitstream filters (${Object.keys(bsfs).length} with private options)`);
+for (const w of index.warnings) console.warn(`[bsf] ${w}`);
 console.log(`Wrote ${outPath}`);
