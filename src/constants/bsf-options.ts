@@ -20,7 +20,6 @@ export type BsfName =
   | 'chomp'
   | 'dca_core'
   | 'dovi_rpu'
-  | 'dovi_split'
   | 'dts2pts'
   | 'dump_extra'
   | 'dv_error_marker'
@@ -55,6 +54,7 @@ export type BsfName =
   | 'smpte436m_to_eia608'
   | 'text2movsub'
   | 'trace_headers'
+  | 'trim'
   | 'truehd_core'
   | 'vp9_metadata'
   | 'vp9_raw_reorder'
@@ -99,6 +99,10 @@ export interface BsfOptionsMap {
     num_ticks_per_picture?: number;
     /** Delete all Padding OBUs */
     delete_padding?: boolean;
+    /** Remove Dolby Vision RPU */
+    remove_dovi?: boolean;
+    /** Remove HDR10+ metadata */
+    remove_hdr10plus?: boolean;
   };
   /**
    * @see https://ffmpeg.org/ffmpeg-bitstream-filters.html#dovi_005frpu
@@ -108,13 +112,6 @@ export interface BsfOptionsMap {
     strip?: boolean;
     /** DV metadata compression mode */
     compression?: 'none' | 'limited' | 'extended';
-  };
-  /**
-   * @see https://ffmpeg.org/ffmpeg-bitstream-filters.html#dovi_005fsplit
-   */
-  dovi_split: {
-    /** Which Dolby Vision components to keep in the output bitstream */
-    mode?: 'bl' | 'bl_rpu' | 'el' | 'el_rpu';
   };
   /**
    * @see https://ffmpeg.org/ffmpeg-bitstream-filters.html#dump_005fextra
@@ -270,6 +267,10 @@ export interface BsfOptionsMap {
     height?: number;
     /** Set level (tables A.6 and A.7) */
     level?: 'auto' | '1' | '2' | '2.1' | '3' | '3.1' | '4' | '4.1' | '5' | '5.1' | '5.2' | '6' | '6.1' | '6.2' | '8.5';
+    /** Remove Dolby Vision EL and RPU */
+    remove_dovi?: boolean;
+    /** Remove HDR10+ metadata */
+    remove_hdr10plus?: boolean;
   };
   /**
    * @see https://ffmpeg.org/ffmpeg-bitstream-filters.html#lcevc_005fmetadata
@@ -374,6 +375,29 @@ export interface BsfOptionsMap {
     time_base?: string | number;
     /** convert to output timebase before evaluation */
     prescale?: boolean;
+  };
+  /**
+   * @see https://ffmpeg.org/ffmpeg-bitstream-filters.html#trim
+   */
+  trim: {
+    /** time or index marking the start of the accepted range */
+    start?: number;
+    /** how to interpret start */
+    start_type?: 'pts' | 'dts' | 'pkt_index' | 'msec_pt' | 'msec_dt';
+    /** interpret start relative to the first packet of the stream */
+    start_rel?: boolean;
+    /** time or index marking the end of the accepted range */
+    end?: number;
+    /** how to interpret end */
+    end_type?: 'pts' | 'dts' | 'pkt_index' | 'msec_pt' | 'msec_dt' | 'dur_ts' | 'dur_t_msec';
+    /** interpret end relative to the first exported packet */
+    end_rel?: boolean;
+    /** trim packets straddling a boundary instead of exporting them untouched or dropping them */
+    trim_packets?: boolean;
+    /** export the packets the first packet in range needs to be decodable, flagged for the decoder to drop them after decoding */
+    preroll?: boolean;
+    /** maximum number of packets held for preroll */
+    preroll_size?: number;
   };
   /**
    * @see https://ffmpeg.org/ffmpeg-bitstream-filters.html#vp9_005fmetadata

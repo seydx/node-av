@@ -9,7 +9,10 @@ export interface CodecContextOptions {
   b?: number;
   /** set bitrate (in bits/s) */
   ab?: number;
-  /** Set video bitrate tolerance (in bits/s). In 1-pass mode, bitrate tolerance specifies how far  */
+  /**
+   * Set video bitrate tolerance (in bits/s). In 1-pass mode, bitrate tolerance specifies how far ratecontrol is willing to deviate from the target average bitrate value.
+   * This is not related to minimum/maximum bitrate. Lowering tolerance too much has an adverse effect on quality.
+   */
   bt?: number;
   flags?:
     | 'unaligned'
@@ -33,19 +36,7 @@ export interface CodecContextOptions {
     | 'cgop'
     | 'output_corrupt'
     | (string & {});
-  flags2?:
-    | 'fast'
-    | 'noout'
-    | 'ignorecrop'
-    | 'local_header'
-    | 'chunks'
-    | 'showall'
-    | 'export_mvs'
-    | 'skip_manual'
-    | 'ass_ro_flush_noop'
-    | 'icc_profiles'
-    | 'fixed_frame_size'
-    | (string & {});
+  flags2?: 'fast' | 'noout' | 'ignorecrop' | 'local_header' | 'chunks' | 'showall' | 'export_mvs' | 'skip_manual' | 'ass_ro_flush_noop' | 'icc_profiles' | (string & {});
   /** Export metadata as side data */
   export_side_data?: 'mvs' | 'prft' | 'venc_params' | 'film_grain' | 'enhancements' | (string & {});
   time_base?: string | number;
@@ -58,7 +49,7 @@ export interface CodecContextOptions {
   frame_size?: number;
   frame_number?: number;
   delay?: number;
-  /** video quantizer scale compression (VBR). Constant of ratecontrol equation.  */
+  /** video quantizer scale compression (VBR). Constant of ratecontrol equation. Recommended range for default rc_eq: 0.0-1.0 */
   qcomp?: number;
   /** video quantizer scale blur (VBR) */
   qblur?: number;
@@ -343,7 +334,16 @@ export interface CodecContextOptions {
   discard_damaged_percentage?: number;
   /** Comma-separated list of side data types for which user-supplied (container) data is preferred over coded bytestream */
   side_data_prefer_packet?:
-    'replaygain' | 'displaymatrix' | 'spherical' | 'stereo3d' | 'audio_service_type' | 'mastering_display_metadata' | 'content_light_level' | 'icc_profile' | 'exif';
+    | 'replaygain'
+    | 'displaymatrix'
+    | 'spherical'
+    | 'stereo3d'
+    | 'audio_service_type'
+    | 'mastering_display_metadata'
+    | 'content_light_level'
+    | 'icc_profile'
+    | 'exif'
+    | (string & {});
 }
 
 export interface EncoderOptionsMap {
@@ -366,12 +366,188 @@ export interface EncoderOptionsMap {
     aac_pce?: boolean;
   };
   /**
+   * aac
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#aac_005fat
+   */
+  aac_at: {
+    /** ratecontrol mode */
+    aac_at_mode?: 'auto' | 'cbr' | 'abr' | 'cvbr' | 'vbr';
+    /** quality vs speed control */
+    aac_at_quality?: number;
+  };
+  /**
+   * ATSC A/52A (AC-3)
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#ac3
+   */
+  ac3: {
+    /** Center Mix Level */
+    center_mixlev?: number;
+    /** Surround Mix Level */
+    surround_mixlev?: number;
+    /** Mixing Level */
+    mixing_level?: number;
+    /** Room Type */
+    room_type?: 'notindicated' | 'large' | 'small';
+    /** Allow Changing Metadata Per-Frame */
+    per_frame_metadata?: boolean;
+    /** Copyright Bit */
+    copyright?: number;
+    /** Dialogue Level (dB) */
+    dialnorm?: number;
+    /** Dolby Surround Mode */
+    dsur_mode?: 'notindicated' | 'on' | 'off';
+    /** Original Bit Stream */
+    original?: number;
+    /** Preferred Stereo Downmix Mode */
+    dmix_mode?: 'notindicated' | 'ltrt' | 'loro' | 'dplii';
+    /** Lt/Rt Center Mix Level */
+    ltrt_cmixlev?: number;
+    /** Lt/Rt Surround Mix Level */
+    ltrt_surmixlev?: number;
+    /** Lo/Ro Center Mix Level */
+    loro_cmixlev?: number;
+    /** Lo/Ro Surround Mix Level */
+    loro_surmixlev?: number;
+    /** Dolby Surround EX Mode */
+    dsurex_mode?: 'notindicated' | 'on' | 'off' | 'dpliiz';
+    /** Dolby Headphone Mode */
+    dheadphone_mode?: 'notindicated' | 'on' | 'off';
+    /** A/D Converter Type */
+    ad_conv_type?: 'standard' | 'hdcd';
+    /** Stereo Rematrixing */
+    stereo_rematrixing?: boolean;
+    /** Channel Coupling */
+    channel_coupling?: 'auto';
+    /** Coupling Start Band */
+    cpl_start_band?: 'auto';
+  };
+  /**
+   * ATSC A/52A (AC-3)
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#ac3_005ffixed
+   */
+  ac3_fixed: {
+    /** Center Mix Level */
+    center_mixlev?: number;
+    /** Surround Mix Level */
+    surround_mixlev?: number;
+    /** Mixing Level */
+    mixing_level?: number;
+    /** Room Type */
+    room_type?: 'notindicated' | 'large' | 'small';
+    /** Allow Changing Metadata Per-Frame */
+    per_frame_metadata?: boolean;
+    /** Copyright Bit */
+    copyright?: number;
+    /** Dialogue Level (dB) */
+    dialnorm?: number;
+    /** Dolby Surround Mode */
+    dsur_mode?: 'notindicated' | 'on' | 'off';
+    /** Original Bit Stream */
+    original?: number;
+    /** Preferred Stereo Downmix Mode */
+    dmix_mode?: 'notindicated' | 'ltrt' | 'loro' | 'dplii';
+    /** Lt/Rt Center Mix Level */
+    ltrt_cmixlev?: number;
+    /** Lt/Rt Surround Mix Level */
+    ltrt_surmixlev?: number;
+    /** Lo/Ro Center Mix Level */
+    loro_cmixlev?: number;
+    /** Lo/Ro Surround Mix Level */
+    loro_surmixlev?: number;
+    /** Dolby Surround EX Mode */
+    dsurex_mode?: 'notindicated' | 'on' | 'off' | 'dpliiz';
+    /** Dolby Headphone Mode */
+    dheadphone_mode?: 'notindicated' | 'on' | 'off';
+    /** A/D Converter Type */
+    ad_conv_type?: 'standard' | 'hdcd';
+    /** Stereo Rematrixing */
+    stereo_rematrixing?: boolean;
+    /** Channel Coupling */
+    channel_coupling?: 'auto';
+    /** Coupling Start Band */
+    cpl_start_band?: 'auto';
+  };
+  /**
+   * ADPCM IMA High Voltage Software ALP
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#adpcm_005fima_005falp
+   */
+  adpcm_ima_alp: {
+    /** set the block size */
+    block_size?: number;
+  };
+  /**
+   * ADPCM IMA AMV
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#adpcm_005fima_005famv
+   */
+  adpcm_ima_amv: {
+    /** set the block size */
+    block_size?: number;
+  };
+  /**
+   * ADPCM IMA Ubisoft APM
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#adpcm_005fima_005fapm
+   */
+  adpcm_ima_apm: {
+    /** set the block size */
+    block_size?: number;
+  };
+  /**
+   * ADPCM IMA Simon &amp; Schuster Interactive
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#adpcm_005fima_005fssi
+   */
+  adpcm_ima_ssi: {
+    /** set the block size */
+    block_size?: number;
+  };
+  /**
+   * ADPCM IMA WAV
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#adpcm_005fima_005fwav
+   */
+  adpcm_ima_wav: {
+    /** set the block size */
+    block_size?: number;
+  };
+  /**
+   * ADPCM IMA Westwood
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#adpcm_005fima_005fws
+   */
+  adpcm_ima_ws: {
+    /** set the block size */
+    block_size?: number;
+  };
+  /**
+   * ADPCM Microsoft
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#adpcm_005fms
+   */
+  adpcm_ms: {
+    /** set the block size */
+    block_size?: number;
+  };
+  /**
+   * ADPCM Yamaha
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#adpcm_005fyamaha
+   */
+  adpcm_yamaha: {
+    /** set the block size */
+    block_size?: number;
+  };
+  /**
    * ALAC (Apple Lossless Audio Codec)
    * @see https://ffmpeg.org/ffmpeg-codecs.html#alac
    */
   alac: {
     min_prediction_order?: number;
     max_prediction_order?: number;
+  };
+  /**
+   * alac
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#alac_005fat
+   */
+  alac_at: {
+    /** ratecontrol mode */
+    aac_at_mode?: 'auto' | 'cbr' | 'abr' | 'cvbr' | 'vbr';
+    /** quality vs speed control */
+    aac_at_quality?: number;
   };
   /**
    * AMV Video
@@ -393,7 +569,11 @@ export interface EncoderOptionsMap {
     rc_qmod_amp?: number;
     /** experimental quantizer modulation */
     rc_qmod_freq?: number;
-    /** Set rate control equation. When computing the expression, besides the standard functions  */
+    /**
+     * Set rate control equation. When computing the expression, besides the standard functions defined in the section 'Expression Evaluation', the following functions
+     * are available: bits2qp(bits), qp2bits(qp). Also the following constants are available: iTex pTex tex mv fCode iCount mcVar var isI isP isB avgQP qComp avgIITex
+     * avgPITex avgPPTex avgBPTex avgTex.
+     */
     rc_eq?: string;
     /** initial complexity for 1-pass encoding */
     rc_init_cplx?: number;
@@ -564,7 +744,7 @@ export interface EncoderOptionsMap {
     idr_interval?: number;
     /** Maximum B-frame reference depth */
     b_depth?: number;
-    /** Maximum processing parallelism.  */
+    /** Maximum processing parallelism. Increase this to improve single channel performance. */
     async_depth?: number;
     /** Maximum frame size (in bytes) */
     max_frame_size?: number;
@@ -579,11 +759,105 @@ export interface EncoderOptionsMap {
     /** Constant QP (for P-frames; scaled by qfactor/qoffset for I/B) */
     qp?: number;
     /** Set profile (general_profile_idc) */
-    profile?: number;
+    profile?: 'main' | 'high' | 'professional';
     /** Set tier (general_tier_flag) */
-    tier?: number;
+    tier?: 'main' | 'high';
     /** Set level (general_level_idc) */
-    level?: number;
+    level?:
+      | '2.0'
+      | '2.1'
+      | '2.2'
+      | '2.3'
+      | '3.0'
+      | '3.1'
+      | '3.2'
+      | '3.3'
+      | '4.0'
+      | '4.1'
+      | '4.2'
+      | '4.3'
+      | '5.0'
+      | '5.1'
+      | '5.2'
+      | '5.3'
+      | '6.0'
+      | '6.1'
+      | '6.2'
+      | '6.3'
+      | '7.0'
+      | '7.1'
+      | '7.2'
+      | '7.3';
+  };
+  /**
+   * AV1
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#av1_005fmediacodec
+   */
+  av1_mediacodec: {
+    /** Use MediaCodec from NDK */
+    ndk_codec?: boolean;
+    /** Try NDK MediaCodec in async mode */
+    ndk_async?: boolean;
+    /** Select codec by name */
+    codec_name?: string;
+    /** Bitrate control method */
+    bitrate_mode?: 'cq' | 'vbr' | 'cbr' | 'cbr_fd';
+    /** Use PTS as DTS. It is enabled automatically if avctx max_b_frames &lt;= 0, since most of Android devices don't output B frames by default. */
+    pts_as_dts?: boolean;
+    /** The desired operating rate that the codec will need to operate at, zero for unspecified */
+    operating_rate?: number;
+    /** minimum quantization parameter for I frame */
+    qp_i_min?: number;
+    /** minimum quantization parameter for P frame */
+    qp_p_min?: number;
+    /** minimum quantization parameter for B frame */
+    qp_b_min?: number;
+    /** maximum quantization parameter for I frame */
+    qp_i_max?: number;
+    /** maximum quantization parameter for P frame */
+    qp_p_max?: number;
+    /** maximum quantization parameter for B frame */
+    qp_b_max?: number;
+    /** Specify tier and level */
+    level?:
+      | '2'
+      | '2.1'
+      | '2.2'
+      | '2.3'
+      | '3'
+      | '3.1'
+      | '3.2'
+      | '3.3'
+      | '4'
+      | '4.1'
+      | '4.2'
+      | '4.3'
+      | '5'
+      | '5.1'
+      | '5.2'
+      | '5.3'
+      | '6'
+      | '6.1'
+      | '6.2'
+      | '6.3'
+      | '7'
+      | '7.1'
+      | '7.2'
+      | '7.3';
+  };
+  /**
+   * AV1
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#av1_005fmf
+   */
+  av1_mf: {
+    /** Select rate control mode */
+    rate_control?: 'default' | 'cbr' | 'pc_vbr' | 'u_vbr' | 'quality' | 'ld_vbr' | 'g_vbr' | 'gld_vbr';
+    /** Select usage scenario */
+    scenario?: 'default' | 'display_remoting' | 'video_conference' | 'archive' | 'live_streaming' | 'camera_record' | 'display_remoting_with_feature_map';
+    /** Quality */
+    quality?: number;
+    /** Force hardware encoding */
+    hw_encoding?: boolean;
   };
   /**
    * NVIDIA NVENC av1 encoder
@@ -688,7 +962,7 @@ export interface EncoderOptionsMap {
     /** Enable weighted prediction */
     weighted_pred?: boolean;
     /** Use B frames as references */
-    b_ref_mode?: 'disabled' | 'each' | 'middle' | 'hierarchical';
+    b_ref_mode?: 'disabled' | 'each' | 'middle';
     /** Specifies the DPB size used for encoding (0 means automatic) */
     dpb_size?: number;
     /** Low delay key frame scale; Specifies the Scene Change frame size increase allowed in case of single frame VBV and CBR */
@@ -759,9 +1033,9 @@ export interface EncoderOptionsMap {
     idr_interval?: number;
     /** Maximum B-frame reference depth */
     b_depth?: number;
-    /** Maximum processing parallelism.  */
+    /** Maximum processing parallelism. Increase this to improve single channel performance. */
     async_depth?: number;
-    /** Use low-power encoding mode (only available on some platforms;  */
+    /** Use low-power encoding mode (only available on some platforms; may not support all encoding features) */
     low_power?: boolean;
     /** Maximum frame size (in bytes) */
     max_frame_size?: number;
@@ -789,20 +1063,20 @@ export interface EncoderOptionsMap {
     idr_interval?: number;
     /** Maximum B-frame reference depth */
     b_depth?: number;
-    /** Maximum processing parallelism.  */
+    /** Maximum processing parallelism. Increase this to improve single channel performance. */
     async_depth?: number;
     /** Use an explicit constant quantizer for the whole stream */
     qp?: number;
     /** Set encode quality (trades off against speed, higher is slower) */
     quality?: number;
     /** Select rate control type */
-    rc_mode?: number;
+    rc_mode?: 'auto' | 'driver' | 'cqp' | 'cbr' | 'vbr';
     /** Select tuning type */
-    tune?: number;
+    tune?: 'default' | 'hq' | 'll' | 'ull' | 'lossless';
     /** Select usage type */
-    usage?: string;
+    usage?: 'default' | 'transcode' | 'stream' | 'record' | 'conference' | (string & {});
     /** Select content type */
-    content?: string;
+    content?: 'default' | 'camera' | 'desktop' | 'rendered' | (string & {});
     /** Set profile */
     profile?: 'main' | 'high' | 'professional';
     /** Set tier (seq_tier) */
@@ -834,7 +1108,7 @@ export interface EncoderOptionsMap {
       | '72'
       | '73';
     /** Set units to include */
-    units?: string;
+    units?: 'hdr' | (string & {});
   };
   /**
    * GoPro CineForm HD
@@ -921,6 +1195,48 @@ export interface EncoderOptionsMap {
     format?: 'dxt1';
   };
   /**
+   * ATSC A/52 E-AC-3
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#eac3
+   */
+  eac3: {
+    /** Mixing Level */
+    mixing_level?: number;
+    /** Room Type */
+    room_type?: 'notindicated' | 'large' | 'small';
+    /** Allow Changing Metadata Per-Frame */
+    per_frame_metadata?: boolean;
+    /** Copyright Bit */
+    copyright?: number;
+    /** Dialogue Level (dB) */
+    dialnorm?: number;
+    /** Dolby Surround Mode */
+    dsur_mode?: 'notindicated' | 'on' | 'off';
+    /** Original Bit Stream */
+    original?: number;
+    /** Preferred Stereo Downmix Mode */
+    dmix_mode?: 'notindicated' | 'ltrt' | 'loro' | 'dplii';
+    /** Lt/Rt Center Mix Level */
+    ltrt_cmixlev?: number;
+    /** Lt/Rt Surround Mix Level */
+    ltrt_surmixlev?: number;
+    /** Lo/Ro Center Mix Level */
+    loro_cmixlev?: number;
+    /** Lo/Ro Surround Mix Level */
+    loro_surmixlev?: number;
+    /** Dolby Surround EX Mode */
+    dsurex_mode?: 'notindicated' | 'on' | 'off' | 'dpliiz';
+    /** Dolby Headphone Mode */
+    dheadphone_mode?: 'notindicated' | 'on' | 'off';
+    /** A/D Converter Type */
+    ad_conv_type?: 'standard' | 'hdcd';
+    /** Stereo Rematrixing */
+    stereo_rematrixing?: boolean;
+    /** Channel Coupling */
+    channel_coupling?: 'auto';
+    /** Coupling Start Band */
+    cpl_start_band?: 'auto';
+  };
+  /**
    * OpenEXR image
    * @see https://ffmpeg.org/ffmpeg-codecs.html#exr
    */
@@ -973,8 +1289,6 @@ export interface EncoderOptionsMap {
     rct_search?: boolean;
     /** Internal parallelization depth */
     async_depth?: number;
-    /** Remap Mode */
-    remap_mode?: 'auto' | 'off' | 'dualrle' | 'flipdualrle';
   };
   /**
    * Huffyuv FFmpeg variant
@@ -1013,42 +1327,10 @@ export interface EncoderOptionsMap {
     max_prediction_order?: number;
   };
   /**
-   * G.726 ADPCM
-   * @see https://ffmpeg.org/ffmpeg-codecs.html#g726
+   * FLV / Sorenson Spark / Sorenson H.263 (Flash Video)
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#flv
    */
-  g726: {
-    /** Bits per code */
-    code_size?: number;
-  };
-  /**
-   * G.726 little endian ADPCM (\"right-justified\")
-   * @see https://ffmpeg.org/ffmpeg-codecs.html#g726le
-   */
-  g726le: {
-    /** Bits per code */
-    code_size?: number;
-  };
-  /**
-   * GIF (Graphics Interchange Format)
-   * @see https://ffmpeg.org/ffmpeg-codecs.html#gif
-   */
-  gif: {
-    /** set GIF flags */
-    gifflags?: 'offsetting' | 'transdiff' | (string & {});
-    /** enable encoding only images per frame */
-    gifimage?: boolean;
-    /** write a palette to the global gif header where feasible */
-    global_palette?: boolean;
-  };
-  /**
-   * H.263 / H.263-1996
-   * @see https://ffmpeg.org/ffmpeg-codecs.html#h263
-   */
-  h263: {
-    /** use overlapped block motion compensation. */
-    obmc?: boolean;
-    /** emit macroblock info for RFC 2190 packetization, the parameter value is the maximum payload size */
-    mb_info?: number;
+  flv: {
     /** Flags common for all mpegvideo-based encoders. */
     mpv_flags?: 'skip_rd' | 'strict_gop' | 'qp_rd' | 'cbp_rd' | 'naq' | 'mv0' | (string & {});
     /** single coefficient elimination threshold for luminance (negative values also consider dc coefficient) */
@@ -1064,7 +1346,11 @@ export interface EncoderOptionsMap {
     rc_qmod_amp?: number;
     /** experimental quantizer modulation */
     rc_qmod_freq?: number;
-    /** Set rate control equation. When computing the expression, besides the standard functions  */
+    /**
+     * Set rate control equation. When computing the expression, besides the standard functions defined in the section 'Expression Evaluation', the following functions
+     * are available: bits2qp(bits), qp2bits(qp). Also the following constants are available: iTex pTex tex mv fCode iCount mcVar var isI isP isB avgQP qComp avgIITex
+     * avgPITex avgPPTex avgBPTex avgTex.
+     */
     rc_eq?: string;
     /** initial complexity for 1-pass encoding */
     rc_init_cplx?: number;
@@ -1100,6 +1386,166 @@ export interface EncoderOptionsMap {
     sc_threshold?: number;
   };
   /**
+   * G.726 ADPCM
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#g726
+   */
+  g726: {
+    /** Bits per code */
+    code_size?: number;
+  };
+  /**
+   * G.726 little endian ADPCM (\"right-justified\")
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#g726le
+   */
+  g726le: {
+    /** Bits per code */
+    code_size?: number;
+  };
+  /**
+   * GIF (Graphics Interchange Format)
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#gif
+   */
+  gif: {
+    /** set GIF flags */
+    gifflags?: 'offsetting' | 'transdiff' | (string & {});
+    /** enable encoding only images per frame */
+    gifimage?: boolean;
+    /** write a palette to the global gif header where feasible */
+    global_palette?: boolean;
+  };
+  /**
+   * H.261
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#h261
+   */
+  h261: {
+    /** Flags common for all mpegvideo-based encoders. */
+    mpv_flags?: 'skip_rd' | 'strict_gop' | 'qp_rd' | 'cbp_rd' | 'naq' | 'mv0' | (string & {});
+    /** single coefficient elimination threshold for luminance (negative values also consider dc coefficient) */
+    luma_elim_threshold?: number;
+    /** single coefficient elimination threshold for chrominance (negative values also consider dc coefficient) */
+    chroma_elim_threshold?: number;
+    quantizer_noise_shaping?: number;
+    /** Simulate errors in the bitstream to test error concealment. */
+    error_rate?: number;
+    /** how to keep quantizer between qmin and qmax (0 = clip, 1 = use differentiable function) */
+    qsquish?: number;
+    /** experimental quantizer modulation */
+    rc_qmod_amp?: number;
+    /** experimental quantizer modulation */
+    rc_qmod_freq?: number;
+    /**
+     * Set rate control equation. When computing the expression, besides the standard functions defined in the section 'Expression Evaluation', the following functions
+     * are available: bits2qp(bits), qp2bits(qp). Also the following constants are available: iTex pTex tex mv fCode iCount mcVar var isI isP isB avgQP qComp avgIITex
+     * avgPITex avgPPTex avgBPTex avgTex.
+     */
+    rc_eq?: string;
+    /** initial complexity for 1-pass encoding */
+    rc_init_cplx?: number;
+    /** currently useless */
+    rc_buf_aggressivity?: number;
+    /** increase the quantizer for macroblocks close to borders */
+    border_mask?: number;
+    /** minimum Lagrange factor (VBR) */
+    lmin?: number;
+    /** maximum Lagrange factor (VBR) */
+    lmax?: number;
+    /** Frame skip threshold */
+    skip_threshold?: number;
+    /** Frame skip factor */
+    skip_factor?: number;
+    /** Frame skip exponent */
+    skip_exp?: number;
+    /** Frame skip compare function */
+    skip_cmp?: 'sad' | 'sse' | 'satd' | 'dct' | 'psnr' | 'bit' | 'rd' | 'zero' | 'vsad' | 'vsse' | 'nsse' | 'dct264' | 'dctmax' | 'chroma' | 'msad';
+    /** Noise reduction */
+    noise_reduction?: number;
+    /** RTP payload size in bytes */
+    ps?: number;
+    /** motion estimation algorithm */
+    motion_est?: 'zero' | 'epzs' | 'xone';
+    /** Motion estimation bitrate penalty compensation (1.0 = 256) */
+    mepc?: number;
+    /** pre motion estimation */
+    mepre?: number;
+    /** Penalty for intra blocks in block decision */
+    intra_penalty?: number;
+    /** Scene change threshold */
+    sc_threshold?: number;
+  };
+  /**
+   * H.263 / H.263-1996
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#h263
+   */
+  h263: {
+    /** use overlapped block motion compensation. */
+    obmc?: boolean;
+    /** emit macroblock info for RFC 2190 packetization, the parameter value is the maximum payload size */
+    mb_info?: number;
+    /** Flags common for all mpegvideo-based encoders. */
+    mpv_flags?: 'skip_rd' | 'strict_gop' | 'qp_rd' | 'cbp_rd' | 'naq' | 'mv0' | (string & {});
+    /** single coefficient elimination threshold for luminance (negative values also consider dc coefficient) */
+    luma_elim_threshold?: number;
+    /** single coefficient elimination threshold for chrominance (negative values also consider dc coefficient) */
+    chroma_elim_threshold?: number;
+    quantizer_noise_shaping?: number;
+    /** Simulate errors in the bitstream to test error concealment. */
+    error_rate?: number;
+    /** how to keep quantizer between qmin and qmax (0 = clip, 1 = use differentiable function) */
+    qsquish?: number;
+    /** experimental quantizer modulation */
+    rc_qmod_amp?: number;
+    /** experimental quantizer modulation */
+    rc_qmod_freq?: number;
+    /**
+     * Set rate control equation. When computing the expression, besides the standard functions defined in the section 'Expression Evaluation', the following functions
+     * are available: bits2qp(bits), qp2bits(qp). Also the following constants are available: iTex pTex tex mv fCode iCount mcVar var isI isP isB avgQP qComp avgIITex
+     * avgPITex avgPPTex avgBPTex avgTex.
+     */
+    rc_eq?: string;
+    /** initial complexity for 1-pass encoding */
+    rc_init_cplx?: number;
+    /** currently useless */
+    rc_buf_aggressivity?: number;
+    /** increase the quantizer for macroblocks close to borders */
+    border_mask?: number;
+    /** minimum Lagrange factor (VBR) */
+    lmin?: number;
+    /** maximum Lagrange factor (VBR) */
+    lmax?: number;
+    /** Frame skip threshold */
+    skip_threshold?: number;
+    /** Frame skip factor */
+    skip_factor?: number;
+    /** Frame skip exponent */
+    skip_exp?: number;
+    /** Frame skip compare function */
+    skip_cmp?: 'sad' | 'sse' | 'satd' | 'dct' | 'psnr' | 'bit' | 'rd' | 'zero' | 'vsad' | 'vsse' | 'nsse' | 'dct264' | 'dctmax' | 'chroma' | 'msad';
+    /** Noise reduction */
+    noise_reduction?: number;
+    /** RTP payload size in bytes */
+    ps?: number;
+    /** motion estimation algorithm */
+    motion_est?: 'zero' | 'epzs' | 'xone';
+    /** Motion estimation bitrate penalty compensation (1.0 = 256) */
+    mepc?: number;
+    /** pre motion estimation */
+    mepre?: number;
+    /** Penalty for intra blocks in block decision */
+    intra_penalty?: number;
+    /** Scene change threshold */
+    sc_threshold?: number;
+  };
+  /**
+   * V4L2 mem2mem
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#h263_005fv4l2m2m
+   */
+  h263_v4l2m2m: {
+    /** Number of buffers in the output context */
+    num_output_buffers?: number;
+    /** Number of buffers in the capture context */
+    num_capture_buffers?: number;
+  };
+  /**
    * H.263+ / H.263-1998 / H.263 version 2
    * @see https://ffmpeg.org/ffmpeg-codecs.html#h263p
    */
@@ -1127,7 +1573,11 @@ export interface EncoderOptionsMap {
     rc_qmod_amp?: number;
     /** experimental quantizer modulation */
     rc_qmod_freq?: number;
-    /** Set rate control equation. When computing the expression, besides the standard functions  */
+    /**
+     * Set rate control equation. When computing the expression, besides the standard functions defined in the section 'Expression Evaluation', the following functions
+     * are available: bits2qp(bits), qp2bits(qp). Also the following constants are available: iTex pTex tex mv fCode iCount mcVar var isI isP isB avgQP qComp avgIITex
+     * avgPITex avgPPTex avgBPTex avgTex.
+     */
     rc_eq?: string;
     /** initial complexity for 1-pass encoding */
     rc_init_cplx?: number;
@@ -1177,9 +1627,9 @@ export interface EncoderOptionsMap {
     /** enables low latency mode */
     latency?: boolean;
     /** Set the encoding quality preset */
-    quality?: 'balanced' | 'speed' | 'quality' | 'high_quality';
+    quality?: 'balanced' | 'speed' | 'quality';
     /** Set the encoding quality preset */
-    preset?: 'balanced' | 'speed' | 'quality' | 'high_quality';
+    preset?: 'balanced' | 'speed' | 'quality';
     /** Rate Control Method */
     rc?: 'cqp' | 'cbr' | 'vbr_peak' | 'vbr_latency' | 'qvbr' | 'hqvbr' | 'hqcbr';
     /** Sets the QVBR quality level */
@@ -1274,7 +1724,7 @@ export interface EncoderOptionsMap {
     idr_interval?: number;
     /** Maximum B-frame reference depth */
     b_depth?: number;
-    /** Maximum processing parallelism.  */
+    /** Maximum processing parallelism. Increase this to improve single channel performance. */
     async_depth?: number;
     /** Maximum frame size (in bytes) */
     max_frame_size?: number;
@@ -1289,15 +1739,59 @@ export interface EncoderOptionsMap {
     /** Constant QP (for P-frames; scaled by qfactor/qoffset for I/B) */
     qp?: number;
     /** Set profile (general_profile_idc) */
-    profile?: number;
+    profile?: 'main' | 'high' | 'high10';
     /** Set level (general_level_idc) */
-    level?: number;
+    level?: '1' | '1.1' | '1.2' | '1.3' | '2' | '2.1' | '2.2' | '3' | '3.1' | '3.2' | '4' | '4.1' | '4.2' | '5' | '5.1' | '5.2' | '6' | '6.1' | '6.2';
     /** Deblocking filter mode */
     deblock?: boolean;
     /** Entropy coder type */
-    coder?: number;
-    /** Constrained intra prediction (constrained_intra_pred_flag) */
-    constrained_intra_pred?: boolean;
+    coder?: 'cavlc' | 'cabac';
+  };
+  /**
+   * H.264
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#h264_005fmediacodec
+   */
+  h264_mediacodec: {
+    /** Use MediaCodec from NDK */
+    ndk_codec?: boolean;
+    /** Try NDK MediaCodec in async mode */
+    ndk_async?: boolean;
+    /** Select codec by name */
+    codec_name?: string;
+    /** Bitrate control method */
+    bitrate_mode?: 'cq' | 'vbr' | 'cbr' | 'cbr_fd';
+    /** Use PTS as DTS. It is enabled automatically if avctx max_b_frames &lt;= 0, since most of Android devices don't output B frames by default. */
+    pts_as_dts?: boolean;
+    /** The desired operating rate that the codec will need to operate at, zero for unspecified */
+    operating_rate?: number;
+    /** minimum quantization parameter for I frame */
+    qp_i_min?: number;
+    /** minimum quantization parameter for P frame */
+    qp_p_min?: number;
+    /** minimum quantization parameter for B frame */
+    qp_b_min?: number;
+    /** maximum quantization parameter for I frame */
+    qp_i_max?: number;
+    /** maximum quantization parameter for P frame */
+    qp_p_max?: number;
+    /** maximum quantization parameter for B frame */
+    qp_b_max?: number;
+    /** Specify level */
+    level?: '1' | '1b' | '1.1' | '1.2' | '1.3' | '2' | '2.1' | '2.2' | '3' | '3.1' | '3.2' | '4' | '4.1' | '4.2' | '5' | '5.1' | '5.2' | '6.0' | '6.1' | '6.2';
+  };
+  /**
+   * H264
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#h264_005fmf
+   */
+  h264_mf: {
+    /** Select rate control mode */
+    rate_control?: 'default' | 'cbr' | 'pc_vbr' | 'u_vbr' | 'quality' | 'ld_vbr' | 'g_vbr' | 'gld_vbr';
+    /** Select usage scenario */
+    scenario?: 'default' | 'display_remoting' | 'video_conference' | 'archive' | 'live_streaming' | 'camera_record' | 'display_remoting_with_feature_map';
+    /** Quality */
+    quality?: number;
+    /** Force hardware encoding */
+    hw_encoding?: boolean;
   };
   /**
    * NVIDIA NVENC H.264 encoder
@@ -1438,6 +1932,18 @@ export interface EncoderOptionsMap {
     lookahead_level?: 'auto' | '0' | '1' | '2' | '3';
   };
   /**
+   * H.264
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#h264_005fohcodec
+   */
+  h264_ohcodec: {
+    /** Select codec by name */
+    codec_name?: string;
+    /** Allow software encoding */
+    allow_sw?: boolean;
+    /** Bitrate control method */
+    bitrate_mode?: 'cbr' | 'vbr' | 'cq';
+  };
+  /**
    * OpenMAX IL H.264 video encoder
    * @see https://ffmpeg.org/ffmpeg-codecs.html#h264_005fomx
    */
@@ -1554,6 +2060,52 @@ export interface EncoderOptionsMap {
     repeat_pps?: boolean;
   };
   /**
+   * Rockchip MPP (Media Process Platform)
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#h264_005frkmpp
+   */
+  h264_rkmpp: {
+    /** Set the encoding rate control mode */
+    rc_mode?: 'VBR' | 'CBR' | 'CQP' | 'AVBR';
+    /** Set the initial QP value */
+    qp_init?: number;
+    /** Set the max QP value for P and B frame */
+    qp_max?: number;
+    /** Set the min QP value for P and B frame */
+    qp_min?: number;
+    /** Set the max QP value for I frame */
+    qp_max_i?: number;
+    /** Set the min QP value for I frame */
+    qp_min_i?: number;
+    /** Use Intra Refresh instead of IDR frames */
+    intra_refresh?: boolean;
+    /** Set the Intra Refresh mode */
+    refresh_mode?: 'row' | 'col';
+    /** Set how many MB rows or columns refresh each time */
+    refresh_num?: number;
+    /** Set the encoding profile restriction */
+    profile?: 'baseline' | 'main' | 'high';
+    /** Set the encoding level restriction */
+    level?: '1' | '1.1' | '1.2' | '1.3' | '2' | '2.1' | '2.2' | '3' | '3.1' | '3.2' | '4' | '4.1' | '4.2' | '5' | '5.1' | '5.2' | '6' | '6.1' | '6.2';
+    /** Set the entropy coder type (from 0 to 1) (default cabac) */
+    coder?: 'cavlc' | 'cabac';
+    /** Set the high profile 8x8 transform */
+    '8x8dct'?: boolean;
+    /** Pass on user data unregistered SEI if available */
+    udu_sei?: boolean;
+    /** Add prefix NAL between SEI info and encoded bitstream data */
+    prefix_mode?: boolean;
+  };
+  /**
+   * V4L2 mem2mem
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#h264_005fv4l2m2m
+   */
+  h264_v4l2m2m: {
+    /** Number of buffers in the output context */
+    num_output_buffers?: number;
+    /** Number of buffers in the capture context */
+    num_capture_buffers?: number;
+  };
+  /**
    * H.264/AVC (VAAPI)
    * @see https://ffmpeg.org/ffmpeg-codecs.html#h264_005fvaapi
    */
@@ -1562,9 +2114,9 @@ export interface EncoderOptionsMap {
     idr_interval?: number;
     /** Maximum B-frame reference depth */
     b_depth?: number;
-    /** Maximum processing parallelism.  */
+    /** Maximum processing parallelism. Increase this to improve single channel performance. */
     async_depth?: number;
-    /** Use low-power encoding mode (only available on some platforms;  */
+    /** Use low-power encoding mode (only available on some platforms; may not support all encoding features) */
     low_power?: boolean;
     /** Maximum frame size (in bytes) */
     max_frame_size?: number;
@@ -1632,28 +2184,28 @@ export interface EncoderOptionsMap {
     idr_interval?: number;
     /** Maximum B-frame reference depth */
     b_depth?: number;
-    /** Maximum processing parallelism.  */
+    /** Maximum processing parallelism. Increase this to improve single channel performance. */
     async_depth?: number;
     /** Use an explicit constant quantizer for the whole stream */
     qp?: number;
     /** Set encode quality (trades off against speed, higher is slower) */
     quality?: number;
     /** Select rate control type */
-    rc_mode?: number;
+    rc_mode?: 'auto' | 'driver' | 'cqp' | 'cbr' | 'vbr';
     /** Select tuning type */
-    tune?: number;
+    tune?: 'default' | 'hq' | 'll' | 'ull' | 'lossless';
     /** Select usage type */
-    usage?: string;
+    usage?: 'default' | 'transcode' | 'stream' | 'record' | 'conference' | (string & {});
     /** Select content type */
-    content?: string;
+    content?: 'default' | 'camera' | 'desktop' | 'rendered' | (string & {});
     /** Set profile (profile_idc and constraint_set*_flag) */
     profile?: 'constrained_baseline' | 'main' | 'high' | 'high444p';
     /** Set level (level_idc) */
     level?: '1' | '1.1' | '1.2' | '1.3' | '2' | '2.1' | '2.2' | '3' | '3.1' | '3.2' | '4' | '4.1' | '4.2' | '5' | '5.1' | '5.2' | '6' | '6.1' | '6.2';
     /** Entropy coder type */
-    coder?: number;
+    coder?: 'cabac' | 'vlc';
     /** Set units to include */
-    units?: string;
+    units?: 'aud' | 'identifier' | 'timing' | 'recovery' | 'a53_cc' | (string & {});
   };
   /**
    * Vidvox Hap
@@ -1682,9 +2234,9 @@ export interface EncoderOptionsMap {
     /** Set the encoding level (default auto) */
     level?: 'auto' | '1.0' | '2.0' | '2.1' | '3.0' | '3.1' | '4.0' | '4.1' | '5.0' | '5.1' | '5.2' | '6.0' | '6.1' | '6.2';
     /** Set the encoding quality preset */
-    quality?: 'quality' | 'balanced' | 'speed' | 'high_quality';
+    quality?: 'quality' | 'balanced' | 'speed';
     /** Set the encoding quality preset */
-    preset?: 'quality' | 'balanced' | 'speed' | 'high_quality';
+    preset?: 'quality' | 'balanced' | 'speed';
     /** enables low latency mode */
     latency?: boolean;
     /** Set the rate control mode */
@@ -1773,7 +2325,7 @@ export interface EncoderOptionsMap {
     idr_interval?: number;
     /** Maximum B-frame reference depth */
     b_depth?: number;
-    /** Maximum processing parallelism.  */
+    /** Maximum processing parallelism. Increase this to improve single channel performance. */
     async_depth?: number;
     /** Maximum frame size (in bytes) */
     max_frame_size?: number;
@@ -1788,13 +2340,83 @@ export interface EncoderOptionsMap {
     /** Constant QP (for P-frames; scaled by qfactor/qoffset for I/B) */
     qp?: number;
     /** Set profile (general_profile_idc) */
-    profile?: number;
+    profile?: 'main' | 'main10';
     /** Set tier (general_tier_flag) */
-    tier?: number;
+    tier?: 'main' | 'high';
     /** Set level (general_level_idc) */
-    level?: number;
-    /** Constrained intra prediction (constrained_intra_pred_flag) */
-    constrained_intra_pred?: boolean;
+    level?: '1' | '2' | '2.1' | '3' | '3.1' | '4' | '4.1' | '5' | '5.1' | '5.2' | '6' | '6.1' | '6.2';
+  };
+  /**
+   * H.265
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#hevc_005fmediacodec
+   */
+  hevc_mediacodec: {
+    /** Use MediaCodec from NDK */
+    ndk_codec?: boolean;
+    /** Try NDK MediaCodec in async mode */
+    ndk_async?: boolean;
+    /** Select codec by name */
+    codec_name?: string;
+    /** Bitrate control method */
+    bitrate_mode?: 'cq' | 'vbr' | 'cbr' | 'cbr_fd';
+    /** Use PTS as DTS. It is enabled automatically if avctx max_b_frames &lt;= 0, since most of Android devices don't output B frames by default. */
+    pts_as_dts?: boolean;
+    /** The desired operating rate that the codec will need to operate at, zero for unspecified */
+    operating_rate?: number;
+    /** minimum quantization parameter for I frame */
+    qp_i_min?: number;
+    /** minimum quantization parameter for P frame */
+    qp_p_min?: number;
+    /** minimum quantization parameter for B frame */
+    qp_b_min?: number;
+    /** maximum quantization parameter for I frame */
+    qp_i_max?: number;
+    /** maximum quantization parameter for P frame */
+    qp_p_max?: number;
+    /** maximum quantization parameter for B frame */
+    qp_b_max?: number;
+    /** Specify tier and level */
+    level?:
+      | 'm1'
+      | 'h1'
+      | 'm2'
+      | 'h2'
+      | 'm2.1'
+      | 'h2.1'
+      | 'm3'
+      | 'h3'
+      | 'm3.1'
+      | 'h3.1'
+      | 'm4'
+      | 'h4'
+      | 'm4.1'
+      | 'h4.1'
+      | 'm5'
+      | 'h5'
+      | 'm5.1'
+      | 'h5.1'
+      | 'm5.2'
+      | 'h5.2'
+      | 'm6'
+      | 'h6'
+      | 'm6.1'
+      | 'h6.1'
+      | 'm6.2'
+      | 'h6.2';
+  };
+  /**
+   * HEVC
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#hevc_005fmf
+   */
+  hevc_mf: {
+    /** Select rate control mode */
+    rate_control?: 'default' | 'cbr' | 'pc_vbr' | 'u_vbr' | 'quality' | 'ld_vbr' | 'g_vbr' | 'gld_vbr';
+    /** Select usage scenario */
+    scenario?: 'default' | 'display_remoting' | 'video_conference' | 'archive' | 'live_streaming' | 'camera_record' | 'display_remoting_with_feature_map';
+    /** Quality */
+    quality?: number;
+    /** Force hardware encoding */
+    hw_encoding?: boolean;
   };
   /**
    * NVIDIA NVENC hevc encoder
@@ -1912,6 +2534,18 @@ export interface EncoderOptionsMap {
     split_encode_mode?: 'disabled' | 'auto' | 'forced' | '2' | '3' | '4';
   };
   /**
+   * H.265
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#hevc_005fohcodec
+   */
+  hevc_ohcodec: {
+    /** Select codec by name */
+    codec_name?: string;
+    /** Allow software encoding */
+    allow_sw?: boolean;
+    /** Bitrate control method */
+    bitrate_mode?: 'cbr' | 'vbr' | 'cq';
+  };
+  /**
    * HEVC (Intel Quick Sync Video acceleration)
    * @see https://ffmpeg.org/ffmpeg-codecs.html#hevc_005fqsv
    */
@@ -2010,6 +2644,48 @@ export interface EncoderOptionsMap {
     main10sp?: boolean;
   };
   /**
+   * Rockchip MPP (Media Process Platform)
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#hevc_005frkmpp
+   */
+  hevc_rkmpp: {
+    /** Set the encoding rate control mode */
+    rc_mode?: 'VBR' | 'CBR' | 'CQP' | 'AVBR';
+    /** Set the initial QP value */
+    qp_init?: number;
+    /** Set the max QP value for P and B frame */
+    qp_max?: number;
+    /** Set the min QP value for P and B frame */
+    qp_min?: number;
+    /** Set the max QP value for I frame */
+    qp_max_i?: number;
+    /** Set the min QP value for I frame */
+    qp_min_i?: number;
+    /** Use Intra Refresh instead of IDR frames */
+    intra_refresh?: boolean;
+    /** Set the Intra Refresh mode */
+    refresh_mode?: 'row' | 'col';
+    /** Set how many MB rows or columns refresh each time */
+    refresh_num?: number;
+    /** Set the encoding profile restriction */
+    profile?: 'main';
+    /** Set the encoding profile tier restriction */
+    tier?: 'main' | 'high';
+    /** Set the encoding level restriction */
+    level?: '1' | '2' | '2.1' | '3' | '3.1' | '4' | '4.1' | '5' | '5.1' | '5.2' | '6' | '6.1' | '6.2';
+    /** Pass on user data unregistered SEI if available */
+    udu_sei?: boolean;
+  };
+  /**
+   * V4L2 mem2mem
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#hevc_005fv4l2m2m
+   */
+  hevc_v4l2m2m: {
+    /** Number of buffers in the output context */
+    num_output_buffers?: number;
+    /** Number of buffers in the capture context */
+    num_capture_buffers?: number;
+  };
+  /**
    * H.265/HEVC (VAAPI)
    * @see https://ffmpeg.org/ffmpeg-codecs.html#hevc_005fvaapi
    */
@@ -2018,9 +2694,9 @@ export interface EncoderOptionsMap {
     idr_interval?: number;
     /** Maximum B-frame reference depth */
     b_depth?: number;
-    /** Maximum processing parallelism.  */
+    /** Maximum processing parallelism. Increase this to improve single channel performance. */
     async_depth?: number;
-    /** Use low-power encoding mode (only available on some platforms;  */
+    /** Use low-power encoding mode (only available on some platforms; may not support all encoding features) */
     low_power?: boolean;
     /** Maximum frame size (in bytes) */
     max_frame_size?: number;
@@ -2082,20 +2758,20 @@ export interface EncoderOptionsMap {
     idr_interval?: number;
     /** Maximum B-frame reference depth */
     b_depth?: number;
-    /** Maximum processing parallelism.  */
+    /** Maximum processing parallelism. Increase this to improve single channel performance. */
     async_depth?: number;
     /** Use an explicit constant quantizer for the whole stream */
     qp?: number;
     /** Set encode quality (trades off against speed, higher is slower) */
     quality?: number;
     /** Select rate control type */
-    rc_mode?: number;
+    rc_mode?: 'auto' | 'driver' | 'cqp' | 'cbr' | 'vbr';
     /** Select tuning type */
-    tune?: number;
+    tune?: 'default' | 'hq' | 'll' | 'ull' | 'lossless';
     /** Select usage type */
-    usage?: string;
+    usage?: 'default' | 'transcode' | 'stream' | 'record' | 'conference' | (string & {});
     /** Select content type */
-    content?: string;
+    content?: 'default' | 'camera' | 'desktop' | 'rendered' | (string & {});
     /** Set profile (profile_idc and constraint_set*_flag) */
     profile?: 'main' | 'main10' | 'rext';
     /** Set tier (general_tier_flag) */
@@ -2103,7 +2779,7 @@ export interface EncoderOptionsMap {
     /** Set level (general_level_idc) */
     level?: '1' | '2' | '2.1' | '3' | '3.1' | '4' | '4.1' | '5' | '5.1' | '5.2' | '6' | '6.1' | '6.2';
     /** Set units to include */
-    units?: string;
+    units?: 'hdr' | 'a53_cc' | (string & {});
   };
   /**
    * Huffyuv / HuffYUV
@@ -2114,6 +2790,16 @@ export interface EncoderOptionsMap {
     non_deterministic?: boolean;
     /** Prediction method */
     pred?: 'left' | 'plane' | 'median';
+  };
+  /**
+   * ilbc
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#ilbc_005fat
+   */
+  ilbc_at: {
+    /** ratecontrol mode */
+    aac_at_mode?: 'auto' | 'cbr' | 'abr' | 'cvbr' | 'vbr';
+    /** quality vs speed control */
+    aac_at_quality?: number;
   };
   /**
    * JPEG 2000
@@ -2152,9 +2838,9 @@ export interface EncoderOptionsMap {
   'libaom-av1': {
     /** Quality/Speed ratio modifier */
     'cpu-used'?: number;
-    /** Enable use of alternate reference  */
+    /** Enable use of alternate reference frames (2-pass only) */
     'auto-alt-ref'?: number;
-    /** Number of frames to look ahead at for  */
+    /** Number of frames to look ahead at for alternate reference frame selection */
     'lag-in-frames'?: number;
     /** altref noise reduction max frame count */
     'arnr-max-frames'?: number;
@@ -2322,7 +3008,7 @@ export interface EncoderOptionsMap {
   libjxl: {
     /** Encoding effort */
     effort?: number;
-    /** Maximum Butteraugli distance (quality setting,  */
+    /** Maximum Butteraugli distance (quality setting, lower = better, zero = lossless, default 1.0) */
     distance?: number;
     /** Force modular mode */
     modular?: number;
@@ -2336,7 +3022,7 @@ export interface EncoderOptionsMap {
   libjxl_anim: {
     /** Encoding effort */
     effort?: number;
-    /** Maximum Butteraugli distance (quality setting,  */
+    /** Maximum Butteraugli distance (quality setting, lower = better, zero = lossless, default 1.0) */
     distance?: number;
     /** Force modular mode */
     modular?: number;
@@ -2449,8 +3135,6 @@ export interface EncoderOptionsMap {
     vbr?: 'off' | 'on' | 'constrained';
     /** Channel Mapping Family */
     mapping_family?: number;
-    /** Enable DTX (Discontinuous transmission) */
-    dtx?: boolean;
     /** Apply intensity stereo phase inversion */
     apply_phase_inv?: boolean;
   };
@@ -2571,7 +3255,7 @@ export interface EncoderOptionsMap {
    * @see https://ffmpeg.org/ffmpeg-codecs.html#libvpx
    */
   libvpx: {
-    /** Number of frames to look ahead for  */
+    /** Number of frames to look ahead for alternate reference frame selection */
     'lag-in-frames'?: number;
     /** altref noise reduction max frame count */
     'arnr-maxframes'?: number;
@@ -2601,7 +3285,7 @@ export interface EncoderOptionsMap {
     'overshoot-pct'?: number;
     /** Temporal scaling configuration using a :-separated list of key=value parameters */
     'ts-parameters'?: string;
-    /** Enable use of alternate reference  */
+    /** Enable use of alternate reference frames (2-pass only) */
     'auto-alt-ref'?: number;
     /** Quality/Speed ratio modifier */
     'cpu-used'?: number;
@@ -2626,7 +3310,7 @@ export interface EncoderOptionsMap {
    * @see https://ffmpeg.org/ffmpeg-codecs.html#libvpx_002dvp9
    */
   'libvpx-vp9': {
-    /** Number of frames to look ahead for  */
+    /** Number of frames to look ahead for alternate reference frame selection */
     'lag-in-frames'?: number;
     /** altref noise reduction max frame count */
     'arnr-maxframes'?: number;
@@ -2656,7 +3340,7 @@ export interface EncoderOptionsMap {
     'overshoot-pct'?: number;
     /** Temporal scaling configuration using a :-separated list of key=value parameters */
     'ts-parameters'?: string;
-    /** Enable use of alternate reference  */
+    /** Enable use of alternate reference frames (2-pass only) */
     'auto-alt-ref'?: number;
     /** Quality/Speed ratio modifier */
     'cpu-used'?: number;
@@ -2702,7 +3386,7 @@ export interface EncoderOptionsMap {
    */
   libvvenc: {
     /** set encoding preset */
-    preset?: number;
+    preset?: 'faster' | 'fast' | 'medium' | 'slow' | 'slower';
     /** set quantization */
     qp?: number;
     /** set subjective (perceptually motivated) optimization */
@@ -2718,7 +3402,39 @@ export interface EncoderOptionsMap {
     /** Specify level (as defined by Annex A) */
     level?: string;
     /** set vvc tier */
-    tier?: number;
+    tier?: 'main' | 'high';
+  };
+  /**
+   * libwebp WebP image
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#libwebp
+   */
+  libwebp: {
+    /** Use lossless mode */
+    lossless?: number;
+    /** Configuration preset */
+    preset?: 'none' | 'default' | 'picture' | 'photo' | 'drawing' | 'icon' | 'text';
+    /** Conditional replenishment threshold */
+    cr_threshold?: number;
+    /** Conditional replenishment block size */
+    cr_size?: number;
+    /** Quality */
+    quality?: number;
+  };
+  /**
+   * libwebp WebP image
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#libwebp_005fanim
+   */
+  libwebp_anim: {
+    /** Use lossless mode */
+    lossless?: number;
+    /** Configuration preset */
+    preset?: 'none' | 'default' | 'picture' | 'photo' | 'drawing' | 'icon' | 'text';
+    /** Conditional replenishment threshold */
+    cr_threshold?: number;
+    /** Conditional replenishment block size */
+    cr_size?: number;
+    /** Quality */
+    quality?: number;
   };
   /**
    * libx262 MPEG2VIDEO
@@ -2786,7 +3502,7 @@ export interface EncoderOptionsMap {
     deblock?: string;
     /** Reduce fluctuations in QP (before curve compression) */
     cplxblur?: number;
-    /** A comma-separated list of partitions to consider.  */
+    /** A comma-separated list of partitions to consider. Possible values: p8x8, p4x4, b8x8, i8x8, i4x4, none, all */
     partitions?: string;
     /** Direct MV prediction mode */
     'direct-pred'?: 'none' | 'spatial' | 'temporal' | 'auto';
@@ -2794,7 +3510,7 @@ export interface EncoderOptionsMap {
     'slice-max-size'?: number;
     /** Filename for 2 pass stats */
     stats?: string;
-    /** Signal HRD information (requires vbv-bufsize;  */
+    /** Signal HRD information (requires vbv-bufsize; cbr not allowed in .mp4) */
     'nal-hrd'?: 'none' | 'vbr' | 'cbr';
     /** AVC-Intra class 50/100/200/300/480 */
     'avcintra-class'?: number;
@@ -2887,7 +3603,7 @@ export interface EncoderOptionsMap {
     deblock?: string;
     /** Reduce fluctuations in QP (before curve compression) */
     cplxblur?: number;
-    /** A comma-separated list of partitions to consider.  */
+    /** A comma-separated list of partitions to consider. Possible values: p8x8, p4x4, b8x8, i8x8, i4x4, none, all */
     partitions?: string;
     /** Direct MV prediction mode */
     'direct-pred'?: 'none' | 'spatial' | 'temporal' | 'auto';
@@ -2895,7 +3611,7 @@ export interface EncoderOptionsMap {
     'slice-max-size'?: number;
     /** Filename for 2 pass stats */
     stats?: string;
-    /** Signal HRD information (requires vbv-bufsize;  */
+    /** Signal HRD information (requires vbv-bufsize; cbr not allowed in .mp4) */
     'nal-hrd'?: 'none' | 'vbr' | 'cbr';
     /** AVC-Intra class 50/100/200/300/480 */
     'avcintra-class'?: number;
@@ -2988,7 +3704,7 @@ export interface EncoderOptionsMap {
     deblock?: string;
     /** Reduce fluctuations in QP (before curve compression) */
     cplxblur?: number;
-    /** A comma-separated list of partitions to consider.  */
+    /** A comma-separated list of partitions to consider. Possible values: p8x8, p4x4, b8x8, i8x8, i4x4, none, all */
     partitions?: string;
     /** Direct MV prediction mode */
     'direct-pred'?: 'none' | 'spatial' | 'temporal' | 'auto';
@@ -2996,7 +3712,7 @@ export interface EncoderOptionsMap {
     'slice-max-size'?: number;
     /** Filename for 2 pass stats */
     stats?: string;
-    /** Signal HRD information (requires vbv-bufsize;  */
+    /** Signal HRD information (requires vbv-bufsize; cbr not allowed in .mp4) */
     'nal-hrd'?: 'none' | 'vbr' | 'cbr';
     /** AVC-Intra class 50/100/200/300/480 */
     'avcintra-class'?: number;
@@ -3190,7 +3906,11 @@ export interface EncoderOptionsMap {
     rc_qmod_amp?: number;
     /** experimental quantizer modulation */
     rc_qmod_freq?: number;
-    /** Set rate control equation. When computing the expression, besides the standard functions  */
+    /**
+     * Set rate control equation. When computing the expression, besides the standard functions defined in the section 'Expression Evaluation', the following functions
+     * are available: bits2qp(bits), qp2bits(qp). Also the following constants are available: iTex pTex tex mv fCode iCount mcVar var isI isP isB avgQP qComp avgIITex
+     * avgPITex avgPPTex avgBPTex avgTex.
+     */
     rc_eq?: string;
     /** initial complexity for 1-pass encoding */
     rc_init_cplx?: number;
@@ -3224,6 +3944,20 @@ export interface EncoderOptionsMap {
     async_depth?: number;
   };
   /**
+   * Rockchip MPP (Media Process Platform)
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#mjpeg_005frkmpp
+   */
+  mjpeg_rkmpp: {
+    /** Set the initial QP/Q_Factor value */
+    qp_init?: number;
+    /** Set the max QP/Q_Factor value */
+    qp_max?: number;
+    /** Set the min QP/Q_Factor value */
+    qp_min?: number;
+    /** Specify the output chroma format for down subsampling */
+    chroma_fmt?: 'auto' | '400' | '420' | '422' | '444';
+  };
+  /**
    * MJPEG (VAAPI)
    * @see https://ffmpeg.org/ffmpeg-codecs.html#mjpeg_005fvaapi
    */
@@ -3232,9 +3966,9 @@ export interface EncoderOptionsMap {
     idr_interval?: number;
     /** Maximum B-frame reference depth */
     b_depth?: number;
-    /** Maximum processing parallelism.  */
+    /** Maximum processing parallelism. Increase this to improve single channel performance. */
     async_depth?: number;
-    /** Use low-power encoding mode (only available on some platforms;  */
+    /** Use low-power encoding mode (only available on some platforms; may not support all encoding features) */
     low_power?: boolean;
     /** Maximum frame size (in bytes) */
     max_frame_size?: number;
@@ -3280,58 +4014,18 @@ export interface EncoderOptionsMap {
     height?: number;
   };
   /**
-   * MPEG-2 video (Intel Quick Sync Video acceleration)
-   * @see https://ffmpeg.org/ffmpeg-codecs.html#mpeg2_005fqsv
+   * MPEG-1 video
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#mpeg1video
    */
-  mpeg2_qsv: {
-    /** Maximum processing parallelism */
-    async_depth?: number;
-    preset?: 'veryfast' | 'faster' | 'fast' | 'medium' | 'slow' | 'slower' | 'veryslow';
-    /** Forcing I frames as IDR frames */
-    forced_idr?: boolean;
-    /** enable low power mode(experimental: many limitations by mfx version, BRC modes, etc.) */
-    low_power?: boolean;
-    /** Set QSV encoder parameters as key1=value1:key2=value2:... */
-    qsv_params?: string;
-    /** Enable rate distortion optimization */
-    rdo?: number;
-    profile?: 'unknown' | 'simple' | 'main' | 'high';
-  };
-  /**
-   * MPEG-2 (VAAPI)
-   * @see https://ffmpeg.org/ffmpeg-codecs.html#mpeg2_005fvaapi
-   */
-  mpeg2_vaapi: {
-    /** Distance (in I-frames) between key frames */
-    idr_interval?: number;
-    /** Maximum B-frame reference depth */
-    b_depth?: number;
-    /** Maximum processing parallelism.  */
-    async_depth?: number;
-    /** Use low-power encoding mode (only available on some platforms;  */
-    low_power?: boolean;
-    /** Maximum frame size (in bytes) */
-    max_frame_size?: number;
-    /** Set rate control mode */
-    rc_mode?: 'auto' | 'CQP' | 'CBR' | 'VBR' | 'ICQ' | 'QVBR' | 'AVBR';
-    /** Block level based bitrate control */
-    blbrc?: boolean;
-    /** Set profile (in profile_and_level_indication) */
-    profile?: 'simple' | 'main';
-    /** Set level (in profile_and_level_indication) */
-    level?: 'low' | 'main' | 'high_1440' | 'high';
-  };
-  /**
-   * MPEG-4 part 2
-   * @see https://ffmpeg.org/ffmpeg-codecs.html#mpeg4
-   */
-  mpeg4: {
-    /** Use data partitioning. */
-    data_partitioning?: boolean;
-    /** Enable alternate scantable. */
-    alternate_scan?: boolean;
-    /** Use MPEG quantizers instead of H.263 */
-    mpeg_quant?: number;
+  mpeg1video: {
+    /** MPEG GOP Timecode in hh:mm:ss[:;.]ff format. Overrides timecode_frame_start. */
+    gop_timecode?: string;
+    /** Timecode is in drop frame format. */
+    drop_frame_timecode?: boolean;
+    /** Reserve space for SVCD scan offset user data. */
+    scan_offset?: boolean;
+    /** GOP timecode frame start number, in non-drop-frame format */
+    timecode_frame_start?: number;
     /** Strategy to choose between I/P/B-frames */
     b_strategy?: number;
     /** Adjust sensitivity of b_frame_strategy 1 */
@@ -3353,7 +4047,11 @@ export interface EncoderOptionsMap {
     rc_qmod_amp?: number;
     /** experimental quantizer modulation */
     rc_qmod_freq?: number;
-    /** Set rate control equation. When computing the expression, besides the standard functions  */
+    /**
+     * Set rate control equation. When computing the expression, besides the standard functions defined in the section 'Expression Evaluation', the following functions
+     * are available: bits2qp(bits), qp2bits(qp). Also the following constants are available: iTex pTex tex mv fCode iCount mcVar var isI isP isB avgQP qComp avgIITex
+     * avgPITex avgPPTex avgBPTex avgTex.
+     */
     rc_eq?: string;
     /** initial complexity for 1-pass encoding */
     rc_init_cplx?: number;
@@ -3389,6 +4087,238 @@ export interface EncoderOptionsMap {
     sc_threshold?: number;
   };
   /**
+   * MPEG-2 video (Intel Quick Sync Video acceleration)
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#mpeg2_005fqsv
+   */
+  mpeg2_qsv: {
+    /** Maximum processing parallelism */
+    async_depth?: number;
+    preset?: 'veryfast' | 'faster' | 'fast' | 'medium' | 'slow' | 'slower' | 'veryslow';
+    /** Forcing I frames as IDR frames */
+    forced_idr?: boolean;
+    /** enable low power mode(experimental: many limitations by mfx version, BRC modes, etc.) */
+    low_power?: boolean;
+    /** Set QSV encoder parameters as key1=value1:key2=value2:... */
+    qsv_params?: string;
+    /** Enable rate distortion optimization */
+    rdo?: number;
+    profile?: 'unknown' | 'simple' | 'main' | 'high';
+  };
+  /**
+   * MPEG-2 (VAAPI)
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#mpeg2_005fvaapi
+   */
+  mpeg2_vaapi: {
+    /** Distance (in I-frames) between key frames */
+    idr_interval?: number;
+    /** Maximum B-frame reference depth */
+    b_depth?: number;
+    /** Maximum processing parallelism. Increase this to improve single channel performance. */
+    async_depth?: number;
+    /** Use low-power encoding mode (only available on some platforms; may not support all encoding features) */
+    low_power?: boolean;
+    /** Maximum frame size (in bytes) */
+    max_frame_size?: number;
+    /** Set rate control mode */
+    rc_mode?: 'auto' | 'CQP' | 'CBR' | 'VBR' | 'ICQ' | 'QVBR' | 'AVBR';
+    /** Block level based bitrate control */
+    blbrc?: boolean;
+    /** Set profile (in profile_and_level_indication) */
+    profile?: 'simple' | 'main';
+    /** Set level (in profile_and_level_indication) */
+    level?: 'low' | 'main' | 'high_1440' | 'high';
+  };
+  /**
+   * MPEG-2 video
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#mpeg2video
+   */
+  mpeg2video: {
+    /** MPEG GOP Timecode in hh:mm:ss[:;.]ff format. Overrides timecode_frame_start. */
+    gop_timecode?: string;
+    /** Timecode is in drop frame format. */
+    drop_frame_timecode?: boolean;
+    /** Reserve space for SVCD scan offset user data. */
+    scan_offset?: boolean;
+    /** GOP timecode frame start number, in non-drop-frame format */
+    timecode_frame_start?: number;
+    /** Strategy to choose between I/P/B-frames */
+    b_strategy?: number;
+    /** Adjust sensitivity of b_frame_strategy 1 */
+    b_sensitivity?: number;
+    /** Downscale frames for dynamic B-frame decision */
+    brd_scale?: number;
+    /** Precision of the DC coefficient - 8 */
+    intra_dc_precision?: number;
+    /** Use MPEG-2 intra VLC table. */
+    intra_vlc?: boolean;
+    /** Use nonlinear quantizer. */
+    non_linear_quant?: boolean;
+    /** Enable alternate scantable. */
+    alternate_scan?: boolean;
+    /** Use A53 Closed Captions (if available) */
+    a53cc?: boolean;
+    /** Write sequence_display_extension blocks. */
+    seq_disp_ext?: 'auto' | 'never' | 'always';
+    /** Video_format in the sequence_display_extension indicating the source of the video. */
+    video_format?: 'component' | 'pal' | 'ntsc' | 'secam' | 'mac' | 'unspecified';
+    /** Flags common for all mpegvideo-based encoders. */
+    mpv_flags?: 'skip_rd' | 'strict_gop' | 'qp_rd' | 'cbp_rd' | 'naq' | 'mv0' | (string & {});
+    /** single coefficient elimination threshold for luminance (negative values also consider dc coefficient) */
+    luma_elim_threshold?: number;
+    /** single coefficient elimination threshold for chrominance (negative values also consider dc coefficient) */
+    chroma_elim_threshold?: number;
+    quantizer_noise_shaping?: number;
+    /** Simulate errors in the bitstream to test error concealment. */
+    error_rate?: number;
+    /** how to keep quantizer between qmin and qmax (0 = clip, 1 = use differentiable function) */
+    qsquish?: number;
+    /** experimental quantizer modulation */
+    rc_qmod_amp?: number;
+    /** experimental quantizer modulation */
+    rc_qmod_freq?: number;
+    /**
+     * Set rate control equation. When computing the expression, besides the standard functions defined in the section 'Expression Evaluation', the following functions
+     * are available: bits2qp(bits), qp2bits(qp). Also the following constants are available: iTex pTex tex mv fCode iCount mcVar var isI isP isB avgQP qComp avgIITex
+     * avgPITex avgPPTex avgBPTex avgTex.
+     */
+    rc_eq?: string;
+    /** initial complexity for 1-pass encoding */
+    rc_init_cplx?: number;
+    /** currently useless */
+    rc_buf_aggressivity?: number;
+    /** increase the quantizer for macroblocks close to borders */
+    border_mask?: number;
+    /** minimum Lagrange factor (VBR) */
+    lmin?: number;
+    /** maximum Lagrange factor (VBR) */
+    lmax?: number;
+    /** Frame skip threshold */
+    skip_threshold?: number;
+    /** Frame skip factor */
+    skip_factor?: number;
+    /** Frame skip exponent */
+    skip_exp?: number;
+    /** Frame skip compare function */
+    skip_cmp?: 'sad' | 'sse' | 'satd' | 'dct' | 'psnr' | 'bit' | 'rd' | 'zero' | 'vsad' | 'vsse' | 'nsse' | 'dct264' | 'dctmax' | 'chroma' | 'msad';
+    /** Noise reduction */
+    noise_reduction?: number;
+    /** RTP payload size in bytes */
+    ps?: number;
+    /** motion estimation algorithm */
+    motion_est?: 'zero' | 'epzs' | 'xone';
+    /** Motion estimation bitrate penalty compensation (1.0 = 256) */
+    mepc?: number;
+    /** pre motion estimation */
+    mepre?: number;
+    /** Penalty for intra blocks in block decision */
+    intra_penalty?: number;
+    /** Scene change threshold */
+    sc_threshold?: number;
+  };
+  /**
+   * MPEG-4 part 2
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#mpeg4
+   */
+  mpeg4: {
+    /** Use data partitioning. */
+    data_partitioning?: boolean;
+    /** Enable alternate scantable. */
+    alternate_scan?: boolean;
+    /** Use MPEG quantizers instead of H.263 */
+    mpeg_quant?: number;
+    /** Strategy to choose between I/P/B-frames */
+    b_strategy?: number;
+    /** Adjust sensitivity of b_frame_strategy 1 */
+    b_sensitivity?: number;
+    /** Downscale frames for dynamic B-frame decision */
+    brd_scale?: number;
+    /** Flags common for all mpegvideo-based encoders. */
+    mpv_flags?: 'skip_rd' | 'strict_gop' | 'qp_rd' | 'cbp_rd' | 'naq' | 'mv0' | (string & {});
+    /** single coefficient elimination threshold for luminance (negative values also consider dc coefficient) */
+    luma_elim_threshold?: number;
+    /** single coefficient elimination threshold for chrominance (negative values also consider dc coefficient) */
+    chroma_elim_threshold?: number;
+    quantizer_noise_shaping?: number;
+    /** Simulate errors in the bitstream to test error concealment. */
+    error_rate?: number;
+    /** how to keep quantizer between qmin and qmax (0 = clip, 1 = use differentiable function) */
+    qsquish?: number;
+    /** experimental quantizer modulation */
+    rc_qmod_amp?: number;
+    /** experimental quantizer modulation */
+    rc_qmod_freq?: number;
+    /**
+     * Set rate control equation. When computing the expression, besides the standard functions defined in the section 'Expression Evaluation', the following functions
+     * are available: bits2qp(bits), qp2bits(qp). Also the following constants are available: iTex pTex tex mv fCode iCount mcVar var isI isP isB avgQP qComp avgIITex
+     * avgPITex avgPPTex avgBPTex avgTex.
+     */
+    rc_eq?: string;
+    /** initial complexity for 1-pass encoding */
+    rc_init_cplx?: number;
+    /** currently useless */
+    rc_buf_aggressivity?: number;
+    /** increase the quantizer for macroblocks close to borders */
+    border_mask?: number;
+    /** minimum Lagrange factor (VBR) */
+    lmin?: number;
+    /** maximum Lagrange factor (VBR) */
+    lmax?: number;
+    /** Frame skip threshold */
+    skip_threshold?: number;
+    /** Frame skip factor */
+    skip_factor?: number;
+    /** Frame skip exponent */
+    skip_exp?: number;
+    /** Frame skip compare function */
+    skip_cmp?: 'sad' | 'sse' | 'satd' | 'dct' | 'psnr' | 'bit' | 'rd' | 'zero' | 'vsad' | 'vsse' | 'nsse' | 'dct264' | 'dctmax' | 'chroma' | 'msad';
+    /** Noise reduction */
+    noise_reduction?: number;
+    /** RTP payload size in bytes */
+    ps?: number;
+    /** motion estimation algorithm */
+    motion_est?: 'zero' | 'epzs' | 'xone';
+    /** Motion estimation bitrate penalty compensation (1.0 = 256) */
+    mepc?: number;
+    /** pre motion estimation */
+    mepre?: number;
+    /** Penalty for intra blocks in block decision */
+    intra_penalty?: number;
+    /** Scene change threshold */
+    sc_threshold?: number;
+  };
+  /**
+   * MPEG-4
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#mpeg4_005fmediacodec
+   */
+  mpeg4_mediacodec: {
+    /** Use MediaCodec from NDK */
+    ndk_codec?: boolean;
+    /** Try NDK MediaCodec in async mode */
+    ndk_async?: boolean;
+    /** Select codec by name */
+    codec_name?: string;
+    /** Bitrate control method */
+    bitrate_mode?: 'cq' | 'vbr' | 'cbr' | 'cbr_fd';
+    /** Use PTS as DTS. It is enabled automatically if avctx max_b_frames &lt;= 0, since most of Android devices don't output B frames by default. */
+    pts_as_dts?: boolean;
+    /** The desired operating rate that the codec will need to operate at, zero for unspecified */
+    operating_rate?: number;
+    /** minimum quantization parameter for I frame */
+    qp_i_min?: number;
+    /** minimum quantization parameter for P frame */
+    qp_p_min?: number;
+    /** minimum quantization parameter for B frame */
+    qp_b_min?: number;
+    /** maximum quantization parameter for I frame */
+    qp_i_max?: number;
+    /** maximum quantization parameter for P frame */
+    qp_p_max?: number;
+    /** maximum quantization parameter for B frame */
+    qp_b_max?: number;
+    /** Specify tier and level */
+    level?: '0' | '0b' | '1' | '2' | '3' | '3b' | '4' | '4a' | '5' | '6';
+  };
+  /**
    * OpenMAX IL MPEG-4 video encoder
    * @see https://ffmpeg.org/ffmpeg-codecs.html#mpeg4_005fomx
    */
@@ -3403,6 +4333,134 @@ export interface EncoderOptionsMap {
     profile?: 'baseline' | 'main' | 'high';
   };
   /**
+   * V4L2 mem2mem
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#mpeg4_005fv4l2m2m
+   */
+  mpeg4_v4l2m2m: {
+    /** Number of buffers in the output context */
+    num_output_buffers?: number;
+    /** Number of buffers in the capture context */
+    num_capture_buffers?: number;
+  };
+  /**
+   * MPEG-4 part 2 Microsoft variant version 3
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#msmpeg4
+   */
+  msmpeg4: {
+    /** Flags common for all mpegvideo-based encoders. */
+    mpv_flags?: 'skip_rd' | 'strict_gop' | 'qp_rd' | 'cbp_rd' | 'naq' | 'mv0' | (string & {});
+    /** single coefficient elimination threshold for luminance (negative values also consider dc coefficient) */
+    luma_elim_threshold?: number;
+    /** single coefficient elimination threshold for chrominance (negative values also consider dc coefficient) */
+    chroma_elim_threshold?: number;
+    quantizer_noise_shaping?: number;
+    /** Simulate errors in the bitstream to test error concealment. */
+    error_rate?: number;
+    /** how to keep quantizer between qmin and qmax (0 = clip, 1 = use differentiable function) */
+    qsquish?: number;
+    /** experimental quantizer modulation */
+    rc_qmod_amp?: number;
+    /** experimental quantizer modulation */
+    rc_qmod_freq?: number;
+    /**
+     * Set rate control equation. When computing the expression, besides the standard functions defined in the section 'Expression Evaluation', the following functions
+     * are available: bits2qp(bits), qp2bits(qp). Also the following constants are available: iTex pTex tex mv fCode iCount mcVar var isI isP isB avgQP qComp avgIITex
+     * avgPITex avgPPTex avgBPTex avgTex.
+     */
+    rc_eq?: string;
+    /** initial complexity for 1-pass encoding */
+    rc_init_cplx?: number;
+    /** currently useless */
+    rc_buf_aggressivity?: number;
+    /** increase the quantizer for macroblocks close to borders */
+    border_mask?: number;
+    /** minimum Lagrange factor (VBR) */
+    lmin?: number;
+    /** maximum Lagrange factor (VBR) */
+    lmax?: number;
+    /** Frame skip threshold */
+    skip_threshold?: number;
+    /** Frame skip factor */
+    skip_factor?: number;
+    /** Frame skip exponent */
+    skip_exp?: number;
+    /** Frame skip compare function */
+    skip_cmp?: 'sad' | 'sse' | 'satd' | 'dct' | 'psnr' | 'bit' | 'rd' | 'zero' | 'vsad' | 'vsse' | 'nsse' | 'dct264' | 'dctmax' | 'chroma' | 'msad';
+    /** Noise reduction */
+    noise_reduction?: number;
+    /** RTP payload size in bytes */
+    ps?: number;
+    /** motion estimation algorithm */
+    motion_est?: 'zero' | 'epzs' | 'xone';
+    /** Motion estimation bitrate penalty compensation (1.0 = 256) */
+    mepc?: number;
+    /** pre motion estimation */
+    mepre?: number;
+    /** Penalty for intra blocks in block decision */
+    intra_penalty?: number;
+    /** Scene change threshold */
+    sc_threshold?: number;
+  };
+  /**
+   * MPEG-4 part 2 Microsoft variant version 2
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#msmpeg4v2
+   */
+  msmpeg4v2: {
+    /** Flags common for all mpegvideo-based encoders. */
+    mpv_flags?: 'skip_rd' | 'strict_gop' | 'qp_rd' | 'cbp_rd' | 'naq' | 'mv0' | (string & {});
+    /** single coefficient elimination threshold for luminance (negative values also consider dc coefficient) */
+    luma_elim_threshold?: number;
+    /** single coefficient elimination threshold for chrominance (negative values also consider dc coefficient) */
+    chroma_elim_threshold?: number;
+    quantizer_noise_shaping?: number;
+    /** Simulate errors in the bitstream to test error concealment. */
+    error_rate?: number;
+    /** how to keep quantizer between qmin and qmax (0 = clip, 1 = use differentiable function) */
+    qsquish?: number;
+    /** experimental quantizer modulation */
+    rc_qmod_amp?: number;
+    /** experimental quantizer modulation */
+    rc_qmod_freq?: number;
+    /**
+     * Set rate control equation. When computing the expression, besides the standard functions defined in the section 'Expression Evaluation', the following functions
+     * are available: bits2qp(bits), qp2bits(qp). Also the following constants are available: iTex pTex tex mv fCode iCount mcVar var isI isP isB avgQP qComp avgIITex
+     * avgPITex avgPPTex avgBPTex avgTex.
+     */
+    rc_eq?: string;
+    /** initial complexity for 1-pass encoding */
+    rc_init_cplx?: number;
+    /** currently useless */
+    rc_buf_aggressivity?: number;
+    /** increase the quantizer for macroblocks close to borders */
+    border_mask?: number;
+    /** minimum Lagrange factor (VBR) */
+    lmin?: number;
+    /** maximum Lagrange factor (VBR) */
+    lmax?: number;
+    /** Frame skip threshold */
+    skip_threshold?: number;
+    /** Frame skip factor */
+    skip_factor?: number;
+    /** Frame skip exponent */
+    skip_exp?: number;
+    /** Frame skip compare function */
+    skip_cmp?: 'sad' | 'sse' | 'satd' | 'dct' | 'psnr' | 'bit' | 'rd' | 'zero' | 'vsad' | 'vsse' | 'nsse' | 'dct264' | 'dctmax' | 'chroma' | 'msad';
+    /** Noise reduction */
+    noise_reduction?: number;
+    /** RTP payload size in bytes */
+    ps?: number;
+    /** motion estimation algorithm */
+    motion_est?: 'zero' | 'epzs' | 'xone';
+    /** Motion estimation bitrate penalty compensation (1.0 = 256) */
+    mepc?: number;
+    /** pre motion estimation */
+    mepre?: number;
+    /** Penalty for intra blocks in block decision */
+    intra_penalty?: number;
+    /** Scene change threshold */
+    sc_threshold?: number;
+  };
+  /**
    * Opus
    * @see https://ffmpeg.org/ffmpeg-codecs.html#opus
    */
@@ -3411,6 +4469,26 @@ export interface EncoderOptionsMap {
     opus_delay?: number;
     /** Apply intensity stereo phase inversion */
     apply_phase_inv?: boolean;
+  };
+  /**
+   * pcm_alaw
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#pcm_005falaw_005fat
+   */
+  pcm_alaw_at: {
+    /** ratecontrol mode */
+    aac_at_mode?: 'auto' | 'cbr' | 'abr' | 'cvbr' | 'vbr';
+    /** quality vs speed control */
+    aac_at_quality?: number;
+  };
+  /**
+   * pcm_mulaw
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#pcm_005fmulaw_005fat
+   */
+  pcm_mulaw_at: {
+    /** ratecontrol mode */
+    aac_at_mode?: 'auto' | 'cbr' | 'abr' | 'cvbr' | 'vbr';
+    /** quality vs speed control */
+    aac_at_quality?: number;
   };
   /**
    * PNG (Portable Network Graphics) image
@@ -3521,6 +4599,124 @@ export interface EncoderOptionsMap {
     sixteen_color_thresh?: number;
   };
   /**
+   * RealVideo 1.0
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#rv10
+   */
+  rv10: {
+    /** Flags common for all mpegvideo-based encoders. */
+    mpv_flags?: 'skip_rd' | 'strict_gop' | 'qp_rd' | 'cbp_rd' | 'naq' | 'mv0' | (string & {});
+    /** single coefficient elimination threshold for luminance (negative values also consider dc coefficient) */
+    luma_elim_threshold?: number;
+    /** single coefficient elimination threshold for chrominance (negative values also consider dc coefficient) */
+    chroma_elim_threshold?: number;
+    quantizer_noise_shaping?: number;
+    /** Simulate errors in the bitstream to test error concealment. */
+    error_rate?: number;
+    /** how to keep quantizer between qmin and qmax (0 = clip, 1 = use differentiable function) */
+    qsquish?: number;
+    /** experimental quantizer modulation */
+    rc_qmod_amp?: number;
+    /** experimental quantizer modulation */
+    rc_qmod_freq?: number;
+    /**
+     * Set rate control equation. When computing the expression, besides the standard functions defined in the section 'Expression Evaluation', the following functions
+     * are available: bits2qp(bits), qp2bits(qp). Also the following constants are available: iTex pTex tex mv fCode iCount mcVar var isI isP isB avgQP qComp avgIITex
+     * avgPITex avgPPTex avgBPTex avgTex.
+     */
+    rc_eq?: string;
+    /** initial complexity for 1-pass encoding */
+    rc_init_cplx?: number;
+    /** currently useless */
+    rc_buf_aggressivity?: number;
+    /** increase the quantizer for macroblocks close to borders */
+    border_mask?: number;
+    /** minimum Lagrange factor (VBR) */
+    lmin?: number;
+    /** maximum Lagrange factor (VBR) */
+    lmax?: number;
+    /** Frame skip threshold */
+    skip_threshold?: number;
+    /** Frame skip factor */
+    skip_factor?: number;
+    /** Frame skip exponent */
+    skip_exp?: number;
+    /** Frame skip compare function */
+    skip_cmp?: 'sad' | 'sse' | 'satd' | 'dct' | 'psnr' | 'bit' | 'rd' | 'zero' | 'vsad' | 'vsse' | 'nsse' | 'dct264' | 'dctmax' | 'chroma' | 'msad';
+    /** Noise reduction */
+    noise_reduction?: number;
+    /** RTP payload size in bytes */
+    ps?: number;
+    /** motion estimation algorithm */
+    motion_est?: 'zero' | 'epzs' | 'xone';
+    /** Motion estimation bitrate penalty compensation (1.0 = 256) */
+    mepc?: number;
+    /** pre motion estimation */
+    mepre?: number;
+    /** Penalty for intra blocks in block decision */
+    intra_penalty?: number;
+    /** Scene change threshold */
+    sc_threshold?: number;
+  };
+  /**
+   * RealVideo 2.0
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#rv20
+   */
+  rv20: {
+    /** Flags common for all mpegvideo-based encoders. */
+    mpv_flags?: 'skip_rd' | 'strict_gop' | 'qp_rd' | 'cbp_rd' | 'naq' | 'mv0' | (string & {});
+    /** single coefficient elimination threshold for luminance (negative values also consider dc coefficient) */
+    luma_elim_threshold?: number;
+    /** single coefficient elimination threshold for chrominance (negative values also consider dc coefficient) */
+    chroma_elim_threshold?: number;
+    quantizer_noise_shaping?: number;
+    /** Simulate errors in the bitstream to test error concealment. */
+    error_rate?: number;
+    /** how to keep quantizer between qmin and qmax (0 = clip, 1 = use differentiable function) */
+    qsquish?: number;
+    /** experimental quantizer modulation */
+    rc_qmod_amp?: number;
+    /** experimental quantizer modulation */
+    rc_qmod_freq?: number;
+    /**
+     * Set rate control equation. When computing the expression, besides the standard functions defined in the section 'Expression Evaluation', the following functions
+     * are available: bits2qp(bits), qp2bits(qp). Also the following constants are available: iTex pTex tex mv fCode iCount mcVar var isI isP isB avgQP qComp avgIITex
+     * avgPITex avgPPTex avgBPTex avgTex.
+     */
+    rc_eq?: string;
+    /** initial complexity for 1-pass encoding */
+    rc_init_cplx?: number;
+    /** currently useless */
+    rc_buf_aggressivity?: number;
+    /** increase the quantizer for macroblocks close to borders */
+    border_mask?: number;
+    /** minimum Lagrange factor (VBR) */
+    lmin?: number;
+    /** maximum Lagrange factor (VBR) */
+    lmax?: number;
+    /** Frame skip threshold */
+    skip_threshold?: number;
+    /** Frame skip factor */
+    skip_factor?: number;
+    /** Frame skip exponent */
+    skip_exp?: number;
+    /** Frame skip compare function */
+    skip_cmp?: 'sad' | 'sse' | 'satd' | 'dct' | 'psnr' | 'bit' | 'rd' | 'zero' | 'vsad' | 'vsse' | 'nsse' | 'dct264' | 'dctmax' | 'chroma' | 'msad';
+    /** Noise reduction */
+    noise_reduction?: number;
+    /** RTP payload size in bytes */
+    ps?: number;
+    /** motion estimation algorithm */
+    motion_est?: 'zero' | 'epzs' | 'xone';
+    /** Motion estimation bitrate penalty compensation (1.0 = 256) */
+    mepc?: number;
+    /** pre motion estimation */
+    mepre?: number;
+    /** Penalty for intra blocks in block decision */
+    intra_penalty?: number;
+    /** Scene change threshold */
+    sc_threshold?: number;
+  };
+  /**
    * SBC (low-complexity subband codec)
    * @see https://ffmpeg.org/ffmpeg-codecs.html#sbc
    */
@@ -3557,8 +4753,71 @@ export interface EncoderOptionsMap {
     sc_threshold?: number;
     /** Spatial decomposition type */
     pred?: 'dwt97' | 'dwt53';
-    /** Set rate control equation. When computing the expression, besides the standard functions  */
+    /**
+     * Set rate control equation. When computing the expression, besides the standard functions defined in the section 'Expression Evaluation', the following functions
+     * are available: bits2qp(bits), qp2bits(qp). Also the following constants are available: iTex pTex tex mv fCode iCount mcVar var isI isP isB avgQP qComp avgIITex
+     * avgPITex avgPPTex avgBPTex avgTex.
+     */
     rc_eq?: string;
+  };
+  /**
+   * NewTek SpeedHQ
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#speedhq
+   */
+  speedhq: {
+    /** Flags common for all mpegvideo-based encoders. */
+    mpv_flags?: 'skip_rd' | 'strict_gop' | 'qp_rd' | 'cbp_rd' | 'naq' | 'mv0' | (string & {});
+    /** single coefficient elimination threshold for luminance (negative values also consider dc coefficient) */
+    luma_elim_threshold?: number;
+    /** single coefficient elimination threshold for chrominance (negative values also consider dc coefficient) */
+    chroma_elim_threshold?: number;
+    quantizer_noise_shaping?: number;
+    /** Simulate errors in the bitstream to test error concealment. */
+    error_rate?: number;
+    /** how to keep quantizer between qmin and qmax (0 = clip, 1 = use differentiable function) */
+    qsquish?: number;
+    /** experimental quantizer modulation */
+    rc_qmod_amp?: number;
+    /** experimental quantizer modulation */
+    rc_qmod_freq?: number;
+    /**
+     * Set rate control equation. When computing the expression, besides the standard functions defined in the section 'Expression Evaluation', the following functions
+     * are available: bits2qp(bits), qp2bits(qp). Also the following constants are available: iTex pTex tex mv fCode iCount mcVar var isI isP isB avgQP qComp avgIITex
+     * avgPITex avgPPTex avgBPTex avgTex.
+     */
+    rc_eq?: string;
+    /** initial complexity for 1-pass encoding */
+    rc_init_cplx?: number;
+    /** currently useless */
+    rc_buf_aggressivity?: number;
+    /** increase the quantizer for macroblocks close to borders */
+    border_mask?: number;
+    /** minimum Lagrange factor (VBR) */
+    lmin?: number;
+    /** maximum Lagrange factor (VBR) */
+    lmax?: number;
+    /** Frame skip threshold */
+    skip_threshold?: number;
+    /** Frame skip factor */
+    skip_factor?: number;
+    /** Frame skip exponent */
+    skip_exp?: number;
+    /** Frame skip compare function */
+    skip_cmp?: 'sad' | 'sse' | 'satd' | 'dct' | 'psnr' | 'bit' | 'rd' | 'zero' | 'vsad' | 'vsse' | 'nsse' | 'dct264' | 'dctmax' | 'chroma' | 'msad';
+    /** Noise reduction */
+    noise_reduction?: number;
+    /** RTP payload size in bytes */
+    ps?: number;
+    /** motion estimation algorithm */
+    motion_est?: 'zero' | 'epzs' | 'xone';
+    /** Motion estimation bitrate penalty compensation (1.0 = 256) */
+    mepc?: number;
+    /** pre motion estimation */
+    mepre?: number;
+    /** Penalty for intra blocks in block decision */
+    intra_penalty?: number;
+    /** Scene change threshold */
+    sc_threshold?: number;
   };
   /**
    * Sun Rasterfile image
@@ -3648,6 +4907,48 @@ export interface EncoderOptionsMap {
     qm?: 'default' | 'color' | 'flat';
   };
   /**
+   * VP8
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#vp8_005fmediacodec
+   */
+  vp8_mediacodec: {
+    /** Use MediaCodec from NDK */
+    ndk_codec?: boolean;
+    /** Try NDK MediaCodec in async mode */
+    ndk_async?: boolean;
+    /** Select codec by name */
+    codec_name?: string;
+    /** Bitrate control method */
+    bitrate_mode?: 'cq' | 'vbr' | 'cbr' | 'cbr_fd';
+    /** Use PTS as DTS. It is enabled automatically if avctx max_b_frames &lt;= 0, since most of Android devices don't output B frames by default. */
+    pts_as_dts?: boolean;
+    /** The desired operating rate that the codec will need to operate at, zero for unspecified */
+    operating_rate?: number;
+    /** minimum quantization parameter for I frame */
+    qp_i_min?: number;
+    /** minimum quantization parameter for P frame */
+    qp_p_min?: number;
+    /** minimum quantization parameter for B frame */
+    qp_b_min?: number;
+    /** maximum quantization parameter for I frame */
+    qp_i_max?: number;
+    /** maximum quantization parameter for P frame */
+    qp_p_max?: number;
+    /** maximum quantization parameter for B frame */
+    qp_b_max?: number;
+    /** Specify tier and level */
+    level?: 'V0' | 'V1' | 'V2' | 'V3';
+  };
+  /**
+   * V4L2 mem2mem
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#vp8_005fv4l2m2m
+   */
+  vp8_v4l2m2m: {
+    /** Number of buffers in the output context */
+    num_output_buffers?: number;
+    /** Number of buffers in the capture context */
+    num_capture_buffers?: number;
+  };
+  /**
    * VP8 (VAAPI)
    * @see https://ffmpeg.org/ffmpeg-codecs.html#vp8_005fvaapi
    */
@@ -3656,9 +4957,9 @@ export interface EncoderOptionsMap {
     idr_interval?: number;
     /** Maximum B-frame reference depth */
     b_depth?: number;
-    /** Maximum processing parallelism.  */
+    /** Maximum processing parallelism. Increase this to improve single channel performance. */
     async_depth?: number;
-    /** Use low-power encoding mode (only available on some platforms;  */
+    /** Use low-power encoding mode (only available on some platforms; may not support all encoding features) */
     low_power?: boolean;
     /** Maximum frame size (in bytes) */
     max_frame_size?: number;
@@ -3670,6 +4971,38 @@ export interface EncoderOptionsMap {
     loop_filter_level?: number;
     /** Loop filter sharpness */
     loop_filter_sharpness?: number;
+  };
+  /**
+   * VP9
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#vp9_005fmediacodec
+   */
+  vp9_mediacodec: {
+    /** Use MediaCodec from NDK */
+    ndk_codec?: boolean;
+    /** Try NDK MediaCodec in async mode */
+    ndk_async?: boolean;
+    /** Select codec by name */
+    codec_name?: string;
+    /** Bitrate control method */
+    bitrate_mode?: 'cq' | 'vbr' | 'cbr' | 'cbr_fd';
+    /** Use PTS as DTS. It is enabled automatically if avctx max_b_frames &lt;= 0, since most of Android devices don't output B frames by default. */
+    pts_as_dts?: boolean;
+    /** The desired operating rate that the codec will need to operate at, zero for unspecified */
+    operating_rate?: number;
+    /** minimum quantization parameter for I frame */
+    qp_i_min?: number;
+    /** minimum quantization parameter for P frame */
+    qp_p_min?: number;
+    /** minimum quantization parameter for B frame */
+    qp_b_min?: number;
+    /** maximum quantization parameter for I frame */
+    qp_i_max?: number;
+    /** maximum quantization parameter for P frame */
+    qp_p_max?: number;
+    /** maximum quantization parameter for B frame */
+    qp_b_max?: number;
+    /** Specify tier and level */
+    level?: '1' | '1.1' | '2' | '2.1' | '3' | '3.1' | '4' | '4.1' | '5' | '5.1' | '5.2' | '6' | '6.1' | '6.2';
   };
   /**
    * VP9 video (Intel Quick Sync Video acceleration)
@@ -3700,9 +5033,9 @@ export interface EncoderOptionsMap {
     idr_interval?: number;
     /** Maximum B-frame reference depth */
     b_depth?: number;
-    /** Maximum processing parallelism.  */
+    /** Maximum processing parallelism. Increase this to improve single channel performance. */
     async_depth?: number;
-    /** Use low-power encoding mode (only available on some platforms;  */
+    /** Use low-power encoding mode (only available on some platforms; may not support all encoding features) */
     low_power?: boolean;
     /** Maximum frame size (in bytes) */
     max_frame_size?: number;
@@ -3723,6 +5056,124 @@ export interface EncoderOptionsMap {
     joint_stereo?: boolean;
     optimize_mono?: boolean;
   };
+  /**
+   * Windows Media Video 7
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#wmv1
+   */
+  wmv1: {
+    /** Flags common for all mpegvideo-based encoders. */
+    mpv_flags?: 'skip_rd' | 'strict_gop' | 'qp_rd' | 'cbp_rd' | 'naq' | 'mv0' | (string & {});
+    /** single coefficient elimination threshold for luminance (negative values also consider dc coefficient) */
+    luma_elim_threshold?: number;
+    /** single coefficient elimination threshold for chrominance (negative values also consider dc coefficient) */
+    chroma_elim_threshold?: number;
+    quantizer_noise_shaping?: number;
+    /** Simulate errors in the bitstream to test error concealment. */
+    error_rate?: number;
+    /** how to keep quantizer between qmin and qmax (0 = clip, 1 = use differentiable function) */
+    qsquish?: number;
+    /** experimental quantizer modulation */
+    rc_qmod_amp?: number;
+    /** experimental quantizer modulation */
+    rc_qmod_freq?: number;
+    /**
+     * Set rate control equation. When computing the expression, besides the standard functions defined in the section 'Expression Evaluation', the following functions
+     * are available: bits2qp(bits), qp2bits(qp). Also the following constants are available: iTex pTex tex mv fCode iCount mcVar var isI isP isB avgQP qComp avgIITex
+     * avgPITex avgPPTex avgBPTex avgTex.
+     */
+    rc_eq?: string;
+    /** initial complexity for 1-pass encoding */
+    rc_init_cplx?: number;
+    /** currently useless */
+    rc_buf_aggressivity?: number;
+    /** increase the quantizer for macroblocks close to borders */
+    border_mask?: number;
+    /** minimum Lagrange factor (VBR) */
+    lmin?: number;
+    /** maximum Lagrange factor (VBR) */
+    lmax?: number;
+    /** Frame skip threshold */
+    skip_threshold?: number;
+    /** Frame skip factor */
+    skip_factor?: number;
+    /** Frame skip exponent */
+    skip_exp?: number;
+    /** Frame skip compare function */
+    skip_cmp?: 'sad' | 'sse' | 'satd' | 'dct' | 'psnr' | 'bit' | 'rd' | 'zero' | 'vsad' | 'vsse' | 'nsse' | 'dct264' | 'dctmax' | 'chroma' | 'msad';
+    /** Noise reduction */
+    noise_reduction?: number;
+    /** RTP payload size in bytes */
+    ps?: number;
+    /** motion estimation algorithm */
+    motion_est?: 'zero' | 'epzs' | 'xone';
+    /** Motion estimation bitrate penalty compensation (1.0 = 256) */
+    mepc?: number;
+    /** pre motion estimation */
+    mepre?: number;
+    /** Penalty for intra blocks in block decision */
+    intra_penalty?: number;
+    /** Scene change threshold */
+    sc_threshold?: number;
+  };
+  /**
+   * Windows Media Video 8
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#wmv2
+   */
+  wmv2: {
+    /** Flags common for all mpegvideo-based encoders. */
+    mpv_flags?: 'skip_rd' | 'strict_gop' | 'qp_rd' | 'cbp_rd' | 'naq' | 'mv0' | (string & {});
+    /** single coefficient elimination threshold for luminance (negative values also consider dc coefficient) */
+    luma_elim_threshold?: number;
+    /** single coefficient elimination threshold for chrominance (negative values also consider dc coefficient) */
+    chroma_elim_threshold?: number;
+    quantizer_noise_shaping?: number;
+    /** Simulate errors in the bitstream to test error concealment. */
+    error_rate?: number;
+    /** how to keep quantizer between qmin and qmax (0 = clip, 1 = use differentiable function) */
+    qsquish?: number;
+    /** experimental quantizer modulation */
+    rc_qmod_amp?: number;
+    /** experimental quantizer modulation */
+    rc_qmod_freq?: number;
+    /**
+     * Set rate control equation. When computing the expression, besides the standard functions defined in the section 'Expression Evaluation', the following functions
+     * are available: bits2qp(bits), qp2bits(qp). Also the following constants are available: iTex pTex tex mv fCode iCount mcVar var isI isP isB avgQP qComp avgIITex
+     * avgPITex avgPPTex avgBPTex avgTex.
+     */
+    rc_eq?: string;
+    /** initial complexity for 1-pass encoding */
+    rc_init_cplx?: number;
+    /** currently useless */
+    rc_buf_aggressivity?: number;
+    /** increase the quantizer for macroblocks close to borders */
+    border_mask?: number;
+    /** minimum Lagrange factor (VBR) */
+    lmin?: number;
+    /** maximum Lagrange factor (VBR) */
+    lmax?: number;
+    /** Frame skip threshold */
+    skip_threshold?: number;
+    /** Frame skip factor */
+    skip_factor?: number;
+    /** Frame skip exponent */
+    skip_exp?: number;
+    /** Frame skip compare function */
+    skip_cmp?: 'sad' | 'sse' | 'satd' | 'dct' | 'psnr' | 'bit' | 'rd' | 'zero' | 'vsad' | 'vsse' | 'nsse' | 'dct264' | 'dctmax' | 'chroma' | 'msad';
+    /** Noise reduction */
+    noise_reduction?: number;
+    /** RTP payload size in bytes */
+    ps?: number;
+    /** motion estimation algorithm */
+    motion_est?: 'zero' | 'epzs' | 'xone';
+    /** Motion estimation bitrate penalty compensation (1.0 = 256) */
+    mepc?: number;
+    /** pre motion estimation */
+    mepre?: number;
+    /** Penalty for intra blocks in block decision */
+    intra_penalty?: number;
+    /** Scene change threshold */
+    sc_threshold?: number;
+  };
 }
 
 export interface DecoderOptionsMap {
@@ -3735,8 +5186,6 @@ export interface DecoderOptionsMap {
     dual_mono_mode?: 'auto' | 'main' | 'sub' | 'both';
     /** Order in which the channels are to be exported */
     channel_order?: 'default' | 'coded';
-    /** Target output loudness in dBFS for xHE-AAC normalization (0 = disabled) */
-    target_level?: number;
   };
   /**
    * AAC (Advanced Audio Coding)
@@ -3747,8 +5196,18 @@ export interface DecoderOptionsMap {
     dual_mono_mode?: 'auto' | 'main' | 'sub' | 'both';
     /** Order in which the channels are to be exported */
     channel_order?: 'default' | 'coded';
-    /** Target output loudness in dBFS for xHE-AAC normalization (0 = disabled) */
-    target_level?: number;
+  };
+  /**
+   * AAC
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#aac_005fmediacodec
+   */
+  aac_mediacodec: {
+    /** Delay flush until hw output buffers are returned to the decoder */
+    delay_flush?: boolean;
+    /** Use MediaCodec from NDK */
+    ndk_codec?: boolean;
+    /** The desired operating rate that the codec will need to operate at, zero for unspecified */
+    operating_rate?: number;
   };
   /**
    * ATSC A/52A (AC-3)
@@ -3791,7 +5250,7 @@ export interface DecoderOptionsMap {
     downmix?: string;
   };
   /**
-   * Dolby AC-4
+   * AC-4
    * @see https://ffmpeg.org/ffmpeg-codecs.html#ac4
    */
   ac4: {
@@ -3815,6 +5274,30 @@ export interface DecoderOptionsMap {
     max_order?: number;
   };
   /**
+   * AMR-NB
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#amrnb_005fmediacodec
+   */
+  amrnb_mediacodec: {
+    /** Delay flush until hw output buffers are returned to the decoder */
+    delay_flush?: boolean;
+    /** Use MediaCodec from NDK */
+    ndk_codec?: boolean;
+    /** The desired operating rate that the codec will need to operate at, zero for unspecified */
+    operating_rate?: number;
+  };
+  /**
+   * AMR-WB
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#amrwb_005fmediacodec
+   */
+  amrwb_mediacodec: {
+    /** Delay flush until hw output buffers are returned to the decoder */
+    delay_flush?: boolean;
+    /** Use MediaCodec from NDK */
+    ndk_codec?: boolean;
+    /** The desired operating rate that the codec will need to operate at, zero for unspecified */
+    operating_rate?: number;
+  };
+  /**
    * Monkey's Audio
    * @see https://ffmpeg.org/ffmpeg-codecs.html#ape
    */
@@ -3829,6 +5312,82 @@ export interface DecoderOptionsMap {
   av1: {
     /** Select an operating point of the scalable bitstream */
     operating_point?: number;
+  };
+  /**
+   * AMD AMF AV1 encoder
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#av1_005famf
+   */
+  av1_amf: {
+    /** Decoder mode */
+    decoder_mode?: 'regular' | 'compliant' | 'low_latency';
+    /** Timestamp mode */
+    timestamp_mode?: 'presentation' | 'sort' | 'decode';
+    /** Number of surfaces in the decode pool */
+    surface_pool_size?: number;
+    /** Minimum number of surfaces for reordering */
+    dpb_size?: number;
+    /** Low latency */
+    lowlatency?: number;
+    /** Smart Access Video */
+    smart_access_video?: number;
+    /** Skip transfer on another GPU when SAV enabled */
+    skip_transfer_sav?: number;
+    /** Copy Output */
+    copy_output?: number;
+  };
+  /**
+   * Nvidia CUVID
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#av1_005fcuvid
+   */
+  av1_cuvid: {
+    /** Set deinterlacing mode */
+    deint?: 'weave' | 'bob' | 'adaptive';
+    /** GPU to be used for decoding */
+    gpu?: string;
+    /** Maximum surfaces to be used for decoding */
+    surfaces?: number;
+    /** Drop second field when deinterlacing */
+    drop_second_field?: boolean;
+    /** Crop (top)x(bottom)x(left)x(right) */
+    crop?: string;
+    /** Resize (width)x(height) */
+    resize?: string;
+  };
+  /**
+   * AV1
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#av1_005fmediacodec
+   */
+  av1_mediacodec: {
+    /** Delay flush until hw output buffers are returned to the decoder */
+    delay_flush?: boolean;
+    /** Use MediaCodec from NDK */
+    ndk_codec?: boolean;
+    /** The desired operating rate that the codec will need to operate at, zero for unspecified */
+    operating_rate?: number;
+  };
+  /**
+   * AV1 (Intel Quick Sync Video acceleration)
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#av1_005fqsv
+   */
+  av1_qsv: {
+    /** Internal parallelization depth, the higher the value the higher the latency. */
+    async_depth?: number;
+    /** A GPU-accelerated copy between video and system memory */
+    gpu_copy?: 'default' | 'on' | 'off';
+  };
+  /**
+   * Rockchip MPP (Media Process Platform)
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#av1_005frkmpp
+   */
+  av1_rkmpp: {
+    /** Enable IEP (Image Enhancement Processor) for de-interlacing */
+    deint?: boolean;
+    /** Enable AFBC (Arm Frame Buffer Compression) to save bandwidth */
+    afbc?: 'off' | 'on' | 'rga';
+    /** Enable fast parsing to improve decoding parallelism */
+    fast_parse?: boolean;
+    /** Set the buffer mode for MPP decoder */
+    buf_mode?: 'half' | 'ext';
   };
   /**
    * Closed Captions (EIA-608 / CEA-708)
@@ -3886,7 +5445,7 @@ export interface DecoderOptionsMap {
     forced_subs_only?: boolean;
   };
   /**
-   * ATSC A/52B (AC-3, E-AC-3)
+   * ATSC A/52 E-AC-3
    * @see https://ffmpeg.org/ffmpeg-codecs.html#eac3
    */
   eac3: {
@@ -4006,6 +5565,30 @@ export interface DecoderOptionsMap {
     trans_color?: number;
   };
   /**
+   * Rockchip MPP (Media Process Platform)
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#h263_005frkmpp
+   */
+  h263_rkmpp: {
+    /** Enable IEP (Image Enhancement Processor) for de-interlacing */
+    deint?: boolean;
+    /** Enable AFBC (Arm Frame Buffer Compression) to save bandwidth */
+    afbc?: 'off' | 'on' | 'rga';
+    /** Enable fast parsing to improve decoding parallelism */
+    fast_parse?: boolean;
+    /** Set the buffer mode for MPP decoder */
+    buf_mode?: 'half' | 'ext';
+  };
+  /**
+   * V4L2 mem2mem
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#h263_005fv4l2m2m
+   */
+  h263_v4l2m2m: {
+    /** Number of buffers in the output context */
+    num_output_buffers?: number;
+    /** Number of buffers in the capture context */
+    num_capture_buffers?: number;
+  };
+  /**
    * H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10
    * @see https://ffmpeg.org/ffmpeg-codecs.html#h264
    */
@@ -4024,6 +5607,112 @@ export interface DecoderOptionsMap {
     noref_gray?: boolean;
   };
   /**
+   * AMD AMF H.264 Encoder
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#h264_005famf
+   */
+  h264_amf: {
+    /** Decoder mode */
+    decoder_mode?: 'regular' | 'compliant' | 'low_latency';
+    /** Timestamp mode */
+    timestamp_mode?: 'presentation' | 'sort' | 'decode';
+    /** Number of surfaces in the decode pool */
+    surface_pool_size?: number;
+    /** Minimum number of surfaces for reordering */
+    dpb_size?: number;
+    /** Low latency */
+    lowlatency?: number;
+    /** Smart Access Video */
+    smart_access_video?: number;
+    /** Skip transfer on another GPU when SAV enabled */
+    skip_transfer_sav?: number;
+    /** Copy Output */
+    copy_output?: number;
+  };
+  /**
+   * Nvidia CUVID
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#h264_005fcuvid
+   */
+  h264_cuvid: {
+    /** Set deinterlacing mode */
+    deint?: 'weave' | 'bob' | 'adaptive';
+    /** GPU to be used for decoding */
+    gpu?: string;
+    /** Maximum surfaces to be used for decoding */
+    surfaces?: number;
+    /** Drop second field when deinterlacing */
+    drop_second_field?: boolean;
+    /** Crop (top)x(bottom)x(left)x(right) */
+    crop?: string;
+    /** Resize (width)x(height) */
+    resize?: string;
+  };
+  /**
+   * H.264
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#h264_005fmediacodec
+   */
+  h264_mediacodec: {
+    /** Delay flush until hw output buffers are returned to the decoder */
+    delay_flush?: boolean;
+    /** Use MediaCodec from NDK */
+    ndk_codec?: boolean;
+    /** The desired operating rate that the codec will need to operate at, zero for unspecified */
+    operating_rate?: number;
+  };
+  /**
+   * h264
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#h264_005fmmal
+   */
+  h264_mmal: {
+    /** extra buffers */
+    extra_buffers?: number;
+    /** extra MMAL internal buffered frames */
+    extra_decoder_buffers?: number;
+  };
+  /**
+   * H.264
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#h264_005fohcodec
+   */
+  h264_ohcodec: {
+    /** Select codec by name */
+    codec_name?: string;
+    /** Allow software decoding */
+    allow_sw?: boolean;
+  };
+  /**
+   * H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10 (Intel Quick Sync Video acceleration)
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#h264_005fqsv
+   */
+  h264_qsv: {
+    /** Internal parallelization depth, the higher the value the higher the latency. */
+    async_depth?: number;
+    /** A GPU-accelerated copy between video and system memory */
+    gpu_copy?: 'default' | 'on' | 'off';
+  };
+  /**
+   * Rockchip MPP (Media Process Platform)
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#h264_005frkmpp
+   */
+  h264_rkmpp: {
+    /** Enable IEP (Image Enhancement Processor) for de-interlacing */
+    deint?: boolean;
+    /** Enable AFBC (Arm Frame Buffer Compression) to save bandwidth */
+    afbc?: 'off' | 'on' | 'rga';
+    /** Enable fast parsing to improve decoding parallelism */
+    fast_parse?: boolean;
+    /** Set the buffer mode for MPP decoder */
+    buf_mode?: 'half' | 'ext';
+  };
+  /**
+   * V4L2 mem2mem
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#h264_005fv4l2m2m
+   */
+  h264_v4l2m2m: {
+    /** Number of buffers in the output context */
+    num_output_buffers?: number;
+    /** Number of buffers in the capture context */
+    num_capture_buffers?: number;
+  };
+  /**
    * HEVC (High Efficiency Video Coding)
    * @see https://ffmpeg.org/ffmpeg-codecs.html#hevc
    */
@@ -4037,7 +5726,107 @@ export interface DecoderOptionsMap {
     /** Array of available view IDs is exported here */
     view_ids_available?: string;
     /** Array of view positions for view_ids_available is exported here, as AVStereo3DView */
-    view_pos_available?: 'unspecified' | 'left' | 'right';
+    view_pos_available?: 'unspecified' | 'left' | 'right' | (string & {});
+  };
+  /**
+   * AMD AMF HEVC encoder
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#hevc_005famf
+   */
+  hevc_amf: {
+    /** Decoder mode */
+    decoder_mode?: 'regular' | 'compliant' | 'low_latency';
+    /** Timestamp mode */
+    timestamp_mode?: 'presentation' | 'sort' | 'decode';
+    /** Number of surfaces in the decode pool */
+    surface_pool_size?: number;
+    /** Minimum number of surfaces for reordering */
+    dpb_size?: number;
+    /** Low latency */
+    lowlatency?: number;
+    /** Smart Access Video */
+    smart_access_video?: number;
+    /** Skip transfer on another GPU when SAV enabled */
+    skip_transfer_sav?: number;
+    /** Copy Output */
+    copy_output?: number;
+  };
+  /**
+   * Nvidia CUVID
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#hevc_005fcuvid
+   */
+  hevc_cuvid: {
+    /** Set deinterlacing mode */
+    deint?: 'weave' | 'bob' | 'adaptive';
+    /** GPU to be used for decoding */
+    gpu?: string;
+    /** Maximum surfaces to be used for decoding */
+    surfaces?: number;
+    /** Drop second field when deinterlacing */
+    drop_second_field?: boolean;
+    /** Crop (top)x(bottom)x(left)x(right) */
+    crop?: string;
+    /** Resize (width)x(height) */
+    resize?: string;
+  };
+  /**
+   * H.265
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#hevc_005fmediacodec
+   */
+  hevc_mediacodec: {
+    /** Delay flush until hw output buffers are returned to the decoder */
+    delay_flush?: boolean;
+    /** Use MediaCodec from NDK */
+    ndk_codec?: boolean;
+    /** The desired operating rate that the codec will need to operate at, zero for unspecified */
+    operating_rate?: number;
+  };
+  /**
+   * H.265
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#hevc_005fohcodec
+   */
+  hevc_ohcodec: {
+    /** Select codec by name */
+    codec_name?: string;
+    /** Allow software decoding */
+    allow_sw?: boolean;
+  };
+  /**
+   * HEVC (Intel Quick Sync Video acceleration)
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#hevc_005fqsv
+   */
+  hevc_qsv: {
+    /** Internal parallelization depth, the higher the value the higher the latency. */
+    async_depth?: number;
+    /** A user plugin to load in an internal session */
+    load_plugin?: 'none' | 'hevc_sw' | 'hevc_hw';
+    /** A :-separate list of hexadecimal plugin UIDs to load in an internal session */
+    load_plugins?: string;
+    /** A GPU-accelerated copy between video and system memory */
+    gpu_copy?: 'default' | 'on' | 'off';
+  };
+  /**
+   * Rockchip MPP (Media Process Platform)
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#hevc_005frkmpp
+   */
+  hevc_rkmpp: {
+    /** Enable IEP (Image Enhancement Processor) for de-interlacing */
+    deint?: boolean;
+    /** Enable AFBC (Arm Frame Buffer Compression) to save bandwidth */
+    afbc?: 'off' | 'on' | 'rga';
+    /** Enable fast parsing to improve decoding parallelism */
+    fast_parse?: boolean;
+    /** Set the buffer mode for MPP decoder */
+    buf_mode?: 'half' | 'ext';
+  };
+  /**
+   * V4L2 mem2mem
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#hevc_005fv4l2m2m
+   */
+  hevc_v4l2m2m: {
+    /** Number of buffers in the output context */
+    num_output_buffers?: number;
+    /** Number of buffers in the capture context */
+    num_capture_buffers?: number;
   };
   /**
    * JPEG 2000
@@ -4192,6 +5981,48 @@ export interface DecoderOptionsMap {
     extern_huff?: boolean;
   };
   /**
+   * Nvidia CUVID
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#mjpeg_005fcuvid
+   */
+  mjpeg_cuvid: {
+    /** Set deinterlacing mode */
+    deint?: 'weave' | 'bob' | 'adaptive';
+    /** GPU to be used for decoding */
+    gpu?: string;
+    /** Maximum surfaces to be used for decoding */
+    surfaces?: number;
+    /** Drop second field when deinterlacing */
+    drop_second_field?: boolean;
+    /** Crop (top)x(bottom)x(left)x(right) */
+    crop?: string;
+    /** Resize (width)x(height) */
+    resize?: string;
+  };
+  /**
+   * MJPEG (Intel Quick Sync Video acceleration)
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#mjpeg_005fqsv
+   */
+  mjpeg_qsv: {
+    /** Internal parallelization depth, the higher the value the higher the latency. */
+    async_depth?: number;
+    /** A GPU-accelerated copy between video and system memory */
+    gpu_copy?: 'default' | 'on' | 'off';
+  };
+  /**
+   * Rockchip MPP (Media Process Platform)
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#mjpeg_005frkmpp
+   */
+  mjpeg_rkmpp: {
+    /** Enable IEP (Image Enhancement Processor) for de-interlacing */
+    deint?: boolean;
+    /** Enable AFBC (Arm Frame Buffer Compression) to save bandwidth */
+    afbc?: 'off' | 'on' | 'rga';
+    /** Enable fast parsing to improve decoding parallelism */
+    fast_parse?: boolean;
+    /** Set the buffer mode for MPP decoder */
+    buf_mode?: 'half' | 'ext';
+  };
+  /**
    * MLP (Meridian Lossless Packing)
    * @see https://ffmpeg.org/ffmpeg-codecs.html#mlp
    */
@@ -4210,6 +6041,134 @@ export interface DecoderOptionsMap {
     height?: number;
   };
   /**
+   * MP3
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#mp3_005fmediacodec
+   */
+  mp3_mediacodec: {
+    /** Delay flush until hw output buffers are returned to the decoder */
+    delay_flush?: boolean;
+    /** Use MediaCodec from NDK */
+    ndk_codec?: boolean;
+    /** The desired operating rate that the codec will need to operate at, zero for unspecified */
+    operating_rate?: number;
+  };
+  /**
+   * Nvidia CUVID
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#mpeg1_005fcuvid
+   */
+  mpeg1_cuvid: {
+    /** Set deinterlacing mode */
+    deint?: 'weave' | 'bob' | 'adaptive';
+    /** GPU to be used for decoding */
+    gpu?: string;
+    /** Maximum surfaces to be used for decoding */
+    surfaces?: number;
+    /** Drop second field when deinterlacing */
+    drop_second_field?: boolean;
+    /** Crop (top)x(bottom)x(left)x(right) */
+    crop?: string;
+    /** Resize (width)x(height) */
+    resize?: string;
+  };
+  /**
+   * Rockchip MPP (Media Process Platform)
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#mpeg1_005frkmpp
+   */
+  mpeg1_rkmpp: {
+    /** Enable IEP (Image Enhancement Processor) for de-interlacing */
+    deint?: boolean;
+    /** Enable AFBC (Arm Frame Buffer Compression) to save bandwidth */
+    afbc?: 'off' | 'on' | 'rga';
+    /** Enable fast parsing to improve decoding parallelism */
+    fast_parse?: boolean;
+    /** Set the buffer mode for MPP decoder */
+    buf_mode?: 'half' | 'ext';
+  };
+  /**
+   * V4L2 mem2mem
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#mpeg1_005fv4l2m2m
+   */
+  mpeg1_v4l2m2m: {
+    /** Number of buffers in the output context */
+    num_output_buffers?: number;
+    /** Number of buffers in the capture context */
+    num_capture_buffers?: number;
+  };
+  /**
+   * Nvidia CUVID
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#mpeg2_005fcuvid
+   */
+  mpeg2_cuvid: {
+    /** Set deinterlacing mode */
+    deint?: 'weave' | 'bob' | 'adaptive';
+    /** GPU to be used for decoding */
+    gpu?: string;
+    /** Maximum surfaces to be used for decoding */
+    surfaces?: number;
+    /** Drop second field when deinterlacing */
+    drop_second_field?: boolean;
+    /** Crop (top)x(bottom)x(left)x(right) */
+    crop?: string;
+    /** Resize (width)x(height) */
+    resize?: string;
+  };
+  /**
+   * MPEG-2
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#mpeg2_005fmediacodec
+   */
+  mpeg2_mediacodec: {
+    /** Delay flush until hw output buffers are returned to the decoder */
+    delay_flush?: boolean;
+    /** Use MediaCodec from NDK */
+    ndk_codec?: boolean;
+    /** The desired operating rate that the codec will need to operate at, zero for unspecified */
+    operating_rate?: number;
+  };
+  /**
+   * mpeg2
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#mpeg2_005fmmal
+   */
+  mpeg2_mmal: {
+    /** extra buffers */
+    extra_buffers?: number;
+    /** extra MMAL internal buffered frames */
+    extra_decoder_buffers?: number;
+  };
+  /**
+   * MPEG-2 video (Intel Quick Sync Video acceleration)
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#mpeg2_005fqsv
+   */
+  mpeg2_qsv: {
+    /** Internal parallelization depth, the higher the value the higher the latency. */
+    async_depth?: number;
+    /** A GPU-accelerated copy between video and system memory */
+    gpu_copy?: 'default' | 'on' | 'off';
+  };
+  /**
+   * Rockchip MPP (Media Process Platform)
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#mpeg2_005frkmpp
+   */
+  mpeg2_rkmpp: {
+    /** Enable IEP (Image Enhancement Processor) for de-interlacing */
+    deint?: boolean;
+    /** Enable AFBC (Arm Frame Buffer Compression) to save bandwidth */
+    afbc?: 'off' | 'on' | 'rga';
+    /** Enable fast parsing to improve decoding parallelism */
+    fast_parse?: boolean;
+    /** Set the buffer mode for MPP decoder */
+    buf_mode?: 'half' | 'ext';
+  };
+  /**
+   * V4L2 mem2mem
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#mpeg2_005fv4l2m2m
+   */
+  mpeg2_v4l2m2m: {
+    /** Number of buffers in the output context */
+    num_output_buffers?: number;
+    /** Number of buffers in the capture context */
+    num_capture_buffers?: number;
+  };
+  /**
    * MPEG-2 video
    * @see https://ffmpeg.org/ffmpeg-codecs.html#mpeg2video
    */
@@ -4226,6 +6185,70 @@ export interface DecoderOptionsMap {
     quarter_sample?: boolean;
     /** divx style packed b frames */
     divx_packed?: boolean;
+  };
+  /**
+   * Nvidia CUVID
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#mpeg4_005fcuvid
+   */
+  mpeg4_cuvid: {
+    /** Set deinterlacing mode */
+    deint?: 'weave' | 'bob' | 'adaptive';
+    /** GPU to be used for decoding */
+    gpu?: string;
+    /** Maximum surfaces to be used for decoding */
+    surfaces?: number;
+    /** Drop second field when deinterlacing */
+    drop_second_field?: boolean;
+    /** Crop (top)x(bottom)x(left)x(right) */
+    crop?: string;
+    /** Resize (width)x(height) */
+    resize?: string;
+  };
+  /**
+   * MPEG-4
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#mpeg4_005fmediacodec
+   */
+  mpeg4_mediacodec: {
+    /** Delay flush until hw output buffers are returned to the decoder */
+    delay_flush?: boolean;
+    /** Use MediaCodec from NDK */
+    ndk_codec?: boolean;
+    /** The desired operating rate that the codec will need to operate at, zero for unspecified */
+    operating_rate?: number;
+  };
+  /**
+   * mpeg4
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#mpeg4_005fmmal
+   */
+  mpeg4_mmal: {
+    /** extra buffers */
+    extra_buffers?: number;
+    /** extra MMAL internal buffered frames */
+    extra_decoder_buffers?: number;
+  };
+  /**
+   * Rockchip MPP (Media Process Platform)
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#mpeg4_005frkmpp
+   */
+  mpeg4_rkmpp: {
+    /** Enable IEP (Image Enhancement Processor) for de-interlacing */
+    deint?: boolean;
+    /** Enable AFBC (Arm Frame Buffer Compression) to save bandwidth */
+    afbc?: 'off' | 'on' | 'rga';
+    /** Enable fast parsing to improve decoding parallelism */
+    fast_parse?: boolean;
+    /** Set the buffer mode for MPP decoder */
+    buf_mode?: 'half' | 'ext';
+  };
+  /**
+   * V4L2 mem2mem
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#mpeg4_005fv4l2m2m
+   */
+  mpeg4_v4l2m2m: {
+    /** Number of buffers in the output context */
+    num_output_buffers?: number;
+    /** Number of buffers in the capture context */
+    num_capture_buffers?: number;
   };
   /**
    * Opus
@@ -4344,11 +6367,219 @@ export interface DecoderOptionsMap {
     custom_stride?: number;
   };
   /**
+   * Nvidia CUVID
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#vc1_005fcuvid
+   */
+  vc1_cuvid: {
+    /** Set deinterlacing mode */
+    deint?: 'weave' | 'bob' | 'adaptive';
+    /** GPU to be used for decoding */
+    gpu?: string;
+    /** Maximum surfaces to be used for decoding */
+    surfaces?: number;
+    /** Drop second field when deinterlacing */
+    drop_second_field?: boolean;
+    /** Crop (top)x(bottom)x(left)x(right) */
+    crop?: string;
+    /** Resize (width)x(height) */
+    resize?: string;
+  };
+  /**
+   * vc1
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#vc1_005fmmal
+   */
+  vc1_mmal: {
+    /** extra buffers */
+    extra_buffers?: number;
+    /** extra MMAL internal buffered frames */
+    extra_decoder_buffers?: number;
+  };
+  /**
+   * VC1
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#vc1_005fqsv
+   */
+  vc1_qsv: {
+    /** Internal parallelization depth, the higher the value the higher the latency. */
+    async_depth?: number;
+    /** A GPU-accelerated copy between video and system memory */
+    gpu_copy?: 'default' | 'on' | 'off';
+  };
+  /**
+   * V4L2 mem2mem
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#vc1_005fv4l2m2m
+   */
+  vc1_v4l2m2m: {
+    /** Number of buffers in the output context */
+    num_output_buffers?: number;
+    /** Number of buffers in the capture context */
+    num_capture_buffers?: number;
+  };
+  /**
+   * Nvidia CUVID
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#vp8_005fcuvid
+   */
+  vp8_cuvid: {
+    /** Set deinterlacing mode */
+    deint?: 'weave' | 'bob' | 'adaptive';
+    /** GPU to be used for decoding */
+    gpu?: string;
+    /** Maximum surfaces to be used for decoding */
+    surfaces?: number;
+    /** Drop second field when deinterlacing */
+    drop_second_field?: boolean;
+    /** Crop (top)x(bottom)x(left)x(right) */
+    crop?: string;
+    /** Resize (width)x(height) */
+    resize?: string;
+  };
+  /**
+   * VP8
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#vp8_005fmediacodec
+   */
+  vp8_mediacodec: {
+    /** Delay flush until hw output buffers are returned to the decoder */
+    delay_flush?: boolean;
+    /** Use MediaCodec from NDK */
+    ndk_codec?: boolean;
+    /** The desired operating rate that the codec will need to operate at, zero for unspecified */
+    operating_rate?: number;
+  };
+  /**
+   * VP8
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#vp8_005fqsv
+   */
+  vp8_qsv: {
+    /** Internal parallelization depth, the higher the value the higher the latency. */
+    async_depth?: number;
+    /** A GPU-accelerated copy between video and system memory */
+    gpu_copy?: 'default' | 'on' | 'off';
+  };
+  /**
+   * Rockchip MPP (Media Process Platform)
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#vp8_005frkmpp
+   */
+  vp8_rkmpp: {
+    /** Enable IEP (Image Enhancement Processor) for de-interlacing */
+    deint?: boolean;
+    /** Enable AFBC (Arm Frame Buffer Compression) to save bandwidth */
+    afbc?: 'off' | 'on' | 'rga';
+    /** Enable fast parsing to improve decoding parallelism */
+    fast_parse?: boolean;
+    /** Set the buffer mode for MPP decoder */
+    buf_mode?: 'half' | 'ext';
+  };
+  /**
+   * V4L2 mem2mem
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#vp8_005fv4l2m2m
+   */
+  vp8_v4l2m2m: {
+    /** Number of buffers in the output context */
+    num_output_buffers?: number;
+    /** Number of buffers in the capture context */
+    num_capture_buffers?: number;
+  };
+  /**
+   * VP9
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#vp9_005famf
+   */
+  vp9_amf: {
+    /** Decoder mode */
+    decoder_mode?: 'regular' | 'compliant' | 'low_latency';
+    /** Timestamp mode */
+    timestamp_mode?: 'presentation' | 'sort' | 'decode';
+    /** Number of surfaces in the decode pool */
+    surface_pool_size?: number;
+    /** Minimum number of surfaces for reordering */
+    dpb_size?: number;
+    /** Low latency */
+    lowlatency?: number;
+    /** Smart Access Video */
+    smart_access_video?: number;
+    /** Skip transfer on another GPU when SAV enabled */
+    skip_transfer_sav?: number;
+    /** Copy Output */
+    copy_output?: number;
+  };
+  /**
+   * Nvidia CUVID
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#vp9_005fcuvid
+   */
+  vp9_cuvid: {
+    /** Set deinterlacing mode */
+    deint?: 'weave' | 'bob' | 'adaptive';
+    /** GPU to be used for decoding */
+    gpu?: string;
+    /** Maximum surfaces to be used for decoding */
+    surfaces?: number;
+    /** Drop second field when deinterlacing */
+    drop_second_field?: boolean;
+    /** Crop (top)x(bottom)x(left)x(right) */
+    crop?: string;
+    /** Resize (width)x(height) */
+    resize?: string;
+  };
+  /**
+   * VP9
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#vp9_005fmediacodec
+   */
+  vp9_mediacodec: {
+    /** Delay flush until hw output buffers are returned to the decoder */
+    delay_flush?: boolean;
+    /** Use MediaCodec from NDK */
+    ndk_codec?: boolean;
+    /** The desired operating rate that the codec will need to operate at, zero for unspecified */
+    operating_rate?: number;
+  };
+  /**
+   * VP9 video (Intel Quick Sync Video acceleration)
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#vp9_005fqsv
+   */
+  vp9_qsv: {
+    /** Internal parallelization depth, the higher the value the higher the latency. */
+    async_depth?: number;
+    /** A GPU-accelerated copy between video and system memory */
+    gpu_copy?: 'default' | 'on' | 'off';
+  };
+  /**
+   * Rockchip MPP (Media Process Platform)
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#vp9_005frkmpp
+   */
+  vp9_rkmpp: {
+    /** Enable IEP (Image Enhancement Processor) for de-interlacing */
+    deint?: boolean;
+    /** Enable AFBC (Arm Frame Buffer Compression) to save bandwidth */
+    afbc?: 'off' | 'on' | 'rga';
+    /** Enable fast parsing to improve decoding parallelism */
+    fast_parse?: boolean;
+    /** Set the buffer mode for MPP decoder */
+    buf_mode?: 'half' | 'ext';
+  };
+  /**
+   * V4L2 mem2mem
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#vp9_005fv4l2m2m
+   */
+  vp9_v4l2m2m: {
+    /** Number of buffers in the output context */
+    num_output_buffers?: number;
+    /** Number of buffers in the capture context */
+    num_capture_buffers?: number;
+  };
+  /**
    * VPlayer subtitle
    * @see https://ffmpeg.org/ffmpeg-codecs.html#vplayer
    */
   vplayer: {
     /** Set if ASS tags must be escaped */
     keep_ass_markup?: boolean;
+  };
+  /**
+   * VVC
+   * @see https://ffmpeg.org/ffmpeg-codecs.html#vvc_005fqsv
+   */
+  vvc_qsv: {
+    /** Internal parallelization depth, the higher the value the higher the latency. */
+    async_depth?: number;
+    /** A GPU-accelerated copy between video and system memory */
+    gpu_copy?: 'default' | 'on' | 'off';
   };
 }

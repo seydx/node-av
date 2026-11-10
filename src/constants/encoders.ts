@@ -43,7 +43,7 @@ export type EncoderOptionsFor<C> = [EncoderNameOf<C>] extends [never]
     : UnknownEncoderOptions;
 
 // ============================================================================
-// VIDEO ENCODERS (137 software, 45 hardware)
+// VIDEO ENCODERS (116 software, 52 hardware)
 // ============================================================================
 
 // Software video encoders
@@ -51,11 +51,9 @@ export const FF_ENCODER_A64MULTI = 'a64multi' as FFVideoEncoder<'a64multi'>;
 export const FF_ENCODER_A64MULTI5 = 'a64multi5' as FFVideoEncoder<'a64multi5'>;
 export const FF_ENCODER_ALIAS_PIX = 'alias_pix' as FFVideoEncoder<'alias_pix'>;
 export const FF_ENCODER_AMV = 'amv' as FFVideoEncoder<'amv'>;
-export const FF_ENCODER_ANULL = 'anull' as FFVideoEncoder<'anull'>;
 export const FF_ENCODER_APNG = 'apng' as FFVideoEncoder<'apng'>;
 export const FF_ENCODER_ASV1 = 'asv1' as FFVideoEncoder<'asv1'>;
 export const FF_ENCODER_ASV2 = 'asv2' as FFVideoEncoder<'asv2'>;
-export const FF_ENCODER_AV1_VULKAN = 'av1_vulkan' as FFVideoEncoder<'av1_vulkan'>;
 export const FF_ENCODER_AVRP = 'avrp' as FFVideoEncoder<'avrp'>;
 export const FF_ENCODER_AVUI = 'avui' as FFVideoEncoder<'avui'>;
 export const FF_ENCODER_BITPACKED = 'bitpacked' as FFVideoEncoder<'bitpacked'>;
@@ -69,7 +67,6 @@ export const FF_ENCODER_DVVIDEO = 'dvvideo' as FFVideoEncoder<'dvvideo'>;
 export const FF_ENCODER_DXV = 'dxv' as FFVideoEncoder<'dxv'>;
 export const FF_ENCODER_EXR = 'exr' as FFVideoEncoder<'exr'>;
 export const FF_ENCODER_FFV1 = 'ffv1' as FFVideoEncoder<'ffv1'>;
-export const FF_ENCODER_FFV1_VULKAN = 'ffv1_vulkan' as FFVideoEncoder<'ffv1_vulkan'>;
 export const FF_ENCODER_FFVHUFF = 'ffvhuff' as FFVideoEncoder<'ffvhuff'>;
 export const FF_ENCODER_FITS = 'fits' as FFVideoEncoder<'fits'>;
 export const FF_ENCODER_FLASHSV = 'flashsv' as FFVideoEncoder<'flashsv'>;
@@ -79,35 +76,22 @@ export const FF_ENCODER_GIF = 'gif' as FFVideoEncoder<'gif'>;
 export const FF_ENCODER_H261 = 'h261' as FFVideoEncoder<'h261'>;
 export const FF_ENCODER_H263 = 'h263' as FFVideoEncoder<'h263'>;
 export const FF_ENCODER_H263P = 'h263p' as FFVideoEncoder<'h263p'>;
-export const FF_ENCODER_H264_OH = 'h264_oh' as FFVideoEncoder<'h264_oh'>;
-export const FF_ENCODER_H264_VULKAN = 'h264_vulkan' as FFVideoEncoder<'h264_vulkan'>;
 export const FF_ENCODER_HAP = 'hap' as FFVideoEncoder<'hap'>;
 export const FF_ENCODER_HDR = 'hdr' as FFVideoEncoder<'hdr'>;
-export const FF_ENCODER_HEVC_OH = 'hevc_oh' as FFVideoEncoder<'hevc_oh'>;
-export const FF_ENCODER_HEVC_VULKAN = 'hevc_vulkan' as FFVideoEncoder<'hevc_vulkan'>;
 export const FF_ENCODER_HUFFYUV = 'huffyuv' as FFVideoEncoder<'huffyuv'>;
 export const FF_ENCODER_JPEG2000 = 'jpeg2000' as FFVideoEncoder<'jpeg2000'>;
 export const FF_ENCODER_JPEGLS = 'jpegls' as FFVideoEncoder<'jpegls'>;
 export const FF_ENCODER_LIBAOM_AV1 = 'libaom-av1' as FFVideoEncoder<'libaom-av1'>;
-export const FF_ENCODER_LIBCODEC2 = 'libcodec2' as FFVideoEncoder<'libcodec2'>;
-export const FF_ENCODER_LIBGSM = 'libgsm' as FFVideoEncoder<'libgsm'>;
-export const FF_ENCODER_LIBGSM_MS = 'libgsm_ms' as FFVideoEncoder<'libgsm_ms'>;
-export const FF_ENCODER_LIBILBC = 'libilbc' as FFVideoEncoder<'libilbc'>;
 export const FF_ENCODER_LIBJXL = 'libjxl' as FFVideoEncoder<'libjxl'>;
 export const FF_ENCODER_LIBJXL_ANIM = 'libjxl_anim' as FFVideoEncoder<'libjxl_anim'>;
 export const FF_ENCODER_LIBKVAZAAR = 'libkvazaar' as FFVideoEncoder<'libkvazaar'>;
-export const FF_ENCODER_LIBLC3 = 'liblc3' as FFVideoEncoder<'liblc3'>;
 export const FF_ENCODER_LIBOAPV = 'liboapv' as FFVideoEncoder<'liboapv'>;
-export const FF_ENCODER_LIBOPENCORE_AMRNB = 'libopencore_amrnb' as FFVideoEncoder<'libopencore_amrnb'>;
 export const FF_ENCODER_LIBOPENH264 = 'libopenh264' as FFVideoEncoder<'libopenh264'>;
 export const FF_ENCODER_LIBOPENJPEG = 'libopenjpeg' as FFVideoEncoder<'libopenjpeg'>;
 export const FF_ENCODER_LIBRAV1E = 'librav1e' as FFVideoEncoder<'librav1e'>;
-export const FF_ENCODER_LIBSHINE = 'libshine' as FFVideoEncoder<'libshine'>;
 export const FF_ENCODER_LIBSVTAV1 = 'libsvtav1' as FFVideoEncoder<'libsvtav1'>;
 export const FF_ENCODER_LIBSVTJPEGXS = 'libsvtjpegxs' as FFVideoEncoder<'libsvtjpegxs'>;
 export const FF_ENCODER_LIBTHEORA = 'libtheora' as FFVideoEncoder<'libtheora'>;
-export const FF_ENCODER_LIBTWOLAME = 'libtwolame' as FFVideoEncoder<'libtwolame'>;
-export const FF_ENCODER_LIBVO_AMRWBENC = 'libvo_amrwbenc' as FFVideoEncoder<'libvo_amrwbenc'>;
 export const FF_ENCODER_LIBVPX_VP8 = 'libvpx' as FFVideoEncoder<'libvpx'>;
 export const FF_ENCODER_LIBVPX_VP9 = 'libvpx-vp9' as FFVideoEncoder<'libvpx-vp9'>;
 export const FF_ENCODER_LIBVVENC = 'libvvenc' as FFVideoEncoder<'libvvenc'>;
@@ -124,7 +108,6 @@ export const FF_ENCODER_LIBXVID = 'libxvid' as FFVideoEncoder<'libxvid'>;
 export const FF_ENCODER_LJPEG = 'ljpeg' as FFVideoEncoder<'ljpeg'>;
 export const FF_ENCODER_MAGICYUV = 'magicyuv' as FFVideoEncoder<'magicyuv'>;
 export const FF_ENCODER_MJPEG = 'mjpeg' as FFVideoEncoder<'mjpeg'>;
-export const FF_ENCODER_MOVTEXT = 'mov_text' as FFVideoEncoder<'mov_text'>;
 export const FF_ENCODER_MPEG1VIDEO = 'mpeg1video' as FFVideoEncoder<'mpeg1video'>;
 export const FF_ENCODER_MPEG2VIDEO = 'mpeg2video' as FFVideoEncoder<'mpeg2video'>;
 export const FF_ENCODER_MPEG4 = 'mpeg4' as FFVideoEncoder<'mpeg4'>;
@@ -135,7 +118,6 @@ export const FF_ENCODER_MSVIDEO1 = 'msvideo1' as FFVideoEncoder<'msvideo1'>;
 export const FF_ENCODER_PAM = 'pam' as FFVideoEncoder<'pam'>;
 export const FF_ENCODER_PBM = 'pbm' as FFVideoEncoder<'pbm'>;
 export const FF_ENCODER_PCX = 'pcx' as FFVideoEncoder<'pcx'>;
-export const FF_ENCODER_PDV = 'pdv' as FFVideoEncoder<'pdv'>;
 export const FF_ENCODER_PFM = 'pfm' as FFVideoEncoder<'pfm'>;
 export const FF_ENCODER_PGM = 'pgm' as FFVideoEncoder<'pgm'>;
 export const FF_ENCODER_PGMYUV = 'pgmyuv' as FFVideoEncoder<'pgmyuv'>;
@@ -145,15 +127,12 @@ export const FF_ENCODER_PPM = 'ppm' as FFVideoEncoder<'ppm'>;
 export const FF_ENCODER_PRORES = 'prores' as FFVideoEncoder<'prores'>;
 export const FF_ENCODER_PRORES_AW = 'prores_aw' as FFVideoEncoder<'prores_aw'>;
 export const FF_ENCODER_PRORES_KS = 'prores_ks' as FFVideoEncoder<'prores_ks'>;
-export const FF_ENCODER_PRORES_KS_VULKAN = 'prores_ks_vulkan' as FFVideoEncoder<'prores_ks_vulkan'>;
 export const FF_ENCODER_QOI = 'qoi' as FFVideoEncoder<'qoi'>;
 export const FF_ENCODER_QTRLE = 'qtrle' as FFVideoEncoder<'qtrle'>;
 export const FF_ENCODER_R10K = 'r10k' as FFVideoEncoder<'r10k'>;
 export const FF_ENCODER_R210 = 'r210' as FFVideoEncoder<'r210'>;
-export const FF_ENCODER_RA_144 = 'real_144' as FFVideoEncoder<'real_144'>;
 export const FF_ENCODER_RAWVIDEO = 'rawvideo' as FFVideoEncoder<'rawvideo'>;
 export const FF_ENCODER_ROQ = 'roqvideo' as FFVideoEncoder<'roqvideo'>;
-export const FF_ENCODER_ROQ_DPCM = 'roq_dpcm' as FFVideoEncoder<'roq_dpcm'>;
 export const FF_ENCODER_RPZA = 'rpza' as FFVideoEncoder<'rpza'>;
 export const FF_ENCODER_RV10 = 'rv10' as FFVideoEncoder<'rv10'>;
 export const FF_ENCODER_RV20 = 'rv20' as FFVideoEncoder<'rv20'>;
@@ -232,12 +211,23 @@ export const FF_ENCODER_MPEG2_VAAPI = 'mpeg2_vaapi' as FFVideoEncoder<'mpeg2_vaa
 export const FF_ENCODER_VP8_VAAPI = 'vp8_vaapi' as FFVideoEncoder<'vp8_vaapi'>;
 export const FF_ENCODER_VP9_VAAPI = 'vp9_vaapi' as FFVideoEncoder<'vp9_vaapi'>;
 
+// Vulkan
+export const FF_ENCODER_AV1_VULKAN = 'av1_vulkan' as FFVideoEncoder<'av1_vulkan'>;
+export const FF_ENCODER_FFV1_VULKAN = 'ffv1_vulkan' as FFVideoEncoder<'ffv1_vulkan'>;
+export const FF_ENCODER_H264_VULKAN = 'h264_vulkan' as FFVideoEncoder<'h264_vulkan'>;
+export const FF_ENCODER_HEVC_VULKAN = 'hevc_vulkan' as FFVideoEncoder<'hevc_vulkan'>;
+export const FF_ENCODER_PRORES_KS_VULKAN = 'prores_ks_vulkan' as FFVideoEncoder<'prores_ks_vulkan'>;
+
 // V4L2 M2M
 export const FF_ENCODER_H263_V4L2M2M = 'h263_v4l2m2m' as FFVideoEncoder<'h263_v4l2m2m'>;
 export const FF_ENCODER_H264_V4L2M2M = 'h264_v4l2m2m' as FFVideoEncoder<'h264_v4l2m2m'>;
 export const FF_ENCODER_HEVC_V4L2M2M = 'hevc_v4l2m2m' as FFVideoEncoder<'hevc_v4l2m2m'>;
 export const FF_ENCODER_MPEG4_V4L2M2M = 'mpeg4_v4l2m2m' as FFVideoEncoder<'mpeg4_v4l2m2m'>;
 export const FF_ENCODER_VP8_V4L2M2M = 'vp8_v4l2m2m' as FFVideoEncoder<'vp8_v4l2m2m'>;
+
+// OpenHarmony
+export const FF_ENCODER_H264_OH = 'h264_oh' as FFVideoEncoder<'h264_oh'>;
+export const FF_ENCODER_HEVC_OH = 'hevc_oh' as FFVideoEncoder<'hevc_oh'>;
 
 // OpenMAX
 export const FF_ENCODER_H264_OMX = 'h264_omx' as FFVideoEncoder<'h264_omx'>;
@@ -255,7 +245,7 @@ export const FF_ENCODER_MJPEG_VIDEOTOOLBOX = 'mjpeg_videotoolbox' as FFVideoEnco
 export const FF_ENCODER_PRORES_VIDEOTOOLBOX = 'prores_videotoolbox' as FFVideoEncoder<'prores_videotoolbox'>;
 
 // ============================================================================
-// AUDIO ENCODERS (78 software, 8 hardware)
+// AUDIO ENCODERS (90 software, 8 hardware)
 // ============================================================================
 
 // Software audio encoders
@@ -278,6 +268,7 @@ export const FF_ENCODER_ADPCM_MS = 'adpcm_ms' as FFAudioEncoder<'adpcm_ms'>;
 export const FF_ENCODER_ADPCM_SWF = 'adpcm_swf' as FFAudioEncoder<'adpcm_swf'>;
 export const FF_ENCODER_ADPCM_YAMAHA = 'adpcm_yamaha' as FFAudioEncoder<'adpcm_yamaha'>;
 export const FF_ENCODER_ALAC = 'alac' as FFAudioEncoder<'alac'>;
+export const FF_ENCODER_ANULL = 'anull' as FFAudioEncoder<'anull'>;
 export const FF_ENCODER_APTX = 'aptx' as FFAudioEncoder<'aptx'>;
 export const FF_ENCODER_APTX_HD = 'aptx_hd' as FFAudioEncoder<'aptx_hd'>;
 export const FF_ENCODER_COMFORTNOISE = 'comfortnoise' as FFAudioEncoder<'comfortnoise'>;
@@ -286,10 +277,19 @@ export const FF_ENCODER_DFPWM = 'dfpwm' as FFAudioEncoder<'dfpwm'>;
 export const FF_ENCODER_EAC3 = 'eac3' as FFAudioEncoder<'eac3'>;
 export const FF_ENCODER_FLAC = 'flac' as FFAudioEncoder<'flac'>;
 export const FF_ENCODER_G723_1 = 'g723_1' as FFAudioEncoder<'g723_1'>;
+export const FF_ENCODER_LIBCODEC2 = 'libcodec2' as FFAudioEncoder<'libcodec2'>;
 export const FF_ENCODER_LIBFDK_AAC = 'libfdk_aac' as FFAudioEncoder<'libfdk_aac'>;
+export const FF_ENCODER_LIBGSM = 'libgsm' as FFAudioEncoder<'libgsm'>;
+export const FF_ENCODER_LIBGSM_MS = 'libgsm_ms' as FFAudioEncoder<'libgsm_ms'>;
+export const FF_ENCODER_LIBILBC = 'libilbc' as FFAudioEncoder<'libilbc'>;
+export const FF_ENCODER_LIBLC3 = 'liblc3' as FFAudioEncoder<'liblc3'>;
 export const FF_ENCODER_LIBMP3LAME = 'libmp3lame' as FFAudioEncoder<'libmp3lame'>;
+export const FF_ENCODER_LIBOPENCORE_AMRNB = 'libopencore_amrnb' as FFAudioEncoder<'libopencore_amrnb'>;
 export const FF_ENCODER_LIBOPUS = 'libopus' as FFAudioEncoder<'libopus'>;
+export const FF_ENCODER_LIBSHINE = 'libshine' as FFAudioEncoder<'libshine'>;
 export const FF_ENCODER_LIBSPEEX = 'libspeex' as FFAudioEncoder<'libspeex'>;
+export const FF_ENCODER_LIBTWOLAME = 'libtwolame' as FFAudioEncoder<'libtwolame'>;
+export const FF_ENCODER_LIBVO_AMRWBENC = 'libvo_amrwbenc' as FFAudioEncoder<'libvo_amrwbenc'>;
 export const FF_ENCODER_LIBVORBIS = 'libvorbis' as FFAudioEncoder<'libvorbis'>;
 export const FF_ENCODER_MLP = 'mlp' as FFAudioEncoder<'mlp'>;
 export const FF_ENCODER_MP2 = 'mp2' as FFAudioEncoder<'mp2'>;
@@ -327,6 +327,8 @@ export const FF_ENCODER_PCM_U32BE = 'pcm_u32be' as FFAudioEncoder<'pcm_u32be'>;
 export const FF_ENCODER_PCM_U32LE = 'pcm_u32le' as FFAudioEncoder<'pcm_u32le'>;
 export const FF_ENCODER_PCM_U8 = 'pcm_u8' as FFAudioEncoder<'pcm_u8'>;
 export const FF_ENCODER_PCM_VIDC = 'pcm_vidc' as FFAudioEncoder<'pcm_vidc'>;
+export const FF_ENCODER_RA_144 = 'real_144' as FFAudioEncoder<'real_144'>;
+export const FF_ENCODER_ROQ_DPCM = 'roq_dpcm' as FFAudioEncoder<'roq_dpcm'>;
 export const FF_ENCODER_S302M = 's302m' as FFAudioEncoder<'s302m'>;
 export const FF_ENCODER_SBC = 'sbc' as FFAudioEncoder<'sbc'>;
 export const FF_ENCODER_SONIC = 'sonic' as FFAudioEncoder<'sonic'>;
@@ -349,12 +351,13 @@ export const FF_ENCODER_PCM_ALAW_AT = 'pcm_alaw_at' as FFAudioEncoder<'pcm_alaw_
 export const FF_ENCODER_PCM_MULAW_AT = 'pcm_mulaw_at' as FFAudioEncoder<'pcm_mulaw_at'>;
 
 // ============================================================================
-// SUBTITLE ENCODERS (10 encoders)
+// SUBTITLE ENCODERS (11 encoders)
 // ============================================================================
 
 export const FF_ENCODER_ASS = 'ass' as FFSubtitleEncoder<'ass'>;
 export const FF_ENCODER_DVBSUB = 'dvbsub' as FFSubtitleEncoder<'dvbsub'>;
 export const FF_ENCODER_DVDSUB = 'dvdsub' as FFSubtitleEncoder<'dvdsub'>;
+export const FF_ENCODER_MOVTEXT = 'mov_text' as FFSubtitleEncoder<'mov_text'>;
 export const FF_ENCODER_SRT = 'srt' as FFSubtitleEncoder<'srt'>;
 export const FF_ENCODER_SSA = 'ssa' as FFSubtitleEncoder<'ssa'>;
 export const FF_ENCODER_SUBRIP = 'subrip' as FFSubtitleEncoder<'subrip'>;

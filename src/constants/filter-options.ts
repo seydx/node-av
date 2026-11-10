@@ -900,9 +900,47 @@ export interface FilterOptionsMap {
    */
   afireqsrc: {
     /** set equalizer preset */
-    preset?: 'custom';
+    preset?:
+      | 'custom'
+      | 'flat'
+      | 'acoustic'
+      | 'bass'
+      | 'beats'
+      | 'classic'
+      | 'clear'
+      | 'deep bass'
+      | 'dubstep'
+      | 'electronic'
+      | 'hardstyle'
+      | 'hip-hop'
+      | 'jazz'
+      | 'metal'
+      | 'movie'
+      | 'pop'
+      | 'r&b'
+      | 'rock'
+      | 'vocal booster';
     /** set equalizer preset */
-    p?: 'custom';
+    p?:
+      | 'custom'
+      | 'flat'
+      | 'acoustic'
+      | 'bass'
+      | 'beats'
+      | 'classic'
+      | 'clear'
+      | 'deep bass'
+      | 'dubstep'
+      | 'electronic'
+      | 'hardstyle'
+      | 'hip-hop'
+      | 'jazz'
+      | 'metal'
+      | 'movie'
+      | 'pop'
+      | 'r&b'
+      | 'rock'
+      | 'vocal booster';
     /** set gain values per band */
     gains?: string | number;
     /** set gain values per band */
@@ -1281,6 +1319,48 @@ export interface FilterOptionsMap {
     latency?: boolean;
   };
   /**
+   * Apply a two-pole all-pass filter.
+   * @see https://ffmpeg.org/ffmpeg-filters.html#allpass
+   */
+  allpass: {
+    /** set central frequency */
+    frequency?: number;
+    /** set central frequency */
+    f?: number;
+    /** set filter-width type */
+    width_type?: 'h' | 'q' | 'o' | 's' | 'k';
+    /** set filter-width type */
+    t?: 'h' | 'q' | 'o' | 's' | 'k';
+    /** set width */
+    width?: number;
+    /** set width */
+    w?: number;
+    /** set mix */
+    mix?: number;
+    /** set mix */
+    m?: number;
+    /** set channels to filter */
+    channels?: string | number;
+    /** set channels to filter */
+    c?: string | number;
+    /** normalize coefficients */
+    normalize?: boolean;
+    /** normalize coefficients */
+    n?: boolean;
+    /** set filter order */
+    order?: number;
+    /** set filter order */
+    o?: number;
+    /** set transform type */
+    transform?: 'di' | 'dii' | 'tdi' | 'tdii' | 'latt' | 'svf' | 'zdf';
+    /** set transform type */
+    a?: 'di' | 'dii' | 'tdi' | 'tdii' | 'latt' | 'svf' | 'zdf';
+    /** set filtering precision */
+    precision?: 'auto' | 's16' | 's32' | 'f32' | 'f64';
+    /** set filtering precision */
+    r?: 'auto' | 's16' | 's32' | 'f32' | 'f64';
+  };
+  /**
    * Generate all RGB colors.
    * @see https://ffmpeg.org/ffmpeg-filters.html#allrgb
    */
@@ -1404,7 +1484,7 @@ export interface FilterOptionsMap {
     inputs?: number;
     /** How to determine the end-of-stream. */
     duration?: 'longest' | 'shortest' | 'first';
-    /** Transition time, in seconds, for volume  */
+    /** Transition time, in seconds, for volume renormalization when an input stream ends. */
     dropout_transition?: number;
     /** Set weight for each input. */
     weights?: string | number;
@@ -1878,7 +1958,12 @@ export interface FilterOptionsMap {
    * Change the sample rate without
    * @see https://ffmpeg.org/ffmpeg-filters.html#asetrate
    */
-  asetrate: {};
+  asetrate: {
+    /** set the sample rate */
+    sample_rate?: number;
+    /** set the sample rate */
+    r?: number;
+  };
   /**
    * Set timebase for the audio output link.
    * @see https://ffmpeg.org/ffmpeg-filters.html#asettb
@@ -2274,25 +2359,25 @@ export interface FilterOptionsMap {
    * @see https://ffmpeg.org/ffmpeg-filters.html#atrim
    */
   atrim: {
-    /** Timestamp of the first frame that  */
+    /** Timestamp of the first frame that should be passed */
     start?: string | number;
-    /** Timestamp of the first frame that  */
+    /** Timestamp of the first frame that should be passed */
     starti?: string | number;
-    /** Timestamp of the first frame that  */
+    /** Timestamp of the first frame that should be dropped again */
     end?: string | number;
-    /** Timestamp of the first frame that  */
+    /** Timestamp of the first frame that should be dropped again */
     endi?: string | number;
-    /** Timestamp of the first frame that should be  */
+    /** Timestamp of the first frame that should be  passed */
     start_pts?: number;
-    /** Timestamp of the first frame that should be  */
+    /** Timestamp of the first frame that should be dropped again */
     end_pts?: number;
     /** Maximum duration of the output */
     duration?: string | number;
     /** Maximum duration of the output */
     durationi?: string | number;
-    /** Number of the first audio sample that should be  */
+    /** Number of the first audio sample that should be passed to the output */
     start_sample?: number;
-    /** Number of the first audio sample that should be  */
+    /** Number of the first audio sample that should be dropped again */
     end_sample?: number;
   };
   /**
@@ -2452,6 +2537,142 @@ export interface FilterOptionsMap {
     blend?: number;
   };
   /**
+   * Apply a two-pole Butterworth band-pass filter.
+   * @see https://ffmpeg.org/ffmpeg-filters.html#bandpass
+   */
+  bandpass: {
+    /** set central frequency */
+    frequency?: number;
+    /** set central frequency */
+    f?: number;
+    /** set filter-width type */
+    width_type?: 'h' | 'q' | 'o' | 's' | 'k';
+    /** set filter-width type */
+    t?: 'h' | 'q' | 'o' | 's' | 'k';
+    /** set width */
+    width?: number;
+    /** set width */
+    w?: number;
+    /** use constant skirt gain */
+    csg?: boolean;
+    /** set mix */
+    mix?: number;
+    /** set mix */
+    m?: number;
+    /** set channels to filter */
+    channels?: string | number;
+    /** set channels to filter */
+    c?: string | number;
+    /** normalize coefficients */
+    normalize?: boolean;
+    /** normalize coefficients */
+    n?: boolean;
+    /** set transform type */
+    transform?: 'di' | 'dii' | 'tdi' | 'tdii' | 'latt' | 'svf' | 'zdf';
+    /** set transform type */
+    a?: 'di' | 'dii' | 'tdi' | 'tdii' | 'latt' | 'svf' | 'zdf';
+    /** set filtering precision */
+    precision?: 'auto' | 's16' | 's32' | 'f32' | 'f64';
+    /** set filtering precision */
+    r?: 'auto' | 's16' | 's32' | 'f32' | 'f64';
+    /** set the block size */
+    blocksize?: number;
+    /** set the block size */
+    b?: number;
+  };
+  /**
+   * Apply a two-pole Butterworth band-reject filter.
+   * @see https://ffmpeg.org/ffmpeg-filters.html#bandreject
+   */
+  bandreject: {
+    /** set central frequency */
+    frequency?: number;
+    /** set central frequency */
+    f?: number;
+    /** set filter-width type */
+    width_type?: 'h' | 'q' | 'o' | 's' | 'k';
+    /** set filter-width type */
+    t?: 'h' | 'q' | 'o' | 's' | 'k';
+    /** set width */
+    width?: number;
+    /** set width */
+    w?: number;
+    /** set mix */
+    mix?: number;
+    /** set mix */
+    m?: number;
+    /** set channels to filter */
+    channels?: string | number;
+    /** set channels to filter */
+    c?: string | number;
+    /** normalize coefficients */
+    normalize?: boolean;
+    /** normalize coefficients */
+    n?: boolean;
+    /** set transform type */
+    transform?: 'di' | 'dii' | 'tdi' | 'tdii' | 'latt' | 'svf' | 'zdf';
+    /** set transform type */
+    a?: 'di' | 'dii' | 'tdi' | 'tdii' | 'latt' | 'svf' | 'zdf';
+    /** set filtering precision */
+    precision?: 'auto' | 's16' | 's32' | 'f32' | 'f64';
+    /** set filtering precision */
+    r?: 'auto' | 's16' | 's32' | 'f32' | 'f64';
+    /** set the block size */
+    blocksize?: number;
+    /** set the block size */
+    b?: number;
+  };
+  /**
+   * Boost or cut lower frequencies.
+   * @see https://ffmpeg.org/ffmpeg-filters.html#bass
+   */
+  bass: {
+    /** set central frequency */
+    frequency?: number;
+    /** set central frequency */
+    f?: number;
+    /** set filter-width type */
+    width_type?: 'h' | 'q' | 'o' | 's' | 'k';
+    /** set filter-width type */
+    t?: 'h' | 'q' | 'o' | 's' | 'k';
+    /** set width */
+    width?: number;
+    /** set width */
+    w?: number;
+    /** set gain */
+    gain?: number;
+    /** set gain */
+    g?: number;
+    /** set number of poles */
+    poles?: number;
+    /** set number of poles */
+    p?: number;
+    /** set mix */
+    mix?: number;
+    /** set mix */
+    m?: number;
+    /** set channels to filter */
+    channels?: string | number;
+    /** set channels to filter */
+    c?: string | number;
+    /** normalize coefficients */
+    normalize?: boolean;
+    /** normalize coefficients */
+    n?: boolean;
+    /** set transform type */
+    transform?: 'di' | 'dii' | 'tdi' | 'tdii' | 'latt' | 'svf' | 'zdf';
+    /** set transform type */
+    a?: 'di' | 'dii' | 'tdi' | 'tdii' | 'latt' | 'svf' | 'zdf';
+    /** set filtering precision */
+    precision?: 'auto' | 's16' | 's32' | 'f32' | 'f64';
+    /** set filtering precision */
+    r?: 'auto' | 's16' | 's32' | 'f32' | 'f64';
+    /** set the block size */
+    blocksize?: number;
+    /** set the block size */
+    b?: number;
+  };
+  /**
    * Compute bounding box for each frame.
    * @see https://ffmpeg.org/ffmpeg-filters.html#bbox
    */
@@ -2490,6 +2711,42 @@ export interface FilterOptionsMap {
     sigmaR?: number;
     /** set neighbours window_size */
     window_size?: number;
+  };
+  /**
+   * Apply a biquad IIR filter with the given coefficients.
+   * @see https://ffmpeg.org/ffmpeg-filters.html#biquad
+   */
+  biquad: {
+    a0?: number;
+    a1?: number;
+    a2?: number;
+    b0?: number;
+    b1?: number;
+    b2?: number;
+    /** set mix */
+    mix?: number;
+    /** set mix */
+    m?: number;
+    /** set channels to filter */
+    channels?: string | number;
+    /** set channels to filter */
+    c?: string | number;
+    /** normalize coefficients */
+    normalize?: boolean;
+    /** normalize coefficients */
+    n?: boolean;
+    /** set transform type */
+    transform?: 'di' | 'dii' | 'tdi' | 'tdii' | 'latt' | 'svf' | 'zdf';
+    /** set transform type */
+    a?: 'di' | 'dii' | 'tdi' | 'tdii' | 'latt' | 'svf' | 'zdf';
+    /** set filtering precision */
+    precision?: 'auto' | 's16' | 's32' | 'f32' | 'f64';
+    /** set filtering precision */
+    r?: 'auto' | 's16' | 's32' | 'f32' | 'f64';
+    /** set the block size */
+    blocksize?: number;
+    /** set the block size */
+    b?: number;
   };
   /**
    * Measure bit plane noise.
@@ -2546,7 +2803,7 @@ export interface FilterOptionsMap {
    * @see https://ffmpeg.org/ffmpeg-filters.html#blackframe
    */
   blackframe: {
-    /** percentage of the pixels that have to be below the threshold  */
+    /** percentage of the pixels that have to be below the threshold for the frame to be considered black */
     amount?: number;
     /** threshold below which a pixel value is considered black */
     threshold?: number;
@@ -2813,225 +3070,15 @@ export interface FilterOptionsMap {
    */
   blend_vulkan: {
     /** set component #0 blend mode */
-    c0_mode?:
-      | 'addition'
-      | 'addition128'
-      | 'grainmerge'
-      | 'and'
-      | 'average'
-      | 'burn'
-      | 'darken'
-      | 'difference'
-      | 'difference128'
-      | 'grainextract'
-      | 'divide'
-      | 'dodge'
-      | 'exclusion'
-      | 'extremity'
-      | 'freeze'
-      | 'glow'
-      | 'hardlight'
-      | 'hardmix'
-      | 'heat'
-      | 'lighten'
-      | 'linearlight'
-      | 'multiply'
-      | 'multiply128'
-      | 'negation'
-      | 'normal'
-      | 'or'
-      | 'overlay'
-      | 'phoenix'
-      | 'pinlight'
-      | 'reflect'
-      | 'screen'
-      | 'softlight'
-      | 'subtract'
-      | 'vividlight'
-      | 'xor'
-      | 'softdifference'
-      | 'geometric'
-      | 'harmonic'
-      | 'bleach'
-      | 'stain'
-      | 'interpolate'
-      | 'hardoverlay';
+    c0_mode?: 'normal' | 'multiply';
     /** set component #1 blend mode */
-    c1_mode?:
-      | 'addition'
-      | 'addition128'
-      | 'grainmerge'
-      | 'and'
-      | 'average'
-      | 'burn'
-      | 'darken'
-      | 'difference'
-      | 'difference128'
-      | 'grainextract'
-      | 'divide'
-      | 'dodge'
-      | 'exclusion'
-      | 'extremity'
-      | 'freeze'
-      | 'glow'
-      | 'hardlight'
-      | 'hardmix'
-      | 'heat'
-      | 'lighten'
-      | 'linearlight'
-      | 'multiply'
-      | 'multiply128'
-      | 'negation'
-      | 'normal'
-      | 'or'
-      | 'overlay'
-      | 'phoenix'
-      | 'pinlight'
-      | 'reflect'
-      | 'screen'
-      | 'softlight'
-      | 'subtract'
-      | 'vividlight'
-      | 'xor'
-      | 'softdifference'
-      | 'geometric'
-      | 'harmonic'
-      | 'bleach'
-      | 'stain'
-      | 'interpolate'
-      | 'hardoverlay';
+    c1_mode?: 'normal' | 'multiply';
     /** set component #2 blend mode */
-    c2_mode?:
-      | 'addition'
-      | 'addition128'
-      | 'grainmerge'
-      | 'and'
-      | 'average'
-      | 'burn'
-      | 'darken'
-      | 'difference'
-      | 'difference128'
-      | 'grainextract'
-      | 'divide'
-      | 'dodge'
-      | 'exclusion'
-      | 'extremity'
-      | 'freeze'
-      | 'glow'
-      | 'hardlight'
-      | 'hardmix'
-      | 'heat'
-      | 'lighten'
-      | 'linearlight'
-      | 'multiply'
-      | 'multiply128'
-      | 'negation'
-      | 'normal'
-      | 'or'
-      | 'overlay'
-      | 'phoenix'
-      | 'pinlight'
-      | 'reflect'
-      | 'screen'
-      | 'softlight'
-      | 'subtract'
-      | 'vividlight'
-      | 'xor'
-      | 'softdifference'
-      | 'geometric'
-      | 'harmonic'
-      | 'bleach'
-      | 'stain'
-      | 'interpolate'
-      | 'hardoverlay';
+    c2_mode?: 'normal' | 'multiply';
     /** set component #3 blend mode */
-    c3_mode?:
-      | 'addition'
-      | 'addition128'
-      | 'grainmerge'
-      | 'and'
-      | 'average'
-      | 'burn'
-      | 'darken'
-      | 'difference'
-      | 'difference128'
-      | 'grainextract'
-      | 'divide'
-      | 'dodge'
-      | 'exclusion'
-      | 'extremity'
-      | 'freeze'
-      | 'glow'
-      | 'hardlight'
-      | 'hardmix'
-      | 'heat'
-      | 'lighten'
-      | 'linearlight'
-      | 'multiply'
-      | 'multiply128'
-      | 'negation'
-      | 'normal'
-      | 'or'
-      | 'overlay'
-      | 'phoenix'
-      | 'pinlight'
-      | 'reflect'
-      | 'screen'
-      | 'softlight'
-      | 'subtract'
-      | 'vividlight'
-      | 'xor'
-      | 'softdifference'
-      | 'geometric'
-      | 'harmonic'
-      | 'bleach'
-      | 'stain'
-      | 'interpolate'
-      | 'hardoverlay';
+    c3_mode?: 'normal' | 'multiply';
     /** set blend mode for all components */
-    all_mode?:
-      | 'addition'
-      | 'addition128'
-      | 'grainmerge'
-      | 'and'
-      | 'average'
-      | 'burn'
-      | 'darken'
-      | 'difference'
-      | 'difference128'
-      | 'grainextract'
-      | 'divide'
-      | 'dodge'
-      | 'exclusion'
-      | 'extremity'
-      | 'freeze'
-      | 'glow'
-      | 'hardlight'
-      | 'hardmix'
-      | 'heat'
-      | 'lighten'
-      | 'linearlight'
-      | 'multiply'
-      | 'multiply128'
-      | 'negation'
-      | 'normal'
-      | 'or'
-      | 'overlay'
-      | 'phoenix'
-      | 'pinlight'
-      | 'reflect'
-      | 'screen'
-      | 'softlight'
-      | 'subtract'
-      | 'vividlight'
-      | 'xor'
-      | 'softdifference'
-      | 'geometric'
-      | 'harmonic'
-      | 'bleach'
-      | 'stain'
-      | 'interpolate'
-      | 'hardoverlay';
+    all_mode?: 'normal' | 'multiply';
     /** set color component #0 opacity */
     c0_opacity?: number;
     /** set color component #1 opacity */
@@ -3250,7 +3297,28 @@ export interface FilterOptionsMap {
    * Deinterlace CUDA frames
    * @see https://ffmpeg.org/ffmpeg-filters.html#bwdif_005fcuda
    */
-  bwdif_cuda: {};
+  bwdif_cuda: {
+    /** specify the interlacing mode */
+    mode?: 'send_frame' | 'send_field' | 'send_frame_nospatial' | 'send_field_nospatial';
+    /** specify the assumed picture field parity */
+    parity?: 'tff' | 'bff' | 'auto';
+    /** specify which frames to deinterlace */
+    deint?: 'all' | 'interlaced';
+  };
+  /**
+   * Deinterlace D3D11 frames using BWDIF
+   * @see https://ffmpeg.org/ffmpeg-filters.html#bwdif_005fd3d11
+   */
+  bwdif_d3d11: {
+    /** specify the interlacing mode */
+    mode?: 'send_frame' | 'send_field' | 'send_frame_nospatial' | 'send_field_nospatial';
+    /** specify the assumed picture field parity */
+    parity?: 'tff' | 'bff' | 'auto';
+    /** specify which frames to deinterlace */
+    deint?: 'all' | 'interlaced';
+    /** Force output through an internal unordered-access texture */
+    force_output_copy?: boolean;
+  };
   /**
    * Deinterlace (BWDIF) the video through OpenCL.
    * @see https://ffmpeg.org/ffmpeg-filters.html#bwdif_005fopencl
@@ -3264,10 +3332,29 @@ export interface FilterOptionsMap {
     deint?: 'all' | 'interlaced';
   };
   /**
+   * BWDIF for VideoToolbox frames using Metal compute
+   * @see https://ffmpeg.org/ffmpeg-filters.html#bwdif_005fvideotoolbox
+   */
+  bwdif_videotoolbox: {
+    /** specify the interlacing mode */
+    mode?: 'send_frame' | 'send_field';
+    /** specify the assumed picture field parity */
+    parity?: 'tff' | 'bff' | 'auto';
+    /** specify which frames to deinterlace */
+    deint?: 'all' | 'interlaced';
+  };
+  /**
    * Deinterlace Vulkan frames via bwdif
    * @see https://ffmpeg.org/ffmpeg-filters.html#bwdif_005fvulkan
    */
-  bwdif_vulkan: {};
+  bwdif_vulkan: {
+    /** specify the interlacing mode */
+    mode?: 'send_frame' | 'send_field' | 'send_frame_nospatial' | 'send_field_nospatial';
+    /** specify the assumed picture field parity */
+    parity?: 'tff' | 'bff' | 'auto';
+    /** specify which frames to deinterlace */
+    deint?: 'all' | 'interlaced';
+  };
   /**
    * Contrast Adaptive Sharpen.
    * @see https://ffmpeg.org/ffmpeg-filters.html#cas
@@ -4032,12 +4119,69 @@ export interface FilterOptionsMap {
    * Convolve first video stream with second video stream.
    * @see https://ffmpeg.org/ffmpeg-filters.html#convolve
    */
-  convolve: {};
+  convolve: {
+    /** set planes to convolve */
+    planes?: number;
+    /** when to process impulses */
+    impulse?: 'first' | 'all';
+    /** set noise */
+    noise?: number;
+    /** Action to take when encountering EOF from secondary input  */
+    eof_action?: 'repeat' | 'endall' | 'pass';
+    /** force termination when the shortest input terminates */
+    shortest?: boolean;
+    /** extend last frame of secondary streams beyond EOF */
+    repeatlast?: boolean;
+    /** How strictly to sync streams based on secondary input timestamps */
+    ts_sync_mode?: 'default' | 'nearest';
+  };
   /**
    * Copy the input video unchanged to the output.
    * @see https://ffmpeg.org/ffmpeg-filters.html#copy
    */
   copy: {};
+  /**
+   * Video filtering using CoreImage API.
+   * @see https://ffmpeg.org/ffmpeg-filters.html#coreimage
+   */
+  coreimage: {
+    /** list available filters */
+    list_filters?: boolean;
+    /** list available generators */
+    list_generators?: boolean;
+    /** names and options of filters to apply */
+    filter?: string | number;
+    /** output rectangle within output image */
+    output_rect?: string | number;
+  };
+  /**
+   * Video source using image generators of CoreImage API.
+   * @see https://ffmpeg.org/ffmpeg-filters.html#coreimagesrc
+   */
+  coreimagesrc: {
+    /** set video size */
+    size?: string | number;
+    /** set video size */
+    s?: string | number;
+    /** set video rate */
+    rate?: string | number;
+    /** set video rate */
+    r?: string | number;
+    /** set video duration */
+    duration?: string | number;
+    /** set video duration */
+    d?: string | number;
+    /** set video sample aspect ratio */
+    sar?: string | number;
+    /** list available filters */
+    list_filters?: boolean;
+    /** list available generators */
+    list_generators?: boolean;
+    /** names and options of filters to apply */
+    filter?: string | number;
+    /** output rectangle within output image */
+    output_rect?: string | number;
+  };
   /**
    * Calculate the correlation between two video streams.
    * @see https://ffmpeg.org/ffmpeg-filters.html#corr
@@ -4359,7 +4503,22 @@ export interface FilterOptionsMap {
    * Deconvolve first video stream with second video stream.
    * @see https://ffmpeg.org/ffmpeg-filters.html#deconvolve
    */
-  deconvolve: {};
+  deconvolve: {
+    /** set planes to deconvolve */
+    planes?: number;
+    /** when to process impulses */
+    impulse?: 'first' | 'all';
+    /** set noise */
+    noise?: number;
+    /** Action to take when encountering EOF from secondary input  */
+    eof_action?: 'repeat' | 'endall' | 'pass';
+    /** force termination when the shortest input terminates */
+    shortest?: boolean;
+    /** extend last frame of secondary streams beyond EOF */
+    repeatlast?: boolean;
+    /** How strictly to sync streams based on secondary input timestamps */
+    ts_sync_mode?: 'default' | 'nearest';
+  };
   /**
    * Reduce cross-luminance and cross-color.
    * @see https://ffmpeg.org/ffmpeg-filters.html#dedot
@@ -4391,6 +4550,20 @@ export interface FilterOptionsMap {
     s?: 'i' | 'o' | 'e';
   };
   /**
+   * Apply deflate effect.
+   * @see https://ffmpeg.org/ffmpeg-filters.html#deflate
+   */
+  deflate: {
+    /** set threshold for 1st plane */
+    threshold0?: number;
+    /** set threshold for 2nd plane */
+    threshold1?: number;
+    /** set threshold for 3rd plane */
+    threshold2?: number;
+    /** set threshold for 4th plane */
+    threshold3?: number;
+  };
+  /**
    * Remove temporal frame luminance variations.
    * @see https://ffmpeg.org/ffmpeg-filters.html#deflicker
    */
@@ -4417,6 +4590,16 @@ export interface FilterOptionsMap {
     mode?: 'frame' | 'field';
     /** Specify which frames to deinterlace */
     deint?: 'all' | 'interlaced';
+  };
+  /**
+   * Quick Sync Video
+   * @see https://ffmpeg.org/ffmpeg-filters.html#deinterlace_005fqsv
+   */
+  deinterlace_qsv: {
+    /** set deinterlace mode */
+    mode?: 'bob' | 'advanced';
+    /** Internal parallelization depth, the higher the value the higher the latency. */
+    async_depth?: number;
   };
   /**
    * Deinterlacing of VAAPI surfaces
@@ -4466,7 +4649,12 @@ export interface FilterOptionsMap {
    * Apply derain filter to the input.
    * @see https://ffmpeg.org/ffmpeg-filters.html#derain
    */
-  derain: {};
+  derain: {
+    /** filter type(derain/dehaze) */
+    filter_type?: 'derain' | 'dehaze';
+    /** DNN backend */
+    dnn_backend?: 'tensorflow';
+  };
   /**
    * Stabilize shaky video.
    * @see https://ffmpeg.org/ffmpeg-filters.html#deshake
@@ -4502,7 +4690,7 @@ export interface FilterOptionsMap {
    * @see https://ffmpeg.org/ffmpeg-filters.html#deshake_005fopencl
    */
   deshake_opencl: {
-    /** simulates a tripod by preventing any camera movement whatsoever  */
+    /** simulates a tripod by preventing any camera movement whatsoever from the original frame */
     tripod?: boolean;
     /** turn on additional debugging information */
     debug?: boolean;
@@ -4562,6 +4750,22 @@ export interface FilterOptionsMap {
     voice?: number;
   };
   /**
+   * Apply dilation effect.
+   * @see https://ffmpeg.org/ffmpeg-filters.html#dilation
+   */
+  dilation: {
+    /** set coordinates */
+    coordinates?: number;
+    /** set threshold for 1st plane */
+    threshold0?: number;
+    /** set threshold for 2nd plane */
+    threshold1?: number;
+    /** set threshold for 3rd plane */
+    threshold2?: number;
+    /** set threshold for 4th plane */
+    threshold3?: number;
+  };
+  /**
    * Apply dilation effect
    * @see https://ffmpeg.org/ffmpeg-filters.html#dilation_005fopencl
    */
@@ -4589,17 +4793,46 @@ export interface FilterOptionsMap {
    * Apply DNN classify filter to the input.
    * @see https://ffmpeg.org/ffmpeg-filters.html#dnn_005fclassify
    */
-  dnn_classify: {};
+  dnn_classify: {
+    /** DNN backend */
+    dnn_backend?: 'openvino';
+    /** threshold of confidence */
+    confidence?: number;
+    /** path to labels file */
+    labels?: string | number;
+    /** which one to be classified */
+    target?: string | number;
+  };
   /**
    * Apply DNN detect filter to the input.
    * @see https://ffmpeg.org/ffmpeg-filters.html#dnn_005fdetect
    */
-  dnn_detect: {};
+  dnn_detect: {
+    /** DNN backend */
+    dnn_backend?: 'tensorflow' | 'openvino';
+    /** threshold of confidence */
+    confidence?: number;
+    /** path to labels file */
+    labels?: string | number;
+    /** DNN detection model type */
+    model_type?: 'ssd' | 'yolo' | 'yolov3' | 'yolov4';
+    /** cell width */
+    cell_w?: number;
+    /** cell height */
+    cell_h?: number;
+    /** The number of class */
+    nb_classes?: number;
+    /** anchors, split by '&amp;' */
+    anchors?: string | number;
+  };
   /**
    * Apply DNN processing filter to the input.
    * @see https://ffmpeg.org/ffmpeg-filters.html#dnn_005fprocessing
    */
-  dnn_processing: {};
+  dnn_processing: {
+    /** DNN backend */
+    dnn_backend?: 'tensorflow' | 'openvino' | 'torch';
+  };
   /**
    * Weave input video fields into double number of frames.
    * @see https://ffmpeg.org/ffmpeg-filters.html#doubleweave
@@ -5028,6 +5261,68 @@ export interface FilterOptionsMap {
     gamma_weight?: string | number;
     /** specify when to evaluate expressions */
     eval?: 'init' | 'frame';
+  };
+  /**
+   * Apply two-pole peaking equalization (EQ) filter.
+   * @see https://ffmpeg.org/ffmpeg-filters.html#equalizer
+   */
+  equalizer: {
+    /** set central frequency */
+    frequency?: number;
+    /** set central frequency */
+    f?: number;
+    /** set filter-width type */
+    width_type?: 'h' | 'q' | 'o' | 's' | 'k';
+    /** set filter-width type */
+    t?: 'h' | 'q' | 'o' | 's' | 'k';
+    /** set width */
+    width?: number;
+    /** set width */
+    w?: number;
+    /** set gain */
+    gain?: number;
+    /** set gain */
+    g?: number;
+    /** set mix */
+    mix?: number;
+    /** set mix */
+    m?: number;
+    /** set channels to filter */
+    channels?: string | number;
+    /** set channels to filter */
+    c?: string | number;
+    /** normalize coefficients */
+    normalize?: boolean;
+    /** normalize coefficients */
+    n?: boolean;
+    /** set transform type */
+    transform?: 'di' | 'dii' | 'tdi' | 'tdii' | 'latt' | 'svf' | 'zdf';
+    /** set transform type */
+    a?: 'di' | 'dii' | 'tdi' | 'tdii' | 'latt' | 'svf' | 'zdf';
+    /** set filtering precision */
+    precision?: 'auto' | 's16' | 's32' | 'f32' | 'f64';
+    /** set filtering precision */
+    r?: 'auto' | 's16' | 's32' | 'f32' | 'f64';
+    /** set the block size */
+    blocksize?: number;
+    /** set the block size */
+    b?: number;
+  };
+  /**
+   * Apply erosion effect.
+   * @see https://ffmpeg.org/ffmpeg-filters.html#erosion
+   */
+  erosion: {
+    /** set coordinates */
+    coordinates?: number;
+    /** set threshold for 1st plane */
+    threshold0?: number;
+    /** set threshold for 2nd plane */
+    threshold1?: number;
+    /** set threshold for 3rd plane */
+    threshold2?: number;
+    /** set threshold for 4th plane */
+    threshold3?: number;
   };
   /**
    * Apply erosion effect
@@ -5472,26 +5767,6 @@ export interface FilterOptionsMap {
     step?: number;
   };
   /**
-   * AMF video Frame Rate Converter
-   * @see https://ffmpeg.org/ffmpeg-filters.html#frc_005famf
-   */
-  frc_amf: {
-    /** Engine type */
-    engine_type?: number;
-    /** Enable FRC */
-    enable?: boolean;
-    /** Fallback behavior in case of low interpolation confidence */
-    fallback_mode?: number;
-    /** Show FRC indicator square in the top left corner of the video. */
-    indicator?: boolean;
-    /** Level of hierarchical motion search */
-    profile?: number;
-    /** Performance mode of the motion search */
-    mv_search_mode?: number;
-    /** Enable dependency on future frame, improves quality for the cost of latency */
-    use_future_frame?: boolean;
-  };
-  /**
    * Detects frozen video input.
    * @see https://ffmpeg.org/ffmpeg-filters.html#freezedetect
    */
@@ -5633,7 +5908,7 @@ export interface FilterOptionsMap {
    * @see https://ffmpeg.org/ffmpeg-filters.html#gfxcapture
    */
   gfxcapture: {
-    /** ECMAScript regular expression to match against the window title.  */
+    /** ECMAScript regular expression to match against the window title. Supports PCRE style (?i) prefix for case-insensitivity. */
     window_title?: string | number;
     /** as window_title, but against the window class */
     window_class?: string | number;
@@ -5810,6 +6085,18 @@ export interface FilterOptionsMap {
    */
   grayworld: {};
   /**
+   * Estimates scene illumination by grey edge assumption.
+   * @see https://ffmpeg.org/ffmpeg-filters.html#greyedge
+   */
+  greyedge: {
+    /** set differentiation order */
+    difford?: number;
+    /** set Minkowski norm */
+    minknorm?: number;
+    /** set sigma */
+    sigma?: number;
+  };
+  /**
    * Apply Guided filter.
    * @see https://ffmpeg.org/ffmpeg-filters.html#guided
    */
@@ -5864,8 +6151,6 @@ export interface FilterOptionsMap {
    * @see https://ffmpeg.org/ffmpeg-filters.html#haldclut
    */
   haldclut: {
-    /** set 3D LUT file name */
-    file?: string | number;
     /** when to process CLUT */
     clut?: 'first' | 'all';
     /** select interpolation mode */
@@ -5943,6 +6228,102 @@ export interface FilterOptionsMap {
    * @see https://ffmpeg.org/ffmpeg-filters.html#hflip_005fvulkan
    */
   hflip_vulkan: {};
+  /**
+   * Apply a high-pass filter with 3dB point frequency.
+   * @see https://ffmpeg.org/ffmpeg-filters.html#highpass
+   */
+  highpass: {
+    /** set frequency */
+    frequency?: number;
+    /** set frequency */
+    f?: number;
+    /** set filter-width type */
+    width_type?: 'h' | 'q' | 'o' | 's' | 'k';
+    /** set filter-width type */
+    t?: 'h' | 'q' | 'o' | 's' | 'k';
+    /** set width */
+    width?: number;
+    /** set width */
+    w?: number;
+    /** set number of poles */
+    poles?: number;
+    /** set number of poles */
+    p?: number;
+    /** set mix */
+    mix?: number;
+    /** set mix */
+    m?: number;
+    /** set channels to filter */
+    channels?: string | number;
+    /** set channels to filter */
+    c?: string | number;
+    /** normalize coefficients */
+    normalize?: boolean;
+    /** normalize coefficients */
+    n?: boolean;
+    /** set transform type */
+    transform?: 'di' | 'dii' | 'tdi' | 'tdii' | 'latt' | 'svf' | 'zdf';
+    /** set transform type */
+    a?: 'di' | 'dii' | 'tdi' | 'tdii' | 'latt' | 'svf' | 'zdf';
+    /** set filtering precision */
+    precision?: 'auto' | 's16' | 's32' | 'f32' | 'f64';
+    /** set filtering precision */
+    r?: 'auto' | 's16' | 's32' | 'f32' | 'f64';
+    /** set the block size */
+    blocksize?: number;
+    /** set the block size */
+    b?: number;
+  };
+  /**
+   * Apply a high shelf filter.
+   * @see https://ffmpeg.org/ffmpeg-filters.html#highshelf
+   */
+  highshelf: {
+    /** set central frequency */
+    frequency?: number;
+    /** set central frequency */
+    f?: number;
+    /** set filter-width type */
+    width_type?: 'h' | 'q' | 'o' | 's' | 'k';
+    /** set filter-width type */
+    t?: 'h' | 'q' | 'o' | 's' | 'k';
+    /** set width */
+    width?: number;
+    /** set width */
+    w?: number;
+    /** set gain */
+    gain?: number;
+    /** set gain */
+    g?: number;
+    /** set number of poles */
+    poles?: number;
+    /** set number of poles */
+    p?: number;
+    /** set mix */
+    mix?: number;
+    /** set mix */
+    m?: number;
+    /** set channels to filter */
+    channels?: string | number;
+    /** set channels to filter */
+    c?: string | number;
+    /** normalize coefficients */
+    normalize?: boolean;
+    /** normalize coefficients */
+    n?: boolean;
+    /** set transform type */
+    transform?: 'di' | 'dii' | 'tdi' | 'tdii' | 'latt' | 'svf' | 'zdf';
+    /** set transform type */
+    a?: 'di' | 'dii' | 'tdi' | 'tdii' | 'latt' | 'svf' | 'zdf';
+    /** set filtering precision */
+    precision?: 'auto' | 's16' | 's32' | 'f32' | 'f64';
+    /** set filtering precision */
+    r?: 'auto' | 's16' | 's32' | 'f32' | 'f64';
+    /** set the block size */
+    blocksize?: number;
+    /** set the block size */
+    b?: number;
+  };
   /**
    * Generate a Hilbert transform FIR coefficients.
    * @see https://ffmpeg.org/ffmpeg-filters.html#hilbert
@@ -6311,6 +6692,20 @@ export interface FilterOptionsMap {
     as?: boolean;
   };
   /**
+   * Apply inflate effect.
+   * @see https://ffmpeg.org/ffmpeg-filters.html#inflate
+   */
+  inflate: {
+    /** set threshold for 1st plane */
+    threshold0?: number;
+    /** set threshold for 2nd plane */
+    threshold1?: number;
+    /** set threshold for 3rd plane */
+    threshold2?: number;
+    /** set threshold for 4th plane */
+    threshold3?: number;
+  };
+  /**
    * Convert progressive video into interlaced.
    * @see https://ffmpeg.org/ffmpeg-filters.html#interlace
    */
@@ -6349,9 +6744,9 @@ export interface FilterOptionsMap {
   join: {
     /** Number of input streams. */
     inputs?: number;
-    /** Channel layout of the  */
+    /** Channel layout of the output stream. */
     channel_layout?: string | number;
-    /** A comma-separated list of channels maps in the format  */
+    /** A comma-separated list of channels maps in the format 'input_stream.input_channel-output_channel. */
     map?: string | number;
   };
   /**
@@ -6568,9 +6963,7 @@ export interface FilterOptionsMap {
       | 'auto'
       | 'bt709'
       | 'unknown'
-      | 'gamma22'
       | 'bt470m'
-      | 'gamma28'
       | 'bt470bg'
       | 'smpte170m'
       | 'smpte240m'
@@ -6857,6 +7250,102 @@ export interface FilterOptionsMap {
     stats_file?: string | number;
   };
   /**
+   * Apply a low-pass filter with 3dB point frequency.
+   * @see https://ffmpeg.org/ffmpeg-filters.html#lowpass
+   */
+  lowpass: {
+    /** set frequency */
+    frequency?: number;
+    /** set frequency */
+    f?: number;
+    /** set filter-width type */
+    width_type?: 'h' | 'q' | 'o' | 's' | 'k';
+    /** set filter-width type */
+    t?: 'h' | 'q' | 'o' | 's' | 'k';
+    /** set width */
+    width?: number;
+    /** set width */
+    w?: number;
+    /** set number of poles */
+    poles?: number;
+    /** set number of poles */
+    p?: number;
+    /** set mix */
+    mix?: number;
+    /** set mix */
+    m?: number;
+    /** set channels to filter */
+    channels?: string | number;
+    /** set channels to filter */
+    c?: string | number;
+    /** normalize coefficients */
+    normalize?: boolean;
+    /** normalize coefficients */
+    n?: boolean;
+    /** set transform type */
+    transform?: 'di' | 'dii' | 'tdi' | 'tdii' | 'latt' | 'svf' | 'zdf';
+    /** set transform type */
+    a?: 'di' | 'dii' | 'tdi' | 'tdii' | 'latt' | 'svf' | 'zdf';
+    /** set filtering precision */
+    precision?: 'auto' | 's16' | 's32' | 'f32' | 'f64';
+    /** set filtering precision */
+    r?: 'auto' | 's16' | 's32' | 'f32' | 'f64';
+    /** set the block size */
+    blocksize?: number;
+    /** set the block size */
+    b?: number;
+  };
+  /**
+   * Apply a low shelf filter.
+   * @see https://ffmpeg.org/ffmpeg-filters.html#lowshelf
+   */
+  lowshelf: {
+    /** set central frequency */
+    frequency?: number;
+    /** set central frequency */
+    f?: number;
+    /** set filter-width type */
+    width_type?: 'h' | 'q' | 'o' | 's' | 'k';
+    /** set filter-width type */
+    t?: 'h' | 'q' | 'o' | 's' | 'k';
+    /** set width */
+    width?: number;
+    /** set width */
+    w?: number;
+    /** set gain */
+    gain?: number;
+    /** set gain */
+    g?: number;
+    /** set number of poles */
+    poles?: number;
+    /** set number of poles */
+    p?: number;
+    /** set mix */
+    mix?: number;
+    /** set mix */
+    m?: number;
+    /** set channels to filter */
+    channels?: string | number;
+    /** set channels to filter */
+    c?: string | number;
+    /** normalize coefficients */
+    normalize?: boolean;
+    /** normalize coefficients */
+    n?: boolean;
+    /** set transform type */
+    transform?: 'di' | 'dii' | 'tdi' | 'tdii' | 'latt' | 'svf' | 'zdf';
+    /** set transform type */
+    a?: 'di' | 'dii' | 'tdi' | 'tdii' | 'latt' | 'svf' | 'zdf';
+    /** set filtering precision */
+    precision?: 'auto' | 's16' | 's32' | 'f32' | 'f64';
+    /** set filtering precision */
+    r?: 'auto' | 's16' | 's32' | 'f32' | 'f64';
+    /** set the block size */
+    blocksize?: number;
+    /** set the block size */
+    b?: number;
+  };
+  /**
    * Turns a certain luma into transparency.
    * @see https://ffmpeg.org/ffmpeg-filters.html#lumakey
    */
@@ -6867,6 +7356,34 @@ export interface FilterOptionsMap {
     tolerance?: number;
     /** set the softness value */
     softness?: number;
+  };
+  /**
+   * Compute and apply a lookup table to the RGB/YUV input video.
+   * @see https://ffmpeg.org/ffmpeg-filters.html#lut
+   */
+  lut: {
+    /** set component #0 expression */
+    c0?: string | number;
+    /** set component #1 expression */
+    c1?: string | number;
+    /** set component #2 expression */
+    c2?: string | number;
+    /** set component #3 expression */
+    c3?: string | number;
+    /** set Y expression */
+    y?: string | number;
+    /** set U expression */
+    u?: string | number;
+    /** set V expression */
+    v?: string | number;
+    /** set R expression */
+    r?: string | number;
+    /** set G expression */
+    g?: string | number;
+    /** set B expression */
+    b?: string | number;
+    /** set A expression */
+    a?: string | number;
   };
   /**
    * Adjust colors using a 1D LUT.
@@ -6883,6 +7400,16 @@ export interface FilterOptionsMap {
    * @see https://ffmpeg.org/ffmpeg-filters.html#lut2
    */
   lut2: {
+    /** set component #0 expression */
+    c0?: string | number;
+    /** set component #1 expression */
+    c1?: string | number;
+    /** set component #2 expression */
+    c2?: string | number;
+    /** set component #3 expression */
+    c3?: string | number;
+    /** set output depth */
+    d?: number;
     /** Action to take when encountering EOF from secondary input  */
     eof_action?: 'repeat' | 'endall' | 'pass';
     /** force termination when the shortest input terminates */
@@ -6903,14 +7430,62 @@ export interface FilterOptionsMap {
     clut?: 'first' | 'all';
     /** select interpolation mode */
     interp?: 'nearest' | 'trilinear' | 'tetrahedral' | 'pyramid' | 'prism';
-    /** Action to take when encountering EOF from secondary input  */
-    eof_action?: 'repeat' | 'endall' | 'pass';
-    /** force termination when the shortest input terminates */
-    shortest?: boolean;
-    /** extend last frame of secondary streams beyond EOF */
-    repeatlast?: boolean;
-    /** How strictly to sync streams based on secondary input timestamps */
-    ts_sync_mode?: 'default' | 'nearest';
+  };
+  /**
+   * Compute and apply a lookup table to the RGB input video.
+   * @see https://ffmpeg.org/ffmpeg-filters.html#lutrgb
+   */
+  lutrgb: {
+    /** set component #0 expression */
+    c0?: string | number;
+    /** set component #1 expression */
+    c1?: string | number;
+    /** set component #2 expression */
+    c2?: string | number;
+    /** set component #3 expression */
+    c3?: string | number;
+    /** set Y expression */
+    y?: string | number;
+    /** set U expression */
+    u?: string | number;
+    /** set V expression */
+    v?: string | number;
+    /** set R expression */
+    r?: string | number;
+    /** set G expression */
+    g?: string | number;
+    /** set B expression */
+    b?: string | number;
+    /** set A expression */
+    a?: string | number;
+  };
+  /**
+   * Compute and apply a lookup table to the YUV input video.
+   * @see https://ffmpeg.org/ffmpeg-filters.html#lutyuv
+   */
+  lutyuv: {
+    /** set component #0 expression */
+    c0?: string | number;
+    /** set component #1 expression */
+    c1?: string | number;
+    /** set component #2 expression */
+    c2?: string | number;
+    /** set component #3 expression */
+    c3?: string | number;
+    /** set Y expression */
+    y?: string | number;
+    /** set U expression */
+    u?: string | number;
+    /** set V expression */
+    v?: string | number;
+    /** set R expression */
+    r?: string | number;
+    /** set G expression */
+    g?: string | number;
+    /** set B expression */
+    b?: string | number;
+    /** set A expression */
+    a?: string | number;
   };
   /**
    * Apply LV2 effect.
@@ -7433,16 +8008,56 @@ export interface FilterOptionsMap {
    * @see https://ffmpeg.org/ffmpeg-filters.html#noise
    */
   noise: {
-    /** _seed */
-    all?: number;
-    /** _seed */
-    c0?: number;
-    /** _seed */
-    c1?: number;
-    /** _seed */
-    c2?: number;
-    /** _seed */
-    c3?: number;
+    /** set component #0 noise seed */
+    all_seed?: number;
+    /** set component #0 strength */
+    all_strength?: number;
+    /** set component #0 strength */
+    alls?: number;
+    /** set component #0 flags */
+    all_flags?: 'a' | 'p' | 't' | 'u' | (string & {});
+    /** set component #0 flags */
+    allf?: 'a' | 'p' | 't' | 'u' | (string & {});
+    /** set component #0 noise seed */
+    c0_seed?: number;
+    /** set component #0 strength */
+    c0_strength?: number;
+    /** set component #0 strength */
+    c0s?: number;
+    /** set component #0 flags */
+    c0_flags?: 'a' | 'p' | 't' | 'u' | (string & {});
+    /** set component #0 flags */
+    c0f?: 'a' | 'p' | 't' | 'u' | (string & {});
+    /** set component #1 noise seed */
+    c1_seed?: number;
+    /** set component #1 strength */
+    c1_strength?: number;
+    /** set component #1 strength */
+    c1s?: number;
+    /** set component #1 flags */
+    c1_flags?: 'a' | 'p' | 't' | 'u' | (string & {});
+    /** set component #1 flags */
+    c1f?: 'a' | 'p' | 't' | 'u' | (string & {});
+    /** set component #2 noise seed */
+    c2_seed?: number;
+    /** set component #2 strength */
+    c2_strength?: number;
+    /** set component #2 strength */
+    c2s?: number;
+    /** set component #2 flags */
+    c2_flags?: 'a' | 'p' | 't' | 'u' | (string & {});
+    /** set component #2 flags */
+    c2f?: 'a' | 'p' | 't' | 'u' | (string & {});
+    /** set component #3 noise seed */
+    c3_seed?: number;
+    /** set component #3 strength */
+    c3_strength?: number;
+    /** set component #3 strength */
+    c3s?: number;
+    /** set component #3 flags */
+    c3_flags?: 'a' | 'p' | 't' | 'u' | (string & {});
+    /** set component #3 flags */
+    c3f?: 'a' | 'p' | 't' | 'u' | (string & {});
   };
   /**
    * Normalize RGB video.
@@ -7489,6 +8104,30 @@ export interface FilterOptionsMap {
     d?: string | number;
     /** set video sample aspect ratio */
     sar?: string | number;
+  };
+  /**
+   * Apply OCIO Display/View transform
+   * @see https://ffmpeg.org/ffmpeg-filters.html#ocio
+   */
+  ocio: {
+    /** OCIO config path, overriding OCIO environment variable. */
+    config?: string | number;
+    /** Input color space */
+    input?: string | number;
+    /** Output color space */
+    output?: string | number;
+    /** Specify a File Transform */
+    filetransform?: string | number;
+    /** Output display, used instead of output color space. */
+    display?: string | number;
+    /** View, output view transform, used in combination with display. */
+    view?: string | number;
+    /** Invert output display/view transform. */
+    inverse?: number;
+    /** Output video format */
+    format?: string | number;
+    /** OCIO context parameters */
+    context_params?: string | number;
   };
   /**
    * Optical Character Recognition.
@@ -7611,6 +8250,30 @@ export interface FilterOptionsMap {
     ts_sync_mode?: 'default' | 'nearest';
   };
   /**
+   * Overlay one D3D11 video on top of another
+   * @see https://ffmpeg.org/ffmpeg-filters.html#overlay_005fd3d11
+   */
+  overlay_d3d11: {
+    /** Overlay x position */
+    x?: string | number;
+    /** Overlay y position */
+    y?: string | number;
+    /** Overlay width */
+    w?: string | number;
+    /** Overlay height */
+    h?: string | number;
+    /** Overlay global alpha */
+    alpha?: number;
+    /** Force output through an internal unordered-access texture */
+    force_output_copy?: boolean;
+    /** Action to take when encountering EOF from secondary input */
+    eof_action?: 'repeat' | 'endall' | 'pass';
+    /** force termination when the shortest input terminates */
+    shortest?: boolean;
+    /** repeat overlay of the last overlay frame */
+    repeatlast?: boolean;
+  };
+  /**
    * Overlay one video on top of another
    * @see https://ffmpeg.org/ffmpeg-filters.html#overlay_005fopencl
    */
@@ -7697,8 +8360,24 @@ export interface FilterOptionsMap {
     h?: string | number;
     /** Overlay global alpha */
     alpha?: number;
-    /** alpha format */
-    alpha_format?: 'straight' | 'premultiplied';
+    /** Action to take when encountering EOF from secondary input  */
+    eof_action?: 'repeat' | 'endall' | 'pass';
+    /** force termination when the shortest input terminates */
+    shortest?: boolean;
+    /** repeat overlay of the last overlay frame */
+    repeatlast?: boolean;
+    /** How strictly to sync streams based on secondary input timestamps */
+    ts_sync_mode?: 'default' | 'nearest';
+  };
+  /**
+   * Overlay filter for VideoToolbox frames using Metal compute
+   * @see https://ffmpeg.org/ffmpeg-filters.html#overlay_005fvideotoolbox
+   */
+  overlay_videotoolbox: {
+    /** Overlay x position */
+    x?: number;
+    /** Overlay y position */
+    y?: number;
     /** Action to take when encountering EOF from secondary input  */
     eof_action?: 'repeat' | 'endall' | 'pass';
     /** force termination when the shortest input terminates */
@@ -7717,6 +8396,12 @@ export interface FilterOptionsMap {
     x?: number;
     /** Set vertical offset */
     y?: number;
+    /** Action to take when encountering EOF from secondary input  */
+    eof_action?: 'repeat' | 'endall' | 'pass';
+    /** force termination when the shortest input terminates */
+    shortest?: boolean;
+    /** repeat overlay of the last overlay frame */
+    repeatlast?: boolean;
   };
   /**
    * Denoise using wavelets.
@@ -7979,7 +8664,7 @@ export interface FilterOptionsMap {
    */
   phase: {
     /** set phase mode */
-    mode?: 'p' | 't' | 'b' | 'T' | 'B' | 'U' | 'a' | 'A';
+    mode?: 'p' | 't' | 'b' | 'T' | 'B' | 'u' | 'U' | 'a' | 'A';
   };
   /**
    * Filter out photosensitive epilepsy seizure-inducing flashes.
@@ -8712,6 +9397,14 @@ export interface FilterOptionsMap {
     param1?: number;
     /** specify when to evaluate expressions */
     eval?: 'init' | 'frame';
+    /** Action to take when encountering EOF from secondary input  */
+    eof_action?: 'repeat' | 'endall' | 'pass';
+    /** force termination when the shortest input terminates */
+    shortest?: boolean;
+    /** extend last frame of secondary streams beyond EOF */
+    repeatlast?: boolean;
+    /** How strictly to sync streams based on secondary input timestamps */
+    ts_sync_mode?: 'default' | 'nearest';
   };
   /**
    * Scale the input video size and/or convert the image format to the given reference.
@@ -8864,16 +9557,22 @@ export interface FilterOptionsMap {
     reset_sar?: boolean;
   };
   /**
-   * Scale video using Direct3D11
+   * Scale D3D11 video
    * @see https://ffmpeg.org/ffmpeg-filters.html#scale_005fd3d11
    */
   scale_d3d11: {
     /** Output video width */
+    w?: string | number;
+    /** Output video width */
     width?: string | number;
+    /** Output video height */
+    h?: string | number;
     /** Output video height */
     height?: string | number;
     /** Output video pixel format */
     format?: string | number;
+    /** Force P010 shader output through an internal unordered-access texture */
+    force_output_copy?: boolean;
   };
   /**
    * Scale video using Direct3D12
@@ -8925,19 +9624,31 @@ export interface FilterOptionsMap {
     /** Do not process frames at all if parameters match */
     passthrough?: boolean;
     /** Scaling algorithm */
-    algo?: 'area' | 'bicubic' | 'bilinear' | 'gauss' | 'lanczos' | 'neighbor' | 'sinc' | 'spline' | 'experimental';
+    algo?: 'neighbor' | 'bilinear' | 'bicubic' | 'lanczos';
+    /** Algorithm-Specific parameter */
+    param?: number;
     /** Decrease or increase w/h if necessary to keep the original AR */
     force_original_aspect_ratio?: 'disable' | 'decrease' | 'increase';
     /** Enforce that the output resolution is divisible by a defined integer when force_original_aspect_ratio is used */
     force_divisible_by?: number;
-    /** Crop offset X */
-    cx?: number;
-    /** Crop offset Y */
-    cy?: number;
-    /** Crop width */
-    cw?: number;
-    /** Crop height */
-    ch?: number;
+    /** Reset SAR to 1 and scale to square pixels if scaling proportionally */
+    reset_sar?: boolean;
+  };
+  /**
+   * Quick Sync Video
+   * @see https://ffmpeg.org/ffmpeg-filters.html#scale_005fqsv
+   */
+  scale_qsv: {
+    /** Output video width(0=input video width, -1=keep input video aspect) */
+    w?: string | number;
+    /** Output video height(0=input video height, -1=keep input video aspect) */
+    h?: string | number;
+    /** Output pixel format */
+    format?: string | number;
+    /** scaling &amp; format conversion mode (mode compute(3), vd(4) and ve(5) are only available on some platforms) */
+    mode?: 'low_power' | 'hq' | 'compute' | 'vd' | 've';
+    /** Internal parallelization depth, the higher the value the higher the latency. */
+    async_depth?: number;
   };
   /**
    * Rockchip RGA (2D Raster Graphic Acceleration) video resizer and format converter
@@ -8954,6 +9665,8 @@ export interface FilterOptionsMap {
     force_original_aspect_ratio?: 'disable' | 'decrease' | 'increase';
     /** Enforce that the output resolution is divisible by a defined integer when force_original_aspect_ratio is used */
     force_divisible_by?: number;
+    /** Reset SAR to 1 and scale to square pixels if scaling proportionally */
+    reset_sar?: boolean;
     /** Enforce planar YUV format output */
     force_yuv?: 'disable' | 'auto' | '8bit' | '10bit';
     /** Enforce chroma of planar YUV format output */
@@ -9122,24 +9835,24 @@ export interface FilterOptionsMap {
   selectivecolor: {
     /** select correction method */
     correction_method?: 'absolute' | 'relative';
-    /** s */
-    red?: string | number;
-    /** s */
-    yellow?: string | number;
-    /** s */
-    green?: string | number;
-    /** s */
-    cyan?: string | number;
-    /** s */
-    blue?: string | number;
-    /** s */
-    magenta?: string | number;
-    /** s */
-    white?: string | number;
-    /** s */
-    neutral?: string | number;
-    /** s */
-    black?: string | number;
+    /** adjust red regions */
+    reds?: string | number;
+    /** adjust yellow regions */
+    yellows?: string | number;
+    /** adjust green regions */
+    greens?: string | number;
+    /** adjust cyan regions */
+    cyans?: string | number;
+    /** adjust blue regions */
+    blues?: string | number;
+    /** adjust magenta regions */
+    magentas?: string | number;
+    /** adjust white regions */
+    whites?: string | number;
+    /** adjust neutral regions */
+    neutrals?: string | number;
+    /** adjust black regions */
+    blacks?: string | number;
     /** set Photoshop selectivecolor file name */
     psfile?: string | number;
   };
@@ -10102,7 +10815,26 @@ export interface FilterOptionsMap {
    * Generate sine wave audio signal.
    * @see https://ffmpeg.org/ffmpeg-filters.html#sine
    */
-  sine: {};
+  sine: {
+    /** set the sine frequency */
+    frequency?: number;
+    /** set the sine frequency */
+    f?: number;
+    /** set the beep frequency factor */
+    beep_factor?: number;
+    /** set the beep frequency factor */
+    b?: number;
+    /** set the sample rate */
+    sample_rate?: number;
+    /** set the sample rate */
+    r?: number;
+    /** set the audio duration */
+    duration?: string | number;
+    /** set the audio duration */
+    d?: string | number;
+    /** set the number of samples per frame */
+    samples_per_frame?: string | number;
+  };
   /**
    * Calculate spatial information (SI) and temporal information (TI).
    * @see https://ffmpeg.org/ffmpeg-filters.html#siti
@@ -10365,7 +11097,12 @@ export interface FilterOptionsMap {
    * Apply DNN-based image super resolution to the input.
    * @see https://ffmpeg.org/ffmpeg-filters.html#sr
    */
-  sr: {};
+  sr: {
+    /** DNN backend used for model execution */
+    dnn_backend?: 'tensorflow';
+    /** scale factor for SRCNN model */
+    scale_factor?: number;
+  };
   /**
    * AMF HQ video upscaling
    * @see https://ffmpeg.org/ffmpeg-filters.html#sr_005famf
@@ -10384,7 +11121,7 @@ export interface FilterOptionsMap {
     /** Fill */
     fill?: boolean;
     /** Scaling algorithm */
-    algorithm?: number;
+    algorithm?: 'bilinear' | 'bicubic' | 'sr1-0' | 'point' | 'sr1-1';
   };
   /**
    * Calculate the SSIM between two video streams.
@@ -11036,14 +11773,6 @@ export interface FilterOptionsMap {
     c3_opacity?: number;
     /** set opacity for all color components */
     all_opacity?: number;
-    /** Action to take when encountering EOF from secondary input  */
-    eof_action?: 'repeat' | 'endall' | 'pass';
-    /** force termination when the shortest input terminates */
-    shortest?: boolean;
-    /** extend last frame of secondary streams beyond EOF */
-    repeatlast?: boolean;
-    /** How strictly to sync streams based on secondary input timestamps */
-    ts_sync_mode?: 'default' | 'nearest';
   };
   /**
    * Apply a telecine pattern.
@@ -11200,6 +11929,56 @@ export interface FilterOptionsMap {
     pad?: number;
   };
   /**
+   * Apply a tilt shelf filter.
+   * @see https://ffmpeg.org/ffmpeg-filters.html#tiltshelf
+   */
+  tiltshelf: {
+    /** set central frequency */
+    frequency?: number;
+    /** set central frequency */
+    f?: number;
+    /** set filter-width type */
+    width_type?: 'h' | 'q' | 'o' | 's' | 'k';
+    /** set filter-width type */
+    t?: 'h' | 'q' | 'o' | 's' | 'k';
+    /** set width */
+    width?: number;
+    /** set width */
+    w?: number;
+    /** set gain */
+    gain?: number;
+    /** set gain */
+    g?: number;
+    /** set number of poles */
+    poles?: number;
+    /** set number of poles */
+    p?: number;
+    /** set mix */
+    mix?: number;
+    /** set mix */
+    m?: number;
+    /** set channels to filter */
+    channels?: string | number;
+    /** set channels to filter */
+    c?: string | number;
+    /** normalize coefficients */
+    normalize?: boolean;
+    /** normalize coefficients */
+    n?: boolean;
+    /** set transform type */
+    transform?: 'di' | 'dii' | 'tdi' | 'tdii' | 'latt' | 'svf' | 'zdf';
+    /** set transform type */
+    a?: 'di' | 'dii' | 'tdi' | 'tdii' | 'latt' | 'svf' | 'zdf';
+    /** set filtering precision */
+    precision?: 'auto' | 's16' | 's32' | 'f32' | 'f64';
+    /** set filtering precision */
+    r?: 'auto' | 's16' | 's32' | 'f32' | 'f64';
+    /** set the block size */
+    blocksize?: number;
+    /** set the block size */
+    b?: number;
+  };
+  /**
    * Perform temporal field interlacing.
    * @see https://ffmpeg.org/ffmpeg-filters.html#tinterlace
    */
@@ -11316,37 +12095,81 @@ export interface FilterOptionsMap {
     threshold?: number;
   };
   /**
+   * Perform HDR to SDR conversion with tonemapping on D3D11 frames.
+   * @see https://ffmpeg.org/ffmpeg-filters.html#tonemap_005fd3d11
+   */
+  tonemap_d3d11: {
+    /** Tonemap algorithm selection */
+    tonemap?: 'none' | 'linear' | 'gamma' | 'clip' | 'reinhard' | 'hable' | 'mobius' | 'bt2390';
+    /** Tonemap mode selection */
+    tonemap_mode?: 'max' | 'rgb' | 'lum' | 'itp' | 'auto';
+    /** Set transfer characteristic */
+    transfer?: 'bt709' | 'bt2020' | 'smpte2084';
+    /** Set transfer characteristic */
+    t?: 'bt709' | 'bt2020' | 'smpte2084';
+    /** Set colorspace matrix */
+    matrix?: 'bt709' | 'bt2020';
+    /** Set colorspace matrix */
+    m?: 'bt709' | 'bt2020';
+    /** Set color primaries */
+    primaries?: 'bt709' | 'bt2020';
+    /** Set color primaries */
+    p?: 'bt709' | 'bt2020';
+    /** Set color range */
+    range?: 'tv' | 'pc' | 'limited' | 'full';
+    /** Set color range */
+    r?: 'tv' | 'pc' | 'limited' | 'full';
+    /** Output pixel format */
+    format?: string | number;
+    /** Apply Dolby Vision metadata if possible */
+    apply_dovi?: boolean;
+    /** Force output through an internal unordered-access texture */
+    force_output_copy?: boolean;
+    /** Signal peak override */
+    peak?: number;
+    /** Tonemap parameter */
+    param?: number;
+    /** Desaturation parameter */
+    desat?: number;
+  };
+  /**
    * Perform HDR to SDR conversion with tonemapping.
    * @see https://ffmpeg.org/ffmpeg-filters.html#tonemap_005fopencl
    */
   tonemap_opencl: {
-    /** tonemap algorithm selection */
-    tonemap?: 'none' | 'linear' | 'gamma' | 'clip' | 'reinhard' | 'hable' | 'mobius';
-    /** set transfer characteristic */
-    transfer?: 'bt709' | 'bt2020';
-    /** set transfer characteristic */
-    t?: 'bt709' | 'bt2020';
-    /** set colorspace matrix */
+    /** Tonemap algorithm selection */
+    tonemap?: 'none' | 'linear' | 'gamma' | 'clip' | 'reinhard' | 'hable' | 'mobius' | 'bt2390';
+    /** Tonemap mode selection */
+    tonemap_mode?: 'max' | 'rgb' | 'lum' | 'itp' | 'auto';
+    /** Set transfer characteristic */
+    transfer?: 'bt709' | 'bt2020' | 'smpte2084';
+    /** Set transfer characteristic */
+    t?: 'bt709' | 'bt2020' | 'smpte2084';
+    /** Set colorspace matrix */
     matrix?: 'bt709' | 'bt2020';
-    /** set colorspace matrix */
+    /** Set colorspace matrix */
     m?: 'bt709' | 'bt2020';
-    /** set color primaries */
+    /** Set color primaries */
     primaries?: 'bt709' | 'bt2020';
-    /** set color primaries */
+    /** Set color primaries */
     p?: 'bt709' | 'bt2020';
-    /** set color range */
+    /** Set color range */
     range?: 'tv' | 'pc' | 'limited' | 'full';
-    /** set color range */
+    /** Set color range */
     r?: 'tv' | 'pc' | 'limited' | 'full';
-    /** output pixel format */
+    /** Output pixel format */
     format?: string | number;
-    /** signal peak override */
+    /** Apply Dolby Vision metadata if possible */
+    apply_dovi?: boolean;
+    /** Apply tradeoffs to offload computing */
+    tradeoff?: 'auto' | 'disabled' | 'enabled';
+    /** Signal peak override */
     peak?: number;
-    /** tonemap parameter */
+    /** Tonemap parameter */
     param?: number;
-    /** desaturation parameter */
+    /** Desaturation parameter */
     desat?: number;
-    /** scene detection threshold */
+    /** Scene detection threshold */
     threshold?: number;
   };
   /**
@@ -11372,6 +12195,44 @@ export interface FilterOptionsMap {
     display?: string | number;
     /** set content light level information */
     light?: string | number;
+  };
+  /**
+   * Perform HDR to SDR conversion with Metal.
+   * @see https://ffmpeg.org/ffmpeg-filters.html#tonemap_005fvideotoolbox
+   */
+  tonemap_videotoolbox: {
+    /** Tonemap algorithm selection */
+    tonemap?: 'none' | 'linear' | 'gamma' | 'clip' | 'reinhard' | 'hable' | 'mobius' | 'bt2390';
+    /** Tonemap mode selection */
+    tonemap_mode?: 'max' | 'rgb' | 'lum' | 'itp';
+    /** Set transfer characteristic */
+    transfer?: 'bt709' | 'bt2020' | 'smpte2084';
+    /** Set transfer characteristic */
+    t?: 'bt709' | 'bt2020' | 'smpte2084';
+    /** Set colorspace matrix */
+    matrix?: 'bt709' | 'bt2020';
+    /** Set colorspace matrix */
+    m?: 'bt709' | 'bt2020';
+    /** Set color primaries */
+    primaries?: 'bt709' | 'bt2020';
+    /** Set color primaries */
+    p?: 'bt709' | 'bt2020';
+    /** Set color range */
+    range?: 'tv' | 'pc' | 'limited' | 'full';
+    /** Set color range */
+    r?: 'tv' | 'pc' | 'limited' | 'full';
+    /** Output pixel format */
+    format?: string | number;
+    /** Apply Dolby Vision metadata if possible */
+    apply_dovi?: boolean;
+    /** Signal peak override */
+    peak?: number;
+    /** Tonemap parameter */
+    param?: number;
+    /** Desaturation parameter */
+    desat?: number;
+    /** Scene detection threshold */
+    threshold?: number;
   };
   /**
    * SIMD optimized HDR to SDR tonemapping
@@ -11448,6 +12309,16 @@ export interface FilterOptionsMap {
     passthrough?: 'none' | 'landscape' | 'portrait';
   };
   /**
+   * Transpose D3D11 video
+   * @see https://ffmpeg.org/ffmpeg-filters.html#transpose_005fd3d11
+   */
+  transpose_d3d11: {
+    /** set transpose direction */
+    dir?: 'cclock_flip' | 'clock' | 'cclock' | 'clock_flip' | 'reversal' | 'hflip' | 'vflip';
+    /** do not apply transposition if the input matches the specified geometry */
+    passthrough?: 'none' | 'portrait' | 'landscape';
+  };
+  /**
    * NVIDIA Performance Primitives video transpose
    * @see https://ffmpeg.org/ffmpeg-filters.html#transpose_005fnpp
    */
@@ -11478,6 +12349,16 @@ export interface FilterOptionsMap {
     passthrough?: 'none' | 'portrait' | 'landscape';
   };
   /**
+   * Transpose Videotoolbox frames
+   * @see https://ffmpeg.org/ffmpeg-filters.html#transpose_005fvt
+   */
+  transpose_vt: {
+    /** set transpose direction */
+    dir?: 'cclock_flip' | 'clock' | 'cclock' | 'clock_flip' | 'reversal' | 'hflip' | 'vflip';
+    /** do not apply transposition if the input matches the specified geometry */
+    passthrough?: 'none' | 'portrait' | 'landscape';
+  };
+  /**
    * Transpose Vulkan Filter
    * @see https://ffmpeg.org/ffmpeg-filters.html#transpose_005fvulkan
    */
@@ -11486,6 +12367,56 @@ export interface FilterOptionsMap {
     dir?: 'cclock_flip' | 'clock' | 'cclock' | 'clock_flip';
     /** do not apply transposition if the input matches the specified geometry */
     passthrough?: 'none' | 'portrait' | 'landscape';
+  };
+  /**
+   * Boost or cut upper frequencies.
+   * @see https://ffmpeg.org/ffmpeg-filters.html#treble
+   */
+  treble: {
+    /** set central frequency */
+    frequency?: number;
+    /** set central frequency */
+    f?: number;
+    /** set filter-width type */
+    width_type?: 'h' | 'q' | 'o' | 's' | 'k';
+    /** set filter-width type */
+    t?: 'h' | 'q' | 'o' | 's' | 'k';
+    /** set width */
+    width?: number;
+    /** set width */
+    w?: number;
+    /** set gain */
+    gain?: number;
+    /** set gain */
+    g?: number;
+    /** set number of poles */
+    poles?: number;
+    /** set number of poles */
+    p?: number;
+    /** set mix */
+    mix?: number;
+    /** set mix */
+    m?: number;
+    /** set channels to filter */
+    channels?: string | number;
+    /** set channels to filter */
+    c?: string | number;
+    /** normalize coefficients */
+    normalize?: boolean;
+    /** normalize coefficients */
+    n?: boolean;
+    /** set transform type */
+    transform?: 'di' | 'dii' | 'tdi' | 'tdii' | 'latt' | 'svf' | 'zdf';
+    /** set transform type */
+    a?: 'di' | 'dii' | 'tdi' | 'tdii' | 'latt' | 'svf' | 'zdf';
+    /** set filtering precision */
+    precision?: 'auto' | 's16' | 's32' | 'f32' | 'f64';
+    /** set filtering precision */
+    r?: 'auto' | 's16' | 's32' | 'f32' | 'f64';
+    /** set the block size */
+    blocksize?: number;
+    /** set the block size */
+    b?: number;
   };
   /**
    * Apply tremolo effect.
@@ -11502,25 +12433,25 @@ export interface FilterOptionsMap {
    * @see https://ffmpeg.org/ffmpeg-filters.html#trim
    */
   trim: {
-    /** Timestamp of the first frame that  */
+    /** Timestamp of the first frame that should be passed */
     start?: string | number;
-    /** Timestamp of the first frame that  */
+    /** Timestamp of the first frame that should be passed */
     starti?: string | number;
-    /** Timestamp of the first frame that  */
+    /** Timestamp of the first frame that should be dropped again */
     end?: string | number;
-    /** Timestamp of the first frame that  */
+    /** Timestamp of the first frame that should be dropped again */
     endi?: string | number;
-    /** Timestamp of the first frame that should be  */
+    /** Timestamp of the first frame that should be  passed */
     start_pts?: number;
-    /** Timestamp of the first frame that should be  */
+    /** Timestamp of the first frame that should be dropped again */
     end_pts?: number;
     /** Maximum duration of the output */
     duration?: string | number;
     /** Maximum duration of the output */
     durationi?: string | number;
-    /** Number of the first frame that should be passed  */
+    /** Number of the first frame that should be passed to the output */
     start_frame?: number;
-    /** Number of the first frame that should be dropped  */
+    /** Number of the first frame that should be dropped again */
     end_frame?: number;
   };
   /**
@@ -11765,36 +12696,6 @@ export interface FilterOptionsMap {
     reset_rot?: boolean;
   };
   /**
-   * Convert 360 projection of video.
-   * @see https://ffmpeg.org/ffmpeg-filters.html#v360_005fvulkan
-   */
-  v360_vulkan: {
-    /** set input projection */
-    input?: number;
-    /** set output projection */
-    output?: number;
-    /** output width */
-    w?: number;
-    /** output height */
-    h?: number;
-    /** yaw rotation */
-    yaw?: number;
-    /** pitch rotation */
-    pitch?: number;
-    /** roll rotation */
-    roll?: number;
-    /** rotation order */
-    rorder?: string | number;
-    /** set output horizontal FOV angle */
-    h_fov?: number;
-    /** set output vertical FOV angle */
-    v_fov?: number;
-    /** set input horizontal FOV angle */
-    ih_fov?: number;
-    /** set input vertical FOV angle */
-    iv_fov?: number;
-  };
-  /**
    * Apply a Wavelet based Denoiser.
    * @see https://ffmpeg.org/ffmpeg-filters.html#vaguedenoiser
    */
@@ -11944,7 +12845,7 @@ export interface FilterOptionsMap {
   vidstabdetect: {
     /** path to the file used to write the transforms */
     result?: string | number;
-    /** how shaky is the video and how quick is the camera? */
+    /** how shaky is the video and how quick is the camera? 1: little (fast) 10: very strong/quick (slow) */
     shakiness?: number;
     /** (&gt;=shakiness) 1: low 15: high (slow) */
     accuracy?: number;
@@ -11954,7 +12855,7 @@ export interface FilterOptionsMap {
     mincontrast?: number;
     /** 0: draw nothing; 1,2: show fields and transforms */
     show?: number;
-    /** virtual tripod mode (if &gt;0): motion is compared to a reference */
+    /** virtual tripod mode (if &gt;0): motion is compared to a reference reference frame (frame # is the value) */
     tripod?: number;
     /** transforms data file format */
     fileformat?: 'ascii' | 'binary';
@@ -12082,27 +12983,99 @@ export interface FilterOptionsMap {
     /** Output pixel format */
     format?: string | number;
     /** Scale type */
-    scale_type?: number;
+    scale_type?: 'bilinear' | 'bicubic';
     /** Color profile */
-    color_profile?: number;
-    /** Input color range */
-    in_color_range?: number;
-    /** Output color range */
-    out_color_range?: number;
-    /** Input color primaries */
-    in_primaries?: number;
+    color_profile?: 'bt601' | 'bt709' | 'bt2020';
+    /** Color range */
+    color_range?: 'studio' | 'full';
     /** Output color primaries */
-    out_primaries?: number;
-    /** Input transfer characteristics */
-    in_trc?: number;
+    primaries?: 'bt709' | 'bt470m' | 'bt470bg' | 'smpte170m' | 'smpte240m' | 'film' | 'bt2020' | 'smpte428' | 'smpte431' | 'smpte432' | 'jedec-p22';
     /** Output transfer characteristics */
-    out_trc?: number;
+    trc?:
+      | 'bt709'
+      | 'gamma22'
+      | 'gamma28'
+      | 'smpte170m'
+      | 'smpte240m'
+      | 'linear'
+      | 'log'
+      | 'log-sqrt'
+      | 'iec61966-2-4'
+      | 'bt1361-ecg'
+      | 'iec61966-2-1'
+      | 'bt2020-10'
+      | 'bt2020-12'
+      | 'smpte2084'
+      | 'smpte428'
+      | 'arib-std-b67';
     /** decrease or increase w/h if necessary to keep the original AR */
-    force_original_aspect_ratio?: number;
+    force_original_aspect_ratio?: 'disable' | 'decrease' | 'increase';
     /** enforce that the output resolution is divisible by a defined integer when force_original_aspect_ratio is used */
     force_divisible_by?: number;
     /** reset SAR to 1 and scale to square pixels if scaling proportionally */
     reset_sar?: boolean;
+  };
+  /**
+   * Quick Sync Video
+   * @see https://ffmpeg.org/ffmpeg-filters.html#vpp_005fqsv
+   */
+  vpp_qsv: {
+    /** deinterlace mode: 0=off, 1=bob, 2=advanced */
+    deinterlace?: 'bob' | 'advanced';
+    /** denoise level [0, 100] */
+    denoise?: number;
+    /** enhancement level [0, 100] */
+    detail?: number;
+    /** output framerate */
+    framerate?: string | number;
+    /** Enable ProcAmp */
+    procamp?: number;
+    /** ProcAmp hue */
+    hue?: number;
+    /** ProcAmp saturation */
+    saturation?: number;
+    /** ProcAmp contrast */
+    contrast?: number;
+    /** ProcAmp brightness */
+    brightness?: number;
+    /** set transpose direction */
+    transpose?: 'cclock_hflip' | 'clock' | 'cclock' | 'clock_hflip' | 'reversal' | 'hflip' | 'vflip';
+    /** set the width crop area expression */
+    cw?: string | number;
+    /** set the height crop area expression */
+    ch?: string | number;
+    /** set the x crop area expression */
+    cx?: string | number;
+    /** set the y crop area expression */
+    cy?: string | number;
+    /** Output video width(0=input video width, -1=keep input video aspect) */
+    w?: string | number;
+    /** Output video width(0=input video width, -1=keep input video aspect) */
+    width?: string | number;
+    /** Output video height(0=input video height, -1=keep input video aspect) */
+    h?: string | number;
+    /** Output video height(0=input video height, -1=keep input video aspect) */
+    height?: string | number;
+    /** Output pixel format */
+    format?: string | number;
+    /** Internal parallelization depth, the higher the value the higher the latency. */
+    async_depth?: number;
+    /** scaling &amp; format conversion mode (mode compute(3), vd(4) and ve(5) are only available on some platforms) */
+    scale_mode?: 'auto' | 'low_power' | 'hq' | 'compute' | 'vd' | 've';
+    /** Generate output at frame rate or field rate, available only for deinterlace mode */
+    rate?: 'frame' | 'field';
+    /** Output color range */
+    out_range?: 'full' | 'limited' | 'jpeg' | 'mpeg' | 'tv' | 'pc';
+    /** Output color matrix coefficient set */
+    out_color_matrix?: string | number;
+    /** Output color primaries */
+    out_color_primaries?: string | number;
+    /** Output color transfer characteristics */
+    out_color_transfer?: string | number;
+    /** Perform tonemapping (0=disable tonemapping, 1=perform tonemapping if the input has HDR metadata) */
+    tonemap?: number;
+    /** Apply pass through mode if possible. */
+    passthrough?: boolean;
   };
   /**
    * Rockchip RGA (2D Raster Graphic Acceleration) video post-process (scale/crop/transpose)
@@ -12148,7 +13121,7 @@ export interface FilterOptionsMap {
     /** Use display output duplication for screen capture */
     duplicate_output?: boolean;
     /** Capture synchronization mode */
-    capture_mode?: number;
+    capture_mode?: 'keep_framerate' | 'wait_for_present' | 'get_current';
   };
   /**
    * Stack video inputs vertically.
@@ -12259,8 +13232,6 @@ export interface FilterOptionsMap {
     model?: string | number;
     /** Language for transcription ('auto' for auto-detect) */
     language?: string | number;
-    /** Translate from source language to English */
-    translate?: boolean;
     /** Audio queue size */
     queue?: string | number;
     /** Use GPU for processing */
@@ -12294,7 +13265,20 @@ export interface FilterOptionsMap {
    * Cross-correlate first video stream with second video stream.
    * @see https://ffmpeg.org/ffmpeg-filters.html#xcorrelate
    */
-  xcorrelate: {};
+  xcorrelate: {
+    /** set planes to cross-correlate */
+    planes?: number;
+    /** when to process secondary frame */
+    secondary?: 'first' | 'all';
+    /** Action to take when encountering EOF from secondary input  */
+    eof_action?: 'repeat' | 'endall' | 'pass';
+    /** force termination when the shortest input terminates */
+    shortest?: boolean;
+    /** extend last frame of secondary streams beyond EOF */
+    repeatlast?: boolean;
+    /** How strictly to sync streams based on secondary input timestamps */
+    ts_sync_mode?: 'default' | 'nearest';
+  };
   /**
    * Cross fade one video with another video.
    * @see https://ffmpeg.org/ffmpeg-filters.html#xfade
@@ -12471,17 +13455,57 @@ export interface FilterOptionsMap {
    * Deinterlace the input image.
    * @see https://ffmpeg.org/ffmpeg-filters.html#yadif
    */
-  yadif: {};
+  yadif: {
+    /** specify the interlacing mode */
+    mode?: 'send_frame' | 'send_field' | 'send_frame_nospatial' | 'send_field_nospatial';
+    /** specify the assumed picture field parity */
+    parity?: 'tff' | 'bff' | 'auto';
+    /** specify which frames to deinterlace */
+    deint?: 'all' | 'interlaced';
+  };
   /**
    * Deinterlace CUDA frames
    * @see https://ffmpeg.org/ffmpeg-filters.html#yadif_005fcuda
    */
-  yadif_cuda: {};
+  yadif_cuda: {
+    /** specify the interlacing mode */
+    mode?: 'send_frame' | 'send_field' | 'send_frame_nospatial' | 'send_field_nospatial';
+    /** specify the assumed picture field parity */
+    parity?: 'tff' | 'bff' | 'auto';
+    /** specify which frames to deinterlace */
+    deint?: 'all' | 'interlaced';
+  };
+  /**
+   * Deinterlace D3D11 frames using YADIF
+   * @see https://ffmpeg.org/ffmpeg-filters.html#yadif_005fd3d11
+   */
+  yadif_d3d11: {
+    /** specify the interlacing mode */
+    mode?: 'send_frame' | 'send_field' | 'send_frame_nospatial' | 'send_field_nospatial';
+    /** specify the assumed picture field parity */
+    parity?: 'tff' | 'bff' | 'auto';
+    /** specify which frames to deinterlace */
+    deint?: 'all' | 'interlaced';
+    /** Force output through an internal unordered-access texture */
+    force_output_copy?: boolean;
+  };
   /**
    * Deinterlace (YADIF) the video through OpenCL.
    * @see https://ffmpeg.org/ffmpeg-filters.html#yadif_005fopencl
    */
   yadif_opencl: {
+    /** specify the interlacing mode */
+    mode?: 'send_frame' | 'send_field' | 'send_frame_nospatial' | 'send_field_nospatial';
+    /** specify the assumed picture field parity */
+    parity?: 'tff' | 'bff' | 'auto';
+    /** specify which frames to deinterlace */
+    deint?: 'all' | 'interlaced';
+  };
+  /**
+   * YADIF for VideoToolbox frames using Metal compute
+   * @see https://ffmpeg.org/ffmpeg-filters.html#yadif_005fvideotoolbox
+   */
+  yadif_videotoolbox: {
     /** specify the interlacing mode */
     mode?: 'send_frame' | 'send_field' | 'send_frame_nospatial' | 'send_field_nospatial';
     /** specify the assumed picture field parity */
@@ -12922,7 +13946,7 @@ export interface FilterOptionsMap {
     npl?: number;
     /** allow approximate gamma */
     agamma?: boolean;
-    /** parameter A, which is parameter \"b\" for bicubic,  */
+    /** parameter A, which is parameter \"b\" for bicubic, and the number of filter taps for lanczos */
     param_a?: number;
     /** parameter B, which is parameter \"c\" for bicubic */
     param_b?: number;

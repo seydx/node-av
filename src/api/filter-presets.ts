@@ -428,7 +428,8 @@ export class FilterPreset {
    */
   crop(width: number, height: number, x = 0, y = 0): FilterPreset {
     if (this.hardware?.deviceType === AV_HWDEVICE_TYPE_OPENCL) {
-      this.add(`scale_opencl=cw=${width}:ch=${height}:cx=${x}:cy=${y}`);
+      // crop only marks the region on hardware frames, scale_opencl then samples it
+      this.add(`crop=${width}:${height}:${x}:${y},scale_opencl`);
     } else {
       this.add(`crop=${width}:${height}:${x}:${y}`, true);
     }
@@ -1404,7 +1405,7 @@ export class FilterPreset {
 
       case AV_HWDEVICE_TYPE_OPENCL:
         return {
-          scale: true, // scale_opencl with crop support (patches 0006, 1004)
+          scale: true, // scale_opencl, applies the frame crop (patch 0006)
           overlay: true, // overlay_opencl (+ PGS support patch 0008)
           transpose: true, // transpose_opencl
           tonemap: true, // tonemap_opencl (enhanced in patch 0007)

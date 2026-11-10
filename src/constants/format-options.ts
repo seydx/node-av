@@ -38,7 +38,7 @@ export interface FormatContextOptions {
   /** max memory used for buffering real-time frames */
   rtbufsize?: number | (string & {});
   /** print specific debug info */
-  fdebug?: 'ts' | 'id3v2' | (string & {}) | number;
+  fdebug?: 'ts' | (string & {}) | number;
   /** maximum muxing or demuxing delay in microseconds */
   max_delay?: number | (string & {});
   /** wall-clock time when stream begins (PTS==0) */
@@ -495,12 +495,8 @@ export interface MuxerPrivateOptionsMap {
     single_file?: boolean | (string & {});
     /** DASH-templated name to be used for baseURL. Implies storing all segments in one file, accessed using byte ranges */
     single_file_name?: string | number;
-    /** set MPD availabilityStartTime as epoch milliseconds */
-    availability_start_time_ms?: number | (string & {});
     /** Enable/Disable streaming mode of output. Each frame will be moof fragment */
     streaming?: boolean | (string & {});
-    /** set MPD suggestedPresentationDelay */
-    suggested_presentation_delay?: string | number;
     /** Set desired target latency for Low-latency dash */
     target_latency?: string | number;
     /** set timeout for socket I/O operations */
@@ -1044,7 +1040,7 @@ export interface MuxerPrivateOptionsMap {
     precision?: number | (string & {});
   };
   /**
-   * Matroska Audio
+   * Matroska
    * @see https://ffmpeg.org/ffmpeg-formats.html#matroska
    */
   matroska: {
@@ -1436,14 +1432,6 @@ export interface MuxerPrivateOptionsMap {
     page_duration?: number | (string & {});
   };
   /**
-   * PlayDate Video
-   * @see https://ffmpeg.org/ffmpeg-formats.html#pdv
-   */
-  pdv: {
-    /** maximum number of frames reserved in table (mandatory) */
-    max_frames?: number | (string & {});
-  };
-  /**
    * PSP MP4 (MPEG-4 Part 14)
    * @see https://ffmpeg.org/ffmpeg-formats.html#psp
    */
@@ -1572,6 +1560,56 @@ export interface MuxerPrivateOptionsMap {
     mpegts_muxer_options?: string | number;
     /** set list of options for the RTP muxer */
     rtp_muxer_options?: string | number;
+  };
+  /**
+   * RTSP output
+   * @see https://ffmpeg.org/ffmpeg-formats.html#rtsp
+   */
+  rtsp: {
+    /** do not start playing the stream immediately */
+    initial_pause?: boolean | (string & {});
+    /** RTP muxer flags */
+    rtpflags?: 'latm' | 'rfc2190' | 'skip_rtcp' | 'h264_mode0' | 'send_bye' | (string & {}) | number;
+    /** set RTSP transport protocols */
+    rtsp_transport?: 'udp' | 'tcp' | 'udp_multicast' | 'http' | 'https' | (string & {}) | number;
+    /** set RTSP flags */
+    rtsp_flags?: 'filter_src' | 'listen' | 'prefer_tcp' | 'satip_raw' | (string & {}) | number;
+    /** set media types to accept from the server */
+    allowed_media_types?: 'video' | 'audio' | 'data' | 'subtitle' | (string & {}) | number;
+    /** set minimum local UDP port */
+    min_port?: number | (string & {});
+    /** set maximum local UDP port */
+    max_port?: number | (string & {});
+    /** set maximum timeout (in seconds) to wait for incoming connections (-1 is infinite, imply flag listen) */
+    listen_timeout?: number | (string & {});
+    /** set timeout (in microseconds) of socket I/O operations */
+    timeout?: number | (string & {});
+    /** set number of packets to buffer for handling of reordered packets */
+    reorder_queue_size?: number | (string & {});
+    /** Underlying protocol send/receive buffer size */
+    buffer_size?: number | (string & {});
+    /** Underlying protocol send packet size */
+    pkt_size?: number | (string & {});
+    /** override User-Agent header */
+    user_agent?: string | number;
+    /** Certificate Authority database file */
+    ca_file?: string | number;
+    /** Certificate Authority database file */
+    cafile?: string | number;
+    /** Verify the peer certificate */
+    tls_verify?: boolean | (string & {});
+    /** Verify the peer certificate */
+    verify?: boolean | (string & {});
+    /** Certificate file */
+    cert_file?: string | number;
+    /** Certificate file */
+    cert?: string | number;
+    /** Private key file */
+    key_file?: string | number;
+    /** Private key file */
+    key?: string | number;
+    /** Verify against a specific hostname */
+    verifyhost?: string | number;
   };
   /**
    * segment
@@ -1944,8 +1982,6 @@ export interface MuxerPrivateOptionsMap {
   whip: {
     /** Timeout in milliseconds for ICE and DTLS handshake. */
     handshake_timeout?: number | (string & {});
-    /** Set timeout for socket I/O operations */
-    timeout?: string | number;
     /** The maximum size, in bytes, of RTP packets that send out */
     pkt_size?: number | (string & {});
     /** The buffer size, in bytes, of underlying protocol */
@@ -2073,6 +2109,71 @@ export interface DemuxerPrivateOptionsMap {
     aa_fixed_key?: string | number;
   };
   /**
+   * raw AC-3
+   * @see https://ffmpeg.org/ffmpeg-formats.html#ac3
+   */
+  ac3: {
+    raw_packet_size?: number | (string & {});
+  };
+  /**
+   * Interplay ACM
+   * @see https://ffmpeg.org/ffmpeg-formats.html#acm
+   */
+  acm: {
+    raw_packet_size?: number | (string & {});
+  };
+  /**
+   * Artworx Data Format
+   * @see https://ffmpeg.org/ffmpeg-formats.html#adf
+   */
+  adf: {
+    /** set simulated line speed (bytes per second) */
+    linespeed?: number | (string & {});
+    /** set video size, such as 640x480 or hd720. */
+    video_size?: string | number;
+    /** set framerate (frames per second) */
+    framerate?: string | number;
+  };
+  /**
+   * CRI ADX
+   * @see https://ffmpeg.org/ffmpeg-formats.html#adx
+   */
+  adx: {
+    raw_packet_size?: number | (string & {});
+  };
+  /**
+   * PCM A-law
+   * @see https://ffmpeg.org/ffmpeg-formats.html#alaw
+   */
+  alaw: {
+    sample_rate?: number | (string & {});
+    ch_layout?: string | number;
+  };
+  /**
+   * Alias/Wavefront PIX image
+   * @see https://ffmpeg.org/ffmpeg-formats.html#alias_005fpix
+   */
+  alias_pix: {
+    /** set pattern type */
+    pattern_type?: 'glob' | 'sequence' | 'none' | (string & {}) | number;
+    /** set first number in the sequence */
+    start_number?: number | (string & {});
+    /** set range for looking at the first sequence number */
+    start_number_range?: number | (string & {});
+    /** set frame timestamp from file's one */
+    ts_from_file?: 'none' | 'sec' | 'ns' | (string & {}) | number;
+    /** enable metadata containing input path information */
+    export_path_metadata?: boolean | (string & {});
+    /** set the video framerate */
+    framerate?: string | number;
+    /** set video pixel format */
+    pixel_format?: string | number;
+    /** set video size */
+    video_size?: string | number;
+    /** force loop over input file sequence */
+    loop?: boolean | (string & {});
+  };
+  /**
    * ALSA audio input
    * @see https://ffmpeg.org/ffmpeg-formats.html#alsa
    */
@@ -2080,6 +2181,27 @@ export interface DemuxerPrivateOptionsMap {
     sample_rate?: number | (string & {});
     channels?: number | (string & {});
     ch_layout?: string | number;
+  };
+  /**
+   * 3GPP AMR
+   * @see https://ffmpeg.org/ffmpeg-formats.html#amr
+   */
+  amr: {
+    raw_packet_size?: number | (string & {});
+  };
+  /**
+   * raw AMR-NB
+   * @see https://ffmpeg.org/ffmpeg-formats.html#amrnb
+   */
+  amrnb: {
+    raw_packet_size?: number | (string & {});
+  };
+  /**
+   * raw AMR-WB
+   * @see https://ffmpeg.org/ffmpeg-formats.html#amrwb
+   */
+  amrwb: {
+    raw_packet_size?: number | (string & {});
   };
   /**
    * Android camera input device
@@ -2094,6 +2216,13 @@ export interface DemuxerPrivateOptionsMap {
     camera_index?: number | (string & {});
     /** set maximum number of frames to buffer */
     input_queue_size?: number | (string & {});
+  };
+  /**
+   * raw APAC
+   * @see https://ffmpeg.org/ffmpeg-formats.html#apac
+   */
+  apac: {
+    raw_packet_size?: number | (string & {});
   };
   /**
    * Animated Portable Network Graphics
@@ -2207,6 +2336,101 @@ export interface DemuxerPrivateOptionsMap {
     avisynth_flags?: 'field_order' | 'range' | 'primaries' | 'transfer' | 'matrix' | 'chroma_location' | 'sar' | (string & {}) | number;
   };
   /**
+   * raw AVS2-P2/IEEE1857.4
+   * @see https://ffmpeg.org/ffmpeg-formats.html#avs2
+   */
+  avs2: {
+    framerate?: string | number;
+    raw_packet_size?: number | (string & {});
+  };
+  /**
+   * raw AVS3-P2/IEEE1857.10
+   * @see https://ffmpeg.org/ffmpeg-formats.html#avs3
+   */
+  avs3: {
+    framerate?: string | number;
+    raw_packet_size?: number | (string & {});
+  };
+  /**
+   * Binary text
+   * @see https://ffmpeg.org/ffmpeg-formats.html#bin
+   */
+  bin: {
+    /** set simulated line speed (bytes per second) */
+    linespeed?: number | (string & {});
+    /** set video size, such as 640x480 or hd720. */
+    video_size?: string | number;
+    /** set framerate (frames per second) */
+    framerate?: string | number;
+  };
+  /**
+   * Bitpacked
+   * @see https://ffmpeg.org/ffmpeg-formats.html#bitpacked
+   */
+  bitpacked: {
+    /** set pixel format */
+    pixel_format?: string | number;
+    /** set frame size */
+    video_size?: string | number;
+    /** set frame rate */
+    framerate?: string | number;
+  };
+  /**
+   * piped
+   * @see https://ffmpeg.org/ffmpeg-formats.html#bmp_005fpipe
+   */
+  bmp_pipe: {
+    /** force frame size in bytes */
+    frame_size?: number | (string & {});
+    /** set the video framerate */
+    framerate?: string | number;
+    /** set video pixel format */
+    pixel_format?: string | number;
+    /** set video size */
+    video_size?: string | number;
+    /** force loop over input file sequence */
+    loop?: boolean | (string & {});
+  };
+  /**
+   * raw Bonk
+   * @see https://ffmpeg.org/ffmpeg-formats.html#bonk
+   */
+  bonk: {
+    raw_packet_size?: number | (string & {});
+  };
+  /**
+   * BRender PIX image
+   * @see https://ffmpeg.org/ffmpeg-formats.html#brender_005fpix
+   */
+  brender_pix: {
+    /** set pattern type */
+    pattern_type?: 'glob' | 'sequence' | 'none' | (string & {}) | number;
+    /** set first number in the sequence */
+    start_number?: number | (string & {});
+    /** set range for looking at the first sequence number */
+    start_number_range?: number | (string & {});
+    /** set frame timestamp from file's one */
+    ts_from_file?: 'none' | 'sec' | 'ns' | (string & {}) | number;
+    /** enable metadata containing input path information */
+    export_path_metadata?: boolean | (string & {});
+    /** set the video framerate */
+    framerate?: string | number;
+    /** set video pixel format */
+    pixel_format?: string | number;
+    /** set video size */
+    video_size?: string | number;
+    /** force loop over input file sequence */
+    loop?: boolean | (string & {});
+  };
+  /**
+   * raw Chinese AVS (Audio Video Standard)
+   * @see https://ffmpeg.org/ffmpeg-formats.html#cavsvideo
+   */
+  cavsvideo: {
+    framerate?: string | number;
+    raw_packet_size?: number | (string & {});
+  };
+  /**
    * Commodore CDXL video
    * @see https://ffmpeg.org/ffmpeg-formats.html#cdxl
    */
@@ -2227,6 +2451,8 @@ export interface DemuxerPrivateOptionsMap {
    * @see https://ffmpeg.org/ffmpeg-formats.html#codec2raw
    */
   codec2raw: {
+    /** codec2 mode [mandatory] */
+    mode?: '3200' | '2400' | '1600' | '1400' | '1300' | '1200' | '700' | '700B' | '700C' | (string & {}) | number;
     /** Number of frames to read at a time. Higher = faster decoding, lower granularity */
     frames_per_packet?: number | (string & {});
   };
@@ -2241,6 +2467,24 @@ export interface DemuxerPrivateOptionsMap {
     auto_convert?: boolean | (string & {});
     /** output file segment start time and duration as packet metadata */
     segment_time_metadata?: boolean | (string & {});
+    /** max recursion depth */
+    recursion_depth?: number | (string & {});
+  };
+  /**
+   * piped
+   * @see https://ffmpeg.org/ffmpeg-formats.html#cri_005fpipe
+   */
+  cri_pipe: {
+    /** force frame size in bytes */
+    frame_size?: number | (string & {});
+    /** set the video framerate */
+    framerate?: string | number;
+    /** set video pixel format */
+    pixel_format?: string | number;
+    /** set video size */
+    video_size?: string | number;
+    /** force loop over input file sequence */
+    loop?: boolean | (string & {});
   };
   /**
    * Dynamic Adaptive Streaming over HTTP
@@ -2262,6 +2506,22 @@ export interface DemuxerPrivateOptionsMap {
    */
   data: {
     raw_packet_size?: number | (string & {});
+  };
+  /**
+   * piped
+   * @see https://ffmpeg.org/ffmpeg-formats.html#dds_005fpipe
+   */
+  dds_pipe: {
+    /** force frame size in bytes */
+    frame_size?: number | (string & {});
+    /** set the video framerate */
+    framerate?: string | number;
+    /** set video pixel format */
+    pixel_format?: string | number;
+    /** set video size */
+    video_size?: string | number;
+    /** force loop over input file sequence */
+    loop?: boolean | (string & {});
   };
   /**
    * Blackmagic DeckLink input
@@ -2316,6 +2576,38 @@ export interface DemuxerPrivateOptionsMap {
   dfpwm: {
     sample_rate?: number | (string & {});
     ch_layout?: string | number;
+  };
+  /**
+   * raw Dirac
+   * @see https://ffmpeg.org/ffmpeg-formats.html#dirac
+   */
+  dirac: {
+    framerate?: string | number;
+    raw_packet_size?: number | (string & {});
+  };
+  /**
+   * raw DNxHD (SMPTE VC-3)
+   * @see https://ffmpeg.org/ffmpeg-formats.html#dnxhd
+   */
+  dnxhd: {
+    framerate?: string | number;
+    raw_packet_size?: number | (string & {});
+  };
+  /**
+   * piped
+   * @see https://ffmpeg.org/ffmpeg-formats.html#dpx_005fpipe
+   */
+  dpx_pipe: {
+    /** force frame size in bytes */
+    frame_size?: number | (string & {});
+    /** set the video framerate */
+    framerate?: string | number;
+    /** set video pixel format */
+    pixel_format?: string | number;
+    /** set video size */
+    video_size?: string | number;
+    /** force loop over input file sequence */
+    loop?: boolean | (string & {});
   };
   /**
    * DirectShow capture
@@ -2376,6 +2668,27 @@ export interface DemuxerPrivateOptionsMap {
     use_video_device_timestamps?: boolean | (string & {});
   };
   /**
+   * raw DTS
+   * @see https://ffmpeg.org/ffmpeg-formats.html#dts
+   */
+  dts: {
+    raw_packet_size?: number | (string & {});
+  };
+  /**
+   * raw dvbsub
+   * @see https://ffmpeg.org/ffmpeg-formats.html#dvbsub
+   */
+  dvbsub: {
+    raw_packet_size?: number | (string & {});
+  };
+  /**
+   * dvbtxt
+   * @see https://ffmpeg.org/ffmpeg-formats.html#dvbtxt
+   */
+  dvbtxt: {
+    raw_packet_size?: number | (string & {});
+  };
+  /**
    * DVD-Video
    * @see https://ffmpeg.org/ffmpeg-formats.html#dvdvideo
    */
@@ -2414,11 +2727,66 @@ export interface DemuxerPrivateOptionsMap {
     merge_alpha?: boolean | (string & {});
   };
   /**
+   * raw E-AC-3
+   * @see https://ffmpeg.org/ffmpeg-formats.html#eac3
+   */
+  eac3: {
+    raw_packet_size?: number | (string & {});
+  };
+  /**
    * EVC Annex B
    * @see https://ffmpeg.org/ffmpeg-formats.html#evc
    */
   evc: {
     framerate?: string | number;
+  };
+  /**
+   * piped
+   * @see https://ffmpeg.org/ffmpeg-formats.html#exr_005fpipe
+   */
+  exr_pipe: {
+    /** force frame size in bytes */
+    frame_size?: number | (string & {});
+    /** set the video framerate */
+    framerate?: string | number;
+    /** set video pixel format */
+    pixel_format?: string | number;
+    /** set video size */
+    video_size?: string | number;
+    /** force loop over input file sequence */
+    loop?: boolean | (string & {});
+  };
+  /**
+   * PCM 32-bit floating-point big-endian
+   * @see https://ffmpeg.org/ffmpeg-formats.html#f32be
+   */
+  f32be: {
+    sample_rate?: number | (string & {});
+    ch_layout?: string | number;
+  };
+  /**
+   * PCM 32-bit floating-point little-endian
+   * @see https://ffmpeg.org/ffmpeg-formats.html#f32le
+   */
+  f32le: {
+    sample_rate?: number | (string & {});
+    ch_layout?: string | number;
+  };
+  /**
+   * PCM 64-bit floating-point big-endian
+   * @see https://ffmpeg.org/ffmpeg-formats.html#f64be
+   */
+  f64be: {
+    sample_rate?: number | (string & {});
+    ch_layout?: string | number;
+  };
+  /**
+   * PCM 64-bit floating-point little-endian
+   * @see https://ffmpeg.org/ffmpeg-formats.html#f64le
+   */
+  f64le: {
+    sample_rate?: number | (string & {});
+    ch_layout?: string | number;
   };
   /**
    * Linux framebuffer
@@ -2436,6 +2804,13 @@ export interface DemuxerPrivateOptionsMap {
     framerate?: string | number;
   };
   /**
+   * raw FLAC
+   * @see https://ffmpeg.org/ffmpeg-formats.html#flac
+   */
+  flac: {
+    raw_packet_size?: number | (string & {});
+  };
+  /**
    * FLV (Flash Video)
    * @see https://ffmpeg.org/ffmpeg-formats.html#flv
    */
@@ -2446,6 +2821,13 @@ export interface DemuxerPrivateOptionsMap {
     flv_full_metadata?: boolean | (string & {});
     /** Ignore the Size of previous tag */
     flv_ignore_prevtag?: boolean | (string & {});
+  };
+  /**
+   * raw G.722
+   * @see https://ffmpeg.org/ffmpeg-formats.html#g722
+   */
+  g722: {
+    raw_packet_size?: number | (string & {});
   };
   /**
    * raw big-endian G.726 (\"left aligned\")
@@ -2491,6 +2873,22 @@ export interface DemuxerPrivateOptionsMap {
     offset_y?: number | (string & {});
   };
   /**
+   * piped
+   * @see https://ffmpeg.org/ffmpeg-formats.html#gem_005fpipe
+   */
+  gem_pipe: {
+    /** force frame size in bytes */
+    frame_size?: number | (string & {});
+    /** set the video framerate */
+    framerate?: string | number;
+    /** set video pixel format */
+    pixel_format?: string | number;
+    /** set video size */
+    video_size?: string | number;
+    /** force loop over input file sequence */
+    loop?: boolean | (string & {});
+  };
+  /**
    * CompuServe Graphics Interchange Format (GIF)
    * @see https://ffmpeg.org/ffmpeg-formats.html#gif
    */
@@ -2505,11 +2903,51 @@ export interface DemuxerPrivateOptionsMap {
     ignore_loop?: boolean | (string & {});
   };
   /**
+   * piped
+   * @see https://ffmpeg.org/ffmpeg-formats.html#gif_005fpipe
+   */
+  gif_pipe: {
+    /** force frame size in bytes */
+    frame_size?: number | (string & {});
+    /** set the video framerate */
+    framerate?: string | number;
+    /** set video pixel format */
+    pixel_format?: string | number;
+    /** set video size */
+    video_size?: string | number;
+    /** force loop over input file sequence */
+    loop?: boolean | (string & {});
+  };
+  /**
    * raw GSM
    * @see https://ffmpeg.org/ffmpeg-formats.html#gsm
    */
   gsm: {
     sample_rate?: number | (string & {});
+  };
+  /**
+   * raw H.261
+   * @see https://ffmpeg.org/ffmpeg-formats.html#h261
+   */
+  h261: {
+    framerate?: string | number;
+    raw_packet_size?: number | (string & {});
+  };
+  /**
+   * raw H.263
+   * @see https://ffmpeg.org/ffmpeg-formats.html#h263
+   */
+  h263: {
+    framerate?: string | number;
+    raw_packet_size?: number | (string & {});
+  };
+  /**
+   * raw H.264 video
+   * @see https://ffmpeg.org/ffmpeg-formats.html#h264
+   */
+  h264: {
+    framerate?: string | number;
+    raw_packet_size?: number | (string & {});
   };
   /**
    * CRI HCA
@@ -2522,6 +2960,30 @@ export interface DemuxerPrivateOptionsMap {
     hca_highkey?: number | (string & {});
     /** Subkey used for handling CRI HCA files */
     hca_subkey?: number | (string & {});
+  };
+  /**
+   * piped
+   * @see https://ffmpeg.org/ffmpeg-formats.html#hdr_005fpipe
+   */
+  hdr_pipe: {
+    /** force frame size in bytes */
+    frame_size?: number | (string & {});
+    /** set the video framerate */
+    framerate?: string | number;
+    /** set video pixel format */
+    pixel_format?: string | number;
+    /** set video size */
+    video_size?: string | number;
+    /** force loop over input file sequence */
+    loop?: boolean | (string & {});
+  };
+  /**
+   * raw HEVC video
+   * @see https://ffmpeg.org/ffmpeg-formats.html#hevc
+   */
+  hevc: {
+    framerate?: string | number;
+    raw_packet_size?: number | (string & {});
   };
   /**
    * Apple HTTP Live Streaming
@@ -2552,6 +3014,18 @@ export interface DemuxerPrivateOptionsMap {
     seg_format_options?: string | number;
     /** Maximum number of times to reload a segment on error. */
     seg_max_retry?: number | (string & {});
+  };
+  /**
+   * iCE Draw File
+   * @see https://ffmpeg.org/ffmpeg-formats.html#idf
+   */
+  idf: {
+    /** set simulated line speed (bytes per second) */
+    linespeed?: number | (string & {});
+    /** set video size, such as 640x480 or hd720. */
+    video_size?: string | number;
+    /** set framerate (frames per second) */
+    framerate?: string | number;
   };
   /**
    * libiec61883 (new DV1394) A/V input device
@@ -2610,8 +3084,39 @@ export interface DemuxerPrivateOptionsMap {
    * @see https://ffmpeg.org/ffmpeg-formats.html#imf
    */
   imf: {
-    /** Comma-separated paths to ASSETMAP files. */
+    /** Comma-separated paths to ASSETMAP files.If not specified, the `ASSETMAP.xml` file in the same directory as the CPL is used. */
     assetmaps?: string | number;
+  };
+  /**
+   * raw Ingenient MJPEG
+   * @see https://ffmpeg.org/ffmpeg-formats.html#ingenient
+   */
+  ingenient: {
+    framerate?: string | number;
+    raw_packet_size?: number | (string & {});
+  };
+  /**
+   * raw IPU Video
+   * @see https://ffmpeg.org/ffmpeg-formats.html#ipu
+   */
+  ipu: {
+    raw_packet_size?: number | (string & {});
+  };
+  /**
+   * piped
+   * @see https://ffmpeg.org/ffmpeg-formats.html#j2k_005fpipe
+   */
+  j2k_pipe: {
+    /** force frame size in bytes */
+    frame_size?: number | (string & {});
+    /** set the video framerate */
+    framerate?: string | number;
+    /** set video pixel format */
+    pixel_format?: string | number;
+    /** set video size */
+    video_size?: string | number;
+    /** force loop over input file sequence */
+    loop?: boolean | (string & {});
   };
   /**
    * JACK Audio Connection Kit
@@ -2620,6 +3125,70 @@ export interface DemuxerPrivateOptionsMap {
   jack: {
     /** Number of audio channels. */
     channels?: number | (string & {});
+  };
+  /**
+   * piped
+   * @see https://ffmpeg.org/ffmpeg-formats.html#jpeg_005fpipe
+   */
+  jpeg_pipe: {
+    /** force frame size in bytes */
+    frame_size?: number | (string & {});
+    /** set the video framerate */
+    framerate?: string | number;
+    /** set video pixel format */
+    pixel_format?: string | number;
+    /** set video size */
+    video_size?: string | number;
+    /** force loop over input file sequence */
+    loop?: boolean | (string & {});
+  };
+  /**
+   * piped
+   * @see https://ffmpeg.org/ffmpeg-formats.html#jpegls_005fpipe
+   */
+  jpegls_pipe: {
+    /** force frame size in bytes */
+    frame_size?: number | (string & {});
+    /** set the video framerate */
+    framerate?: string | number;
+    /** set video pixel format */
+    pixel_format?: string | number;
+    /** set video size */
+    video_size?: string | number;
+    /** force loop over input file sequence */
+    loop?: boolean | (string & {});
+  };
+  /**
+   * piped
+   * @see https://ffmpeg.org/ffmpeg-formats.html#jpegxl_005fpipe
+   */
+  jpegxl_pipe: {
+    /** force frame size in bytes */
+    frame_size?: number | (string & {});
+    /** set the video framerate */
+    framerate?: string | number;
+    /** set video pixel format */
+    pixel_format?: string | number;
+    /** set video size */
+    video_size?: string | number;
+    /** force loop over input file sequence */
+    loop?: boolean | (string & {});
+  };
+  /**
+   * piped
+   * @see https://ffmpeg.org/ffmpeg-formats.html#jpegxs_005fpipe
+   */
+  jpegxs_pipe: {
+    /** force frame size in bytes */
+    frame_size?: number | (string & {});
+    /** set the video framerate */
+    framerate?: string | number;
+    /** set video pixel format */
+    pixel_format?: string | number;
+    /** set video size */
+    video_size?: string | number;
+    /** force loop over input file sequence */
+    loop?: boolean | (string & {});
   };
   /**
    * KMS screen capture
@@ -2751,6 +3320,13 @@ export interface DemuxerPrivateOptionsMap {
     flv_ignore_prevtag?: boolean | (string & {});
   };
   /**
+   * LOAS AudioSyncStream
+   * @see https://ffmpeg.org/ffmpeg-formats.html#loas
+   */
+  loas: {
+    raw_packet_size?: number | (string & {});
+  };
+  /**
    * QuickTime / MOV
    * @see https://ffmpeg.org/ffmpeg-formats.html#m4a
    */
@@ -2790,6 +3366,14 @@ export interface DemuxerPrivateOptionsMap {
     max_stts_delta?: number | (string & {});
     /** Interleave packets from multiple tracks at demuxer level */
     interleaved_read?: boolean | (string & {});
+  };
+  /**
+   * raw MPEG-4 video
+   * @see https://ffmpeg.org/ffmpeg-formats.html#m4v
+   */
+  m4v: {
+    framerate?: string | number;
+    raw_packet_size?: number | (string & {});
   };
   /**
    * MacCaption
@@ -2847,6 +3431,29 @@ export interface DemuxerPrivateOptionsMap {
     max_stts_delta?: number | (string & {});
     /** Interleave packets from multiple tracks at demuxer level */
     interleaved_read?: boolean | (string & {});
+  };
+  /**
+   * raw MJPEG video
+   * @see https://ffmpeg.org/ffmpeg-formats.html#mjpeg
+   */
+  mjpeg: {
+    framerate?: string | number;
+    raw_packet_size?: number | (string & {});
+  };
+  /**
+   * raw MJPEG 2000 video
+   * @see https://ffmpeg.org/ffmpeg-formats.html#mjpeg_005f2000
+   */
+  mjpeg_2000: {
+    framerate?: string | number;
+    raw_packet_size?: number | (string & {});
+  };
+  /**
+   * raw MLP
+   * @see https://ffmpeg.org/ffmpeg-formats.html#mlp
+   */
+  mlp: {
+    raw_packet_size?: number | (string & {});
   };
   /**
    * QuickTime / MOV
@@ -2979,12 +3586,28 @@ export interface DemuxerPrivateOptionsMap {
     compute_pcr?: boolean | (string & {});
   };
   /**
+   * raw MPEG video
+   * @see https://ffmpeg.org/ffmpeg-formats.html#mpegvideo
+   */
+  mpegvideo: {
+    framerate?: string | number;
+    raw_packet_size?: number | (string & {});
+  };
+  /**
    * MIME multipart JPEG
    * @see https://ffmpeg.org/ffmpeg-formats.html#mpjpeg
    */
   mpjpeg: {
     /** require MIME boundaries match */
     strict_mime_boundary?: boolean | (string & {});
+  };
+  /**
+   * PCM mu-law
+   * @see https://ffmpeg.org/ffmpeg-formats.html#mulaw
+   */
+  mulaw: {
+    sample_rate?: number | (string & {});
+    ch_layout?: string | number;
   };
   /**
    * MXF (Material eXchange Format)
@@ -3016,12 +3639,227 @@ export interface DemuxerPrivateOptionsMap {
     list_devices?: 'true' | 'false' | (string & {}) | number;
   };
   /**
+   * raw OSQ
+   * @see https://ffmpeg.org/ffmpeg-formats.html#osq
+   */
+  osq: {
+    raw_packet_size?: number | (string & {});
+  };
+  /**
    * OSS (Open Sound System) capture
    * @see https://ffmpeg.org/ffmpeg-formats.html#oss
    */
   oss: {
     sample_rate?: number | (string & {});
     channels?: number | (string & {});
+  };
+  /**
+   * piped
+   * @see https://ffmpeg.org/ffmpeg-formats.html#pam_005fpipe
+   */
+  pam_pipe: {
+    /** force frame size in bytes */
+    frame_size?: number | (string & {});
+    /** set the video framerate */
+    framerate?: string | number;
+    /** set video pixel format */
+    pixel_format?: string | number;
+    /** set video size */
+    video_size?: string | number;
+    /** force loop over input file sequence */
+    loop?: boolean | (string & {});
+  };
+  /**
+   * piped
+   * @see https://ffmpeg.org/ffmpeg-formats.html#pbm_005fpipe
+   */
+  pbm_pipe: {
+    /** force frame size in bytes */
+    frame_size?: number | (string & {});
+    /** set the video framerate */
+    framerate?: string | number;
+    /** set video pixel format */
+    pixel_format?: string | number;
+    /** set video size */
+    video_size?: string | number;
+    /** force loop over input file sequence */
+    loop?: boolean | (string & {});
+  };
+  /**
+   * piped
+   * @see https://ffmpeg.org/ffmpeg-formats.html#pcx_005fpipe
+   */
+  pcx_pipe: {
+    /** force frame size in bytes */
+    frame_size?: number | (string & {});
+    /** set the video framerate */
+    framerate?: string | number;
+    /** set video pixel format */
+    pixel_format?: string | number;
+    /** set video size */
+    video_size?: string | number;
+    /** force loop over input file sequence */
+    loop?: boolean | (string & {});
+  };
+  /**
+   * piped
+   * @see https://ffmpeg.org/ffmpeg-formats.html#pfm_005fpipe
+   */
+  pfm_pipe: {
+    /** force frame size in bytes */
+    frame_size?: number | (string & {});
+    /** set the video framerate */
+    framerate?: string | number;
+    /** set video pixel format */
+    pixel_format?: string | number;
+    /** set video size */
+    video_size?: string | number;
+    /** force loop over input file sequence */
+    loop?: boolean | (string & {});
+  };
+  /**
+   * piped
+   * @see https://ffmpeg.org/ffmpeg-formats.html#pgm_005fpipe
+   */
+  pgm_pipe: {
+    /** force frame size in bytes */
+    frame_size?: number | (string & {});
+    /** set the video framerate */
+    framerate?: string | number;
+    /** set video pixel format */
+    pixel_format?: string | number;
+    /** set video size */
+    video_size?: string | number;
+    /** force loop over input file sequence */
+    loop?: boolean | (string & {});
+  };
+  /**
+   * piped
+   * @see https://ffmpeg.org/ffmpeg-formats.html#pgmyuv_005fpipe
+   */
+  pgmyuv_pipe: {
+    /** force frame size in bytes */
+    frame_size?: number | (string & {});
+    /** set the video framerate */
+    framerate?: string | number;
+    /** set video pixel format */
+    pixel_format?: string | number;
+    /** set video size */
+    video_size?: string | number;
+    /** force loop over input file sequence */
+    loop?: boolean | (string & {});
+  };
+  /**
+   * piped
+   * @see https://ffmpeg.org/ffmpeg-formats.html#pgx_005fpipe
+   */
+  pgx_pipe: {
+    /** force frame size in bytes */
+    frame_size?: number | (string & {});
+    /** set the video framerate */
+    framerate?: string | number;
+    /** set video pixel format */
+    pixel_format?: string | number;
+    /** set video size */
+    video_size?: string | number;
+    /** force loop over input file sequence */
+    loop?: boolean | (string & {});
+  };
+  /**
+   * piped
+   * @see https://ffmpeg.org/ffmpeg-formats.html#phm_005fpipe
+   */
+  phm_pipe: {
+    /** force frame size in bytes */
+    frame_size?: number | (string & {});
+    /** set the video framerate */
+    framerate?: string | number;
+    /** set video pixel format */
+    pixel_format?: string | number;
+    /** set video size */
+    video_size?: string | number;
+    /** force loop over input file sequence */
+    loop?: boolean | (string & {});
+  };
+  /**
+   * piped
+   * @see https://ffmpeg.org/ffmpeg-formats.html#photocd_005fpipe
+   */
+  photocd_pipe: {
+    /** force frame size in bytes */
+    frame_size?: number | (string & {});
+    /** set the video framerate */
+    framerate?: string | number;
+    /** set video pixel format */
+    pixel_format?: string | number;
+    /** set video size */
+    video_size?: string | number;
+    /** force loop over input file sequence */
+    loop?: boolean | (string & {});
+  };
+  /**
+   * piped
+   * @see https://ffmpeg.org/ffmpeg-formats.html#pictor_005fpipe
+   */
+  pictor_pipe: {
+    /** force frame size in bytes */
+    frame_size?: number | (string & {});
+    /** set the video framerate */
+    framerate?: string | number;
+    /** set video pixel format */
+    pixel_format?: string | number;
+    /** set video size */
+    video_size?: string | number;
+    /** force loop over input file sequence */
+    loop?: boolean | (string & {});
+  };
+  /**
+   * piped
+   * @see https://ffmpeg.org/ffmpeg-formats.html#png_005fpipe
+   */
+  png_pipe: {
+    /** force frame size in bytes */
+    frame_size?: number | (string & {});
+    /** set the video framerate */
+    framerate?: string | number;
+    /** set video pixel format */
+    pixel_format?: string | number;
+    /** set video size */
+    video_size?: string | number;
+    /** force loop over input file sequence */
+    loop?: boolean | (string & {});
+  };
+  /**
+   * piped
+   * @see https://ffmpeg.org/ffmpeg-formats.html#ppm_005fpipe
+   */
+  ppm_pipe: {
+    /** force frame size in bytes */
+    frame_size?: number | (string & {});
+    /** set the video framerate */
+    framerate?: string | number;
+    /** set video pixel format */
+    pixel_format?: string | number;
+    /** set video size */
+    video_size?: string | number;
+    /** force loop over input file sequence */
+    loop?: boolean | (string & {});
+  };
+  /**
+   * piped
+   * @see https://ffmpeg.org/ffmpeg-formats.html#psd_005fpipe
+   */
+  psd_pipe: {
+    /** force frame size in bytes */
+    frame_size?: number | (string & {});
+    /** set the video framerate */
+    framerate?: string | number;
+    /** set video pixel format */
+    pixel_format?: string | number;
+    /** set video size */
+    video_size?: string | number;
+    /** force loop over input file sequence */
+    loop?: boolean | (string & {});
   };
   /**
    * Pulse audio input
@@ -3044,6 +3882,38 @@ export interface DemuxerPrivateOptionsMap {
     fragment_size?: number | (string & {});
     /** set the initial pts using the current time */
     wallclock?: number | (string & {});
+  };
+  /**
+   * piped
+   * @see https://ffmpeg.org/ffmpeg-formats.html#qdraw_005fpipe
+   */
+  qdraw_pipe: {
+    /** force frame size in bytes */
+    frame_size?: number | (string & {});
+    /** set the video framerate */
+    framerate?: string | number;
+    /** set video pixel format */
+    pixel_format?: string | number;
+    /** set video size */
+    video_size?: string | number;
+    /** force loop over input file sequence */
+    loop?: boolean | (string & {});
+  };
+  /**
+   * piped
+   * @see https://ffmpeg.org/ffmpeg-formats.html#qoi_005fpipe
+   */
+  qoi_pipe: {
+    /** force frame size in bytes */
+    frame_size?: number | (string & {});
+    /** set the video framerate */
+    framerate?: string | number;
+    /** set video pixel format */
+    pixel_format?: string | number;
+    /** set video size */
+    video_size?: string | number;
+    /** force loop over input file sequence */
+    loop?: boolean | (string & {});
   };
   /**
    * raw video
@@ -3078,6 +3948,119 @@ export interface DemuxerPrivateOptionsMap {
     buffer_size?: number | (string & {});
     /** Underlying protocol send packet size */
     pkt_size?: number | (string & {});
+  };
+  /**
+   * RTSP input
+   * @see https://ffmpeg.org/ffmpeg-formats.html#rtsp
+   */
+  rtsp: {
+    /** do not start playing the stream immediately */
+    initial_pause?: boolean | (string & {});
+    /** RTP muxer flags */
+    rtpflags?: 'latm' | 'rfc2190' | 'skip_rtcp' | 'h264_mode0' | 'send_bye' | (string & {}) | number;
+    /** set RTSP transport protocols */
+    rtsp_transport?: 'udp' | 'tcp' | 'udp_multicast' | 'http' | 'https' | (string & {}) | number;
+    /** set RTSP flags */
+    rtsp_flags?: 'filter_src' | 'listen' | 'prefer_tcp' | 'satip_raw' | (string & {}) | number;
+    /** set media types to accept from the server */
+    allowed_media_types?: 'video' | 'audio' | 'data' | 'subtitle' | (string & {}) | number;
+    /** set minimum local UDP port */
+    min_port?: number | (string & {});
+    /** set maximum local UDP port */
+    max_port?: number | (string & {});
+    /** set maximum timeout (in seconds) to wait for incoming connections (-1 is infinite, imply flag listen) */
+    listen_timeout?: number | (string & {});
+    /** set timeout (in microseconds) of socket I/O operations */
+    timeout?: number | (string & {});
+    /** set number of packets to buffer for handling of reordered packets */
+    reorder_queue_size?: number | (string & {});
+    /** Underlying protocol send/receive buffer size */
+    buffer_size?: number | (string & {});
+    /** Underlying protocol send packet size */
+    pkt_size?: number | (string & {});
+    /** override User-Agent header */
+    user_agent?: string | number;
+    /** Certificate Authority database file */
+    ca_file?: string | number;
+    /** Certificate Authority database file */
+    cafile?: string | number;
+    /** Verify the peer certificate */
+    tls_verify?: boolean | (string & {});
+    /** Verify the peer certificate */
+    verify?: boolean | (string & {});
+    /** Certificate file */
+    cert_file?: string | number;
+    /** Certificate file */
+    cert?: string | number;
+    /** Private key file */
+    key_file?: string | number;
+    /** Private key file */
+    key?: string | number;
+    /** Verify against a specific hostname */
+    verifyhost?: string | number;
+  };
+  /**
+   * PCM signed 16-bit big-endian
+   * @see https://ffmpeg.org/ffmpeg-formats.html#s16be
+   */
+  s16be: {
+    sample_rate?: number | (string & {});
+    ch_layout?: string | number;
+  };
+  /**
+   * PCM signed 16-bit little-endian
+   * @see https://ffmpeg.org/ffmpeg-formats.html#s16le
+   */
+  s16le: {
+    sample_rate?: number | (string & {});
+    ch_layout?: string | number;
+  };
+  /**
+   * PCM signed 24-bit big-endian
+   * @see https://ffmpeg.org/ffmpeg-formats.html#s24be
+   */
+  s24be: {
+    sample_rate?: number | (string & {});
+    ch_layout?: string | number;
+  };
+  /**
+   * PCM signed 24-bit little-endian
+   * @see https://ffmpeg.org/ffmpeg-formats.html#s24le
+   */
+  s24le: {
+    sample_rate?: number | (string & {});
+    ch_layout?: string | number;
+  };
+  /**
+   * PCM signed 32-bit big-endian
+   * @see https://ffmpeg.org/ffmpeg-formats.html#s32be
+   */
+  s32be: {
+    sample_rate?: number | (string & {});
+    ch_layout?: string | number;
+  };
+  /**
+   * PCM signed 32-bit little-endian
+   * @see https://ffmpeg.org/ffmpeg-formats.html#s32le
+   */
+  s32le: {
+    sample_rate?: number | (string & {});
+    ch_layout?: string | number;
+  };
+  /**
+   * PCM signed 8-bit
+   * @see https://ffmpeg.org/ffmpeg-formats.html#s8
+   */
+  s8: {
+    sample_rate?: number | (string & {});
+    ch_layout?: string | number;
+  };
+  /**
+   * raw SBC (low-complexity subband codec)
+   * @see https://ffmpeg.org/ffmpeg-formats.html#sbc
+   */
+  sbc: {
+    raw_packet_size?: number | (string & {});
   };
   /**
    * SBaGen binaural beats script
@@ -3117,6 +4100,29 @@ export interface DemuxerPrivateOptionsMap {
     framerate?: string | number;
   };
   /**
+   * piped
+   * @see https://ffmpeg.org/ffmpeg-formats.html#sgi_005fpipe
+   */
+  sgi_pipe: {
+    /** force frame size in bytes */
+    frame_size?: number | (string & {});
+    /** set the video framerate */
+    framerate?: string | number;
+    /** set video pixel format */
+    pixel_format?: string | number;
+    /** set video size */
+    video_size?: string | number;
+    /** force loop over input file sequence */
+    loop?: boolean | (string & {});
+  };
+  /**
+   * raw Shorten
+   * @see https://ffmpeg.org/ffmpeg-formats.html#shn
+   */
+  shn: {
+    raw_packet_size?: number | (string & {});
+  };
+  /**
    * Asterisk raw pcm
    * @see https://ffmpeg.org/ffmpeg-formats.html#sln
    */
@@ -3133,12 +4139,74 @@ export interface DemuxerPrivateOptionsMap {
     channels?: number | (string & {});
   };
   /**
+   * piped
+   * @see https://ffmpeg.org/ffmpeg-formats.html#sunrast_005fpipe
+   */
+  sunrast_pipe: {
+    /** force frame size in bytes */
+    frame_size?: number | (string & {});
+    /** set the video framerate */
+    framerate?: string | number;
+    /** set video pixel format */
+    pixel_format?: string | number;
+    /** set video size */
+    video_size?: string | number;
+    /** force loop over input file sequence */
+    loop?: boolean | (string & {});
+  };
+  /**
+   * piped
+   * @see https://ffmpeg.org/ffmpeg-formats.html#svg_005fpipe
+   */
+  svg_pipe: {
+    /** force frame size in bytes */
+    frame_size?: number | (string & {});
+    /** set the video framerate */
+    framerate?: string | number;
+    /** set video pixel format */
+    pixel_format?: string | number;
+    /** set video size */
+    video_size?: string | number;
+    /** force loop over input file sequence */
+    loop?: boolean | (string & {});
+  };
+  /**
+   * raw TAK
+   * @see https://ffmpeg.org/ffmpeg-formats.html#tak
+   */
+  tak: {
+    raw_packet_size?: number | (string & {});
+  };
+  /**
    * TED Talks captions
    * @see https://ffmpeg.org/ffmpeg-formats.html#tedcaptions
    */
   tedcaptions: {
     /** set the start time (offset) of the subtitles, in ms */
     start_time?: number | (string & {});
+  };
+  /**
+   * piped
+   * @see https://ffmpeg.org/ffmpeg-formats.html#tiff_005fpipe
+   */
+  tiff_pipe: {
+    /** force frame size in bytes */
+    frame_size?: number | (string & {});
+    /** set the video framerate */
+    framerate?: string | number;
+    /** set video pixel format */
+    pixel_format?: string | number;
+    /** set video size */
+    video_size?: string | number;
+    /** force loop over input file sequence */
+    loop?: boolean | (string & {});
+  };
+  /**
+   * raw TrueHD
+   * @see https://ffmpeg.org/ffmpeg-formats.html#truehd
+   */
+  truehd: {
+    raw_packet_size?: number | (string & {});
   };
   /**
    * Tele-typewriter
@@ -3148,6 +4216,82 @@ export interface DemuxerPrivateOptionsMap {
     chars_per_frame?: number | (string & {});
     /** A string describing frame size, such as 640x480 or hd720. */
     video_size?: string | number;
+    framerate?: string | number;
+  };
+  /**
+   * PCM unsigned 16-bit big-endian
+   * @see https://ffmpeg.org/ffmpeg-formats.html#u16be
+   */
+  u16be: {
+    sample_rate?: number | (string & {});
+    ch_layout?: string | number;
+  };
+  /**
+   * PCM unsigned 16-bit little-endian
+   * @see https://ffmpeg.org/ffmpeg-formats.html#u16le
+   */
+  u16le: {
+    sample_rate?: number | (string & {});
+    ch_layout?: string | number;
+  };
+  /**
+   * PCM unsigned 24-bit big-endian
+   * @see https://ffmpeg.org/ffmpeg-formats.html#u24be
+   */
+  u24be: {
+    sample_rate?: number | (string & {});
+    ch_layout?: string | number;
+  };
+  /**
+   * PCM unsigned 24-bit little-endian
+   * @see https://ffmpeg.org/ffmpeg-formats.html#u24le
+   */
+  u24le: {
+    sample_rate?: number | (string & {});
+    ch_layout?: string | number;
+  };
+  /**
+   * PCM unsigned 32-bit big-endian
+   * @see https://ffmpeg.org/ffmpeg-formats.html#u32be
+   */
+  u32be: {
+    sample_rate?: number | (string & {});
+    ch_layout?: string | number;
+  };
+  /**
+   * PCM unsigned 32-bit little-endian
+   * @see https://ffmpeg.org/ffmpeg-formats.html#u32le
+   */
+  u32le: {
+    sample_rate?: number | (string & {});
+    ch_layout?: string | number;
+  };
+  /**
+   * PCM unsigned 8-bit
+   * @see https://ffmpeg.org/ffmpeg-formats.html#u8
+   */
+  u8: {
+    sample_rate?: number | (string & {});
+    ch_layout?: string | number;
+  };
+  /**
+   * Uncompressed 4:2:2 10-bit
+   * @see https://ffmpeg.org/ffmpeg-formats.html#v210
+   */
+  v210: {
+    /** set frame size */
+    video_size?: string | number;
+    /** set frame rate */
+    framerate?: string | number;
+  };
+  /**
+   * Uncompressed 4:2:2 10-bit
+   * @see https://ffmpeg.org/ffmpeg-formats.html#v210x
+   */
+  v210x: {
+    /** set frame size */
+    video_size?: string | number;
+    /** set frame rate */
     framerate?: string | number;
   };
   /**
@@ -3187,6 +4331,30 @@ export interface DemuxerPrivateOptionsMap {
     max_script_size?: number | (string & {});
   };
   /**
+   * piped
+   * @see https://ffmpeg.org/ffmpeg-formats.html#vbn_005fpipe
+   */
+  vbn_pipe: {
+    /** force frame size in bytes */
+    frame_size?: number | (string & {});
+    /** set the video framerate */
+    framerate?: string | number;
+    /** set video pixel format */
+    pixel_format?: string | number;
+    /** set video size */
+    video_size?: string | number;
+    /** force loop over input file sequence */
+    loop?: boolean | (string & {});
+  };
+  /**
+   * raw VC-1
+   * @see https://ffmpeg.org/ffmpeg-formats.html#vc1
+   */
+  vc1: {
+    framerate?: string | number;
+    raw_packet_size?: number | (string & {});
+  };
+  /**
    * VfW video capture
    * @see https://ffmpeg.org/ffmpeg-formats.html#vfwcap
    */
@@ -3194,6 +4362,14 @@ export interface DemuxerPrivateOptionsMap {
     /** A string describing frame size, such as 640x480 or hd720. */
     video_size?: string | number;
     framerate?: string | number;
+  };
+  /**
+   * PCM Archimedes VIDC
+   * @see https://ffmpeg.org/ffmpeg-formats.html#vidc
+   */
+  vidc: {
+    sample_rate?: number | (string & {});
+    ch_layout?: string | number;
   };
   /**
    * Video4Linux2 device grab
@@ -3232,6 +4408,22 @@ export interface DemuxerPrivateOptionsMap {
     sub_name?: string | number;
   };
   /**
+   * raw H.266/VVC video
+   * @see https://ffmpeg.org/ffmpeg-formats.html#vvc
+   */
+  vvc: {
+    framerate?: string | number;
+    raw_packet_size?: number | (string & {});
+  };
+  /**
+   * Sony Wave64
+   * @see https://ffmpeg.org/ffmpeg-formats.html#w64
+   */
+  w64: {
+    /** max size of single packet */
+    max_size?: number | (string & {});
+  };
+  /**
    * WAV / WAVE (Waveform Audio)
    * @see https://ffmpeg.org/ffmpeg-formats.html#wav
    */
@@ -3252,20 +4444,20 @@ export interface DemuxerPrivateOptionsMap {
     bandwidth?: number | (string & {});
   };
   /**
-   * Animated WebP
-   * @see https://ffmpeg.org/ffmpeg-formats.html#webp_005fanim
+   * piped
+   * @see https://ffmpeg.org/ffmpeg-formats.html#webp_005fpipe
    */
-  webp_anim: {
-    /** minimum valid delay between frames (in milliseconds) */
-    min_delay?: number | (string & {});
-    /** maximum valid delay between frames (in milliseconds) */
-    max_webp_delay?: number | (string & {});
-    /** default delay between frames (in milliseconds) */
-    default_delay?: number | (string & {});
-    /** ignore loop setting */
-    ignore_loop?: boolean | (string & {});
-    /** use background color from ANIM chunk */
-    usebgcolor?: boolean | (string & {});
+  webp_pipe: {
+    /** force frame size in bytes */
+    frame_size?: number | (string & {});
+    /** set the video framerate */
+    framerate?: string | number;
+    /** set video pixel format */
+    pixel_format?: string | number;
+    /** set video size */
+    video_size?: string | number;
+    /** force loop over input file sequence */
+    loop?: boolean | (string & {});
   };
   /**
    * WebVTT subtitle
@@ -3274,6 +4466,13 @@ export interface DemuxerPrivateOptionsMap {
   webvtt: {
     /** Set kind of WebVTT track */
     kind?: 'subtitles' | 'captions' | 'descriptions' | 'metadata' | (string & {}) | number;
+  };
+  /**
+   * Wideband Single-bit Data (WSD)
+   * @see https://ffmpeg.org/ffmpeg-formats.html#wsd
+   */
+  wsd: {
+    raw_packet_size?: number | (string & {});
   };
   /**
    * X11 screen capture, using XCB
@@ -3303,6 +4502,66 @@ export interface DemuxerPrivateOptionsMap {
     region_border?: number | (string & {});
     /** Select the grabbing region graphically using the pointer. */
     select_region?: boolean | (string & {});
+  };
+  /**
+   * eXtended BINary text (XBIN)
+   * @see https://ffmpeg.org/ffmpeg-formats.html#xbin
+   */
+  xbin: {
+    /** set simulated line speed (bytes per second) */
+    linespeed?: number | (string & {});
+    /** set video size, such as 640x480 or hd720. */
+    video_size?: string | number;
+    /** set framerate (frames per second) */
+    framerate?: string | number;
+  };
+  /**
+   * piped
+   * @see https://ffmpeg.org/ffmpeg-formats.html#xbm_005fpipe
+   */
+  xbm_pipe: {
+    /** force frame size in bytes */
+    frame_size?: number | (string & {});
+    /** set the video framerate */
+    framerate?: string | number;
+    /** set video pixel format */
+    pixel_format?: string | number;
+    /** set video size */
+    video_size?: string | number;
+    /** force loop over input file sequence */
+    loop?: boolean | (string & {});
+  };
+  /**
+   * piped
+   * @see https://ffmpeg.org/ffmpeg-formats.html#xpm_005fpipe
+   */
+  xpm_pipe: {
+    /** force frame size in bytes */
+    frame_size?: number | (string & {});
+    /** set the video framerate */
+    framerate?: string | number;
+    /** set video pixel format */
+    pixel_format?: string | number;
+    /** set video size */
+    video_size?: string | number;
+    /** force loop over input file sequence */
+    loop?: boolean | (string & {});
+  };
+  /**
+   * piped
+   * @see https://ffmpeg.org/ffmpeg-formats.html#xwd_005fpipe
+   */
+  xwd_pipe: {
+    /** force frame size in bytes */
+    frame_size?: number | (string & {});
+    /** set the video framerate */
+    framerate?: string | number;
+    /** set video pixel format */
+    pixel_format?: string | number;
+    /** set video size */
+    video_size?: string | number;
+    /** force loop over input file sequence */
+    loop?: boolean | (string & {});
   };
 }
 
