@@ -447,6 +447,66 @@ function expandDefiningMacros(code, macros) {
   return generated;
 }
 
+// The value of an #ifdef/#ifndef/#if/#elif condition on one macro of `known`
+// (`X`, `defined(X)`, `!defined(X)`), or null when the condition is anything else.
+function knownCondition(keyword, rest, known) {
+  if (keyword === 'ifdef' || keyword === 'ifndef') {
+    const name = rest.trim().split(/\s/)[0];
+    if (!known.has(name)) return null;
+    return keyword === 'ifdef' ? known.get(name) : !known.get(name);
+  }
+  const m = rest.match(/^\s*(!)?\s*defined\s*(?:\(\s*(\w+)\s*\)|(\w+))\s*$/);
+  if (!m || !known.has(m[2] ?? m[3])) return null;
+  return m[1] ? !known.get(m[2] ?? m[3]) : known.get(m[2] ?? m[3]);
+}
+
+// Blank the branches not taken of conditionals on a macro of `known` (name -> defined),
+// so options behind a build feature macro (NVENC_HAVE_*) follow the build. Every other
+// conditional keeps all of its branches.
+function applyKnownConditionals(text, known) {
+  if (!known.size) return text;
+  const lines = text.split('\n');
+  const stack = [];
+  let active = true;
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(/^[ \t]*#[ \t]*(ifdef|ifndef|if|elif|else|endif)\b(.*)$/);
+    if (!m) {
+      if (!active) lines[i] = '';
+      continue;
+    }
+    const [, keyword, rest] = m;
+    const top = stack.at(-1);
+    const opens = keyword === 'ifdef' || keyword === 'ifndef' || keyword === 'if';
+    // A directive inside a branch not taken is dropped with that branch.
+    if (!(opens ? active : (top?.parent ?? true))) lines[i] = '';
+    if (opens) {
+      const value = knownCondition(keyword, rest, known);
+      stack.push({ parent: active, decided: value !== null, taken: value === true });
+      active = active && value !== false;
+    } else if (!top) {
+      continue;
+    } else if (keyword === 'elif') {
+      if (!top.decided) {
+        active = top.parent;
+      } else if (top.taken) {
+        active = false;
+      } else {
+        const value = knownCondition('if', rest, known);
+        top.decided = value !== null;
+        top.taken = value === true;
+        active = top.parent && value !== false;
+      }
+    } else if (keyword === 'else') {
+      active = top.parent && !(top.decided && top.taken);
+      top.taken = true;
+    } else {
+      active = top.parent;
+      stack.pop();
+    }
+  }
+  return lines.join('\n');
+}
+
 /**
  * Index the AVClasses and AVOption arrays of a set of source files.
  *
@@ -456,9 +516,11 @@ function expandDefiningMacros(code, macros) {
  * entry's priv_class (its own array plus the options of child classes like
  * framesync), or null without a class; `resolveArray(name)` parses a named array.
  * `warnings` collects what could not be resolved (ambiguous or missing definitions).
+ * `defines` (name -> defined) decides conditionals on build feature macros; options
+ * in branches the build does not take are left out.
  */
-export function createSourceIndex(files, { macroHeaders = [] } = {}) {
-  const texts = files.map((file) => ({ file, text: stripComments(readFileSync(file, 'utf8')) }));
+export function createSourceIndex(files, { macroHeaders = [], defines = new Map() } = {}) {
+  const texts = files.map((file) => ({ file, text: applyKnownConditionals(stripComments(readFileSync(file, 'utf8')), defines) }));
   // Headers of other libraries only contribute macros (libavformat uses CODEC2_AVOPTIONS
   // from libavcodec/codec2utils.h); the library's own headers take precedence.
   const headerMacros = new Map();

@@ -867,7 +867,7 @@ export interface EncoderOptionsMap {
     /** Set the encoding preset */
     preset?: 'default' | 'slow' | 'medium' | 'fast' | 'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7';
     /** Set the encoding tuning info */
-    tune?: 'hq' | 'uhq' | 'll' | 'ull' | 'lossless';
+    tune?: 'hq' | 'll' | 'ull' | 'lossless';
     /** Set the encoding level restriction */
     level?:
       | 'auto'
@@ -979,12 +979,6 @@ export interface EncoderOptionsMap {
     s12m_tc?: boolean;
     /** Pad the bitstream to ensure bitrate does not drop below the target in CBR mode */
     cbr_padding?: boolean;
-    /** Specifies the strength of the temporal filtering */
-    tf_level?: '0' | '4';
-    /** Specifies the lookahead level. Higher level may improve quality at the expense of performance. */
-    lookahead_level?: 'auto' | '0' | '1' | '2' | '3';
-    /** Specifies the split encoding mode */
-    split_encode_mode?: 'disabled' | 'auto' | 'forced' | '2' | '3' | '4';
   };
   /**
    * AV1 (Intel Quick Sync Video acceleration)
@@ -1804,7 +1798,7 @@ export interface EncoderOptionsMap {
     /** Set the encoding tuning info */
     tune?: 'hq' | 'll' | 'ull' | 'lossless';
     /** Set the encoding profile */
-    profile?: 'baseline' | 'main' | 'high' | 'high10' | 'high422' | 'high444p';
+    profile?: 'baseline' | 'main' | 'high' | 'high444p';
     /** Set the encoding level restriction */
     level?:
       | 'auto'
@@ -1902,14 +1896,10 @@ export interface EncoderOptionsMap {
     b_ref_mode?: 'disabled' | 'each' | 'middle';
     /** Use A53 Closed Captions (if available) */
     a53cc?: boolean;
-    /** Use timecode (if available) */
-    s12m_tc?: boolean;
     /** Specifies the DPB size used for encoding (0 means automatic) */
     dpb_size?: number;
     /** Set the multipass encoding */
     multipass?: 'disabled' | 'qres' | 'fullres';
-    /** Enable 10 bit encode for 8 bit input */
-    highbitdepth?: boolean;
     /** Low delay key frame scale; Specifies the Scene Change frame size increase allowed in case of single frame VBV and CBR */
     ldkfs?: number;
     /** Pass on extra SEI data (e.g. a53 cc) to be included in the bitstream */
@@ -1926,10 +1916,6 @@ export interface EncoderOptionsMap {
     'constrained-encoding'?: boolean;
     /** Pad the bitstream to ensure bitrate does not drop below the target in CBR mode */
     cbr_padding?: boolean;
-    /** Specifies the strength of the temporal filtering */
-    tf_level?: '0' | '4';
-    /** Specifies the lookahead level. Higher level may improve quality at the expense of performance. */
-    lookahead_level?: 'auto' | '0' | '1' | '2' | '3';
   };
   /**
    * H.264
@@ -2427,9 +2413,9 @@ export interface EncoderOptionsMap {
     preset?:
       'default' | 'slow' | 'medium' | 'fast' | 'hp' | 'hq' | 'bd' | 'll' | 'llhq' | 'llhp' | 'lossless' | 'losslesshp' | 'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7';
     /** Set the encoding tuning info */
-    tune?: 'hq' | 'uhq' | 'll' | 'ull' | 'lossless';
+    tune?: 'hq' | 'll' | 'ull' | 'lossless';
     /** Set the encoding profile */
-    profile?: 'main' | 'main10' | 'rext' | 'mv';
+    profile?: 'main' | 'main10' | 'rext';
     /** Set the encoding level restriction */
     level?: 'auto' | '1' | '1.0' | '2' | '2.0' | '2.1' | '3' | '3.0' | '3.1' | '4' | '4.0' | '4.1' | '5' | '5.0' | '5.1' | '5.2' | '6' | '6.0' | '6.1' | '6.2';
     /** Set the encoding tier */
@@ -2506,8 +2492,6 @@ export interface EncoderOptionsMap {
     dpb_size?: number;
     /** Set the multipass encoding */
     multipass?: 'disabled' | 'qres' | 'fullres';
-    /** Enable 10 bit encode for 8 bit input */
-    highbitdepth?: boolean;
     /** Low delay key frame scale; Specifies the Scene Change frame size increase allowed in case of single frame VBV and CBR */
     ldkfs?: number;
     /** Pass on extra SEI data (e.g. a53 cc) to be included in the bitstream */
@@ -2524,14 +2508,6 @@ export interface EncoderOptionsMap {
     'constrained-encoding'?: boolean;
     /** Pad the bitstream to ensure bitrate does not drop below the target in CBR mode */
     cbr_padding?: boolean;
-    /** Specifies the strength of the temporal filtering */
-    tf_level?: '0' | '4';
-    /** Specifies the lookahead level. Higher level may improve quality at the expense of performance. */
-    lookahead_level?: 'auto' | '0' | '1' | '2' | '3';
-    /** Enable use of unidirectional B-Frames. */
-    unidir_b?: boolean;
-    /** Specifies the split encoding mode */
-    split_encode_mode?: 'disabled' | 'auto' | 'forced' | '2' | '3' | '4';
   };
   /**
    * H.265

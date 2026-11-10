@@ -11,13 +11,17 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { createSourceIndex, docAnchor, fileHeader, findComponents, renderFlat, renderMap, walk } from './avoption-parser.js';
-import { getFFmpegPath } from './utils.js';
+import { getFFmpegPath, getNvencFeatureMacros } from './utils.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const LAVC = join(getFFmpegPath(''), 'libavcodec');
 
-// libavutil's headers for shared macros (AV_STRINGIFY, ...)
-const index = createSourceIndex(walk(LAVC), { macroHeaders: walk(join(getFFmpegPath(''), 'libavutil'), [], ['.h']) });
+// libavutil's headers for shared macros (AV_STRINGIFY, ...); the NVENC feature macros
+// drop the NVENC options the bundled SDK headers do not have
+const index = createSourceIndex(walk(LAVC), {
+  macroHeaders: walk(join(getFFmpegPath(''), 'libavutil'), [], ['.h']),
+  defines: getNvencFeatureMacros(getFFmpegPath('')),
+});
 
 // Generic AVCodecContext options (options_table.h) — applied to every codec via
 // the same option dictionary, so they belong in every codec's option bag.

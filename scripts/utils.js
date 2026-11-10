@@ -358,3 +358,49 @@ export const buildCodecTypeResolver = (ffmpegPath, options = {}) => {
     return null;
   };
 };
+
+// NVENC SDK version of each nv-codec-headers commit that builder/scripts.d/50-ffnvcodec.sh
+// pins. Add the new commit when the pin moves; its tag (n12.0.16.1, ...) names the version.
+const NV_CODEC_HEADERS_SDK = {
+  '451da99614412a7f9526ef301a5ee0c7a6f9ad76': [12, 0], // n12.0.16.1
+};
+
+/**
+ * Resolve the NVENC feature macros (NVENC_HAVE_*, NVENC_NO_DEPRECATED_RC) of the build.
+ *
+ * libavcodec/nvenc.h defines each macro inside an `#if NVENCAPI_CHECK_VERSION(major, minor)`
+ * block, and the NVENC encoders declare options behind them (lookahead_level, tf_level, ...).
+ * The macros the bundled headers' SDK version reaches are defined, the rest are not.
+ *
+ * @param {string} ffmpegPath - Path to FFmpeg source root
+ * @returns {Map<string, boolean>} Macro name -> defined; empty when the tree has no
+ *   jellyfin builder (the options of every branch are then kept)
+ * @throws {Error} When the pinned nv-codec-headers commit has no known SDK version
+ */
+export const getNvencFeatureMacros = (ffmpegPath) => {
+  const script = join(ffmpegPath, 'builder', 'scripts.d', '50-ffnvcodec.sh');
+  if (!existsSync(script)) {
+    console.warn(`No ${script}: NVENC options of every SDK version are kept`);
+    return new Map();
+  }
+
+  const commit = readFileSync(script, 'utf8').match(/^SCRIPT_COMMIT="([0-9a-f]+)"/m)?.[1];
+  const sdk = NV_CODEC_HEADERS_SDK[commit];
+  if (!sdk) {
+    throw new Error(`Unknown nv-codec-headers commit ${commit} in ${script}: add its SDK version to NV_CODEC_HEADERS_SDK in scripts/utils.js`);
+  }
+
+  const macros = new Map();
+  let gate = null;
+  for (const line of readFileSync(join(ffmpegPath, 'libavcodec', 'nvenc.h'), 'utf8').split('\n')) {
+    let m;
+    if ((m = line.match(/^#if NVENCAPI_CHECK_VERSION\((\d+),\s*(\d+)\)/))) {
+      gate = [Number(m[1]), Number(m[2])];
+    } else if (/^#endif/.test(line)) {
+      gate = null;
+    } else if ((m = line.match(/^#define (NVENC_\w+)/))) {
+      macros.set(m[1], !gate || gate[0] < sdk[0] || (gate[0] === sdk[0] && gate[1] <= sdk[1]));
+    }
+  }
+  return macros;
+};
