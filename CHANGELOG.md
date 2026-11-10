@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [7.0.0-beta.1] - 2026-11-10
+
 ### Breaking Changes
 
 #### FFmpeg 8.1.3 from jellyfin-ffmpeg instead of an FFmpeg development snapshot
