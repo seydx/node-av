@@ -317,6 +317,9 @@
                             "/opt/ffbuild/prefix/lib/libXau.a",
                             "/opt/ffbuild/prefix/lib/libXrandr.a",
                             "/opt/ffbuild/prefix/lib/libXrender.a",
+                            "-lva",
+                            "-lva-drm",
+                            "-lva-x11",
                             "-ldrm",
                             "-lpthread",
                             "-lm",
@@ -347,9 +350,6 @@
                                 {
                                     "libraries": [
                                         "/opt/ffbuild/prefix/lib/libvpl.a",
-                                        "-lva",
-                                        "-lva-drm",
-                                        "-lva-x11",
                                     ]
                                 },
                             ],
