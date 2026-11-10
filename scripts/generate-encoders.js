@@ -11,7 +11,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import { buildCodecNameIndex, getFFmpegPath } from './utils.js';
+import { buildCodecNameIndex, buildCodecTypeResolver, getFFmpegPath } from './utils.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -96,25 +96,9 @@ const extractEncoders = (includePatches = false) => {
 };
 
 /**
- * Categorize encoder by type and hardware
+ * Categorize encoder by hardware
  */
 const categorizeEncoder = (name) => {
-  // Determine media type
-  let mediaType = 'video'; // Default to video
-
-  // Audio encoder patterns
-  if (
-    name.match(
-      // eslint-disable-next-line @stylistic/max-len
-      /^(aac|ac3|eac3|mp2|mp3|opus|flac|vorbis|alac|tta|wavpack|mlp|truehd|dca|dts|pcm|adpcm|g72|aptx|sbc|libmp3|libopus|libvorbis|libfdk|libspeex|nellymoser|wmav|real-144|sonic|dfpwm|comfortnoise|s302m|roq-dpcm|ilbc|gsm|amr|at$|at-|mf$|-mf-)/,
-    )
-  ) {
-    mediaType = 'audio';
-  } else if (name.match(/^(ass|ssa|srt|subrip|webvtt|dvbsub|dvdsub|mov-text|text|ttml|xsub)/)) {
-    // Subtitle encoder patterns
-    mediaType = 'subtitle';
-  }
-
   // Determine if hardware accelerated
   let isHardware = false;
   let hardwareType = null;
@@ -155,12 +139,18 @@ const categorizeEncoder = (name) => {
   } else if (name.includes('_rkmpp')) {
     isHardware = true;
     hardwareType = 'Rockchip MPP';
+  } else if (name.includes('_vulkan')) {
+    isHardware = true;
+    hardwareType = 'Vulkan';
+  } else if (name.endsWith('_oh')) {
+    isHardware = true;
+    hardwareType = 'OpenHarmony';
   } else if (name.endsWith('_at')) {
     isHardware = true;
     hardwareType = 'AudioToolbox (macOS)';
   }
 
-  return { mediaType, isHardware, hardwareType };
+  return { isHardware, hardwareType };
 };
 
 /**
@@ -192,13 +182,22 @@ const generateTypeScript = (includePatches = false) => {
 
   console.log(`\nFound ${encoders.length} encoders in FFmpeg source`);
 
+  // Media type from the FFmpeg source: the FFCodec's .p.type, or for macro-generated
+  // codecs the descriptor of the codec they implement (see buildCodecTypeResolver)
+  const resolveType = buildCodecTypeResolver(FFMPEG_PATH, { scanPatches: includePatches });
+  const mediaTypeOf = (cId) => resolveType(`${cId}_encoder`);
+  const untyped = encoders.filter((c) => !['video', 'audio', 'subtitle'].includes(mediaTypeOf(c)));
+  if (untyped.length > 0) {
+    throw new Error(`Could not determine the media type of: ${untyped.map((c) => `${c} (${mediaTypeOf(c)})`).join(', ')}`);
+  }
+
   // Categorize encoders
   const videoEncoders = [];
   const audioEncoders = [];
   const subtitleEncoders = [];
 
   for (const encoder of encoders) {
-    const { mediaType } = categorizeEncoder(encoder);
+    const mediaType = mediaTypeOf(encoder);
 
     if (mediaType === 'audio') {
       audioEncoders.push(encoder);

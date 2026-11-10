@@ -11,7 +11,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import { buildCodecNameIndex, getFFmpegPath } from './utils.js';
+import { buildCodecNameIndex, buildCodecTypeResolver, getFFmpegPath } from './utils.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -96,27 +96,9 @@ const extractDecoders = (includePatches = false) => {
 };
 
 /**
- * Categorize decoder by type and hardware
+ * Categorize decoder by hardware
  */
 const categorizeDecoder = (name) => {
-  // Determine media type
-  let mediaType = 'video'; // Default to video
-
-  // Audio decoder patterns
-  if (
-    name.match(
-      // eslint-disable-next-line @stylistic/max-len
-      /^(aac|ac3|ac4|eac3|mp1|mp2|mp3|opus|flac|vorbis|alac|tta|wavpack|mlp|truehd|dca|dts|pcm|adpcm|g72|aptx|sbc|libmp3|libopus|libvorbis|libfdk|libspeex|nellymoser|wmav|wma|real|sonic|dfpwm|comfortnoise|s302m|roq-dpcm|ilbc|gsm|amr|atrac|cook|dolby|imc|mace|metasound|musepack|on2avc|paf-audio|qcelp|qdm|ra-|ralf|sipr|tak|truespeech|twinvq|vmdaudio|wavarc|westwood-snd1|xma|at$|at-|mf$|-mf-)/,
-    )
-  ) {
-    mediaType = 'audio';
-  } else if (
-    name.match(/^(ass|ssa|srt|subrip|webvtt|dvbsub|dvdsub|mov-text|text|ttml|xsub|cc-dec|hdmv-pgs|jacosub|microdvd|mpl2|pjs|realtext|sami|stl|subviewer|vplayer)/)
-  ) {
-    // Subtitle decoder patterns
-    mediaType = 'subtitle';
-  }
-
   // Determine if hardware accelerated
   let isHardware = false;
   let hardwareType = null;
@@ -163,12 +145,18 @@ const categorizeDecoder = (name) => {
   } else if (name.includes('_mmal')) {
     isHardware = true;
     hardwareType = 'Raspberry Pi MMAL';
+  } else if (name.includes('_amf')) {
+    isHardware = true;
+    hardwareType = 'AMD AMF';
+  } else if (name.endsWith('_oh')) {
+    isHardware = true;
+    hardwareType = 'OpenHarmony';
   } else if (name.endsWith('_at')) {
     isHardware = true;
     hardwareType = 'AudioToolbox (macOS)';
   }
 
-  return { mediaType, isHardware, hardwareType };
+  return { isHardware, hardwareType };
 };
 
 /**
@@ -200,13 +188,22 @@ const generateTypeScript = (includePatches = false) => {
 
   console.log(`\nFound ${decoders.length} decoders in FFmpeg source`);
 
+  // Media type from the FFmpeg source: the FFCodec's .p.type, or for macro-generated
+  // codecs the descriptor of the codec they implement (see buildCodecTypeResolver)
+  const resolveType = buildCodecTypeResolver(FFMPEG_PATH, { scanPatches: includePatches });
+  const mediaTypeOf = (cId) => resolveType(`${cId}_decoder`);
+  const untyped = decoders.filter((c) => !['video', 'audio', 'subtitle'].includes(mediaTypeOf(c)));
+  if (untyped.length > 0) {
+    throw new Error(`Could not determine the media type of: ${untyped.map((c) => `${c} (${mediaTypeOf(c)})`).join(', ')}`);
+  }
+
   // Categorize decoders
   const videoDecoders = [];
   const audioDecoders = [];
   const subtitleDecoders = [];
 
   for (const decoder of decoders) {
-    const { mediaType } = categorizeDecoder(decoder);
+    const mediaType = mediaTypeOf(decoder);
 
     if (mediaType === 'audio') {
       audioDecoders.push(decoder);
