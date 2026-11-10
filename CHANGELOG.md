@@ -4,6 +4,85 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Breaking Changes
+
+#### FFmpeg 8.1.3 from jellyfin-ffmpeg instead of an FFmpeg development snapshot
+
+The bundled FFmpeg moves from an FFmpeg master snapshot (June 2026) to jellyfin-ffmpeg 8.1.3 and its patch set. Every prebuild now builds this one source with the same patches and dependency versions, including the Windows MSVC builds. 8.1.3 carries the 8.1 branch's backported fixes, among them security fixes the snapshot lacked (mov/mpegts bounds checks, HEVC WPP, RTSP credentials on redirect, …). It does not carry the features that only existed on FFmpeg master.
+
+`ffmpegVersion()` returns `'8.1.3'` instead of `'8.1'`. `getFFmpegInfo()` reports lower library versions than 6.2.0 (e.g. libavcodec 62.28 instead of 62.36), because the snapshot was ahead of the 8.1 branch.
+
+Removed together with the master-only features:
+
+- **Constants:**
+  - the swscale ops API: `SWS_UOP_*`, `SWS_OP_FILTER_H`/`_V`, `SWS_RW_*`, `SWS_BACKEND_GLSL`, `SWS_BACKEND_MAX_ENUM`
+  - frame and packet side data: `AV_FRAME_DATA_IAMF_*_PARAM`, `AV_FRAME_DATA_RAW_COLOR_PARAMS` with `AV_RAW_COLOR_PARAMS_*`, `AV_FRAME_DATA_DYNAMIC_HDR_SMPTE_2094_APP5`, `AV_PKT_DATA_DYNAMIC_HDR_SMPTE_2094_APP5`, `AV_PKT_DATA_HEVC_CONF`
+  - stream groups: `AV_STREAM_GROUP_PARAMS_DOLBY_VISION`, `AV_STREAM_GROUP_PARAMS_TREF`
+  - codec IDs: `AV_CODEC_ID_APPLE_APAC`, `AV_CODEC_ID_WEBP_ANIM`
+  - flags: `AVFMT_FIXED_FRAMESIZE`, `AV_CODEC_FLAG2_FIXED_FRAME_SIZE`, `AVFMT_PROGCOPY_*`, `AV_CPU_FLAG_EOR3`, `AV_CPU_FLAG_PMULL`
+- **Components:**
+  - the `pdv` encoder and muxer (`FF_ENCODER_PDV`)
+  - the `webp_anim` decoder and demuxer (`FF_DECODER_WEBP_ANIM`)
+  - the `frc_amf` and `v360_vulkan` filters
+  - the `dovi_split` bitstream filter
+- **Options:**
+  - `whisper`: `translate`
+  - `aac`/`aac_fixed`: `target_level`
+  - `libopus`: `dtx`
+  - `h264_d3d12va`/`hevc_d3d12va`: `constrained_intra_pred`
+  - `ffv1_vulkan`: `remap_mode`
+  - `overlay_vaapi`: `alpha_format`
+  - `vpp_amf`: the `in_*`/`out_*` color options
+  - `dash`: `availability_start_time_ms`, `suggested_presentation_delay`
+  - `whip`: `timeout`
+
+#### Constant values that changed
+
+`AV_HWDEVICE_TYPE_RKMPP`, `AV_HWDEVICE_TYPE_AMF` and `AV_HWDEVICE_TYPE_OHCODEC` are now 15, 13 and 14 (were 13, 14 and 15). `AV_PKT_DATA_RTP_TIMESTAMP` is now 41 (was 43). Code that uses the constants by name is unaffected. Numeric values stored or sent elsewhere must be updated.
+
+#### NVENC uses SDK 12.0: driver 520/522 instead of 610, without SDK 12.1+ features
+
+The NVENC headers move from SDK 13.1 to SDK 12.0, as in jellyfin-ffmpeg. NVENC now opens on drivers from 520.56 (Linux) and 522.25 (Windows). In 6.2.0, every `*_nvenc` encoder failed below driver 610 with "Driver does not support the required nvenc API version", so NVENC returns on older and stable-branch drivers (e.g. a GTX 1080 on 582).
+
+Not available in SDK 12.0:
+
+- split-frame encoding (`split_encode_mode`)
+- temporal filtering (`tf_level`)
+- `lookahead_level`
+- UHQ tuning (`tune: 'uhq'`)
+- unidirectional B-frames (`unidir_b`)
+- 10-bit and 4:2:2 H.264 (`highbitdepth`, `high10`, `high422`) and the `highbitdepth` option of `hevc_nvenc`
+- MV-HEVC (`mv`)
+- HEVC/AV1 mastering display metadata
+
+#### `scale_opencl` has no crop options
+
+The `cw`, `ch`, `cx` and `cy` options of `scale_opencl` came from a node-av FFmpeg patch that is gone: jellyfin's `scale_opencl` applies the frame's crop fields itself. `FilterPreset.crop()` on OpenCL now emits `crop=w:h:x:y,scale_opencl=w:h`, and `Scaler` follows. Filter strings that pass the options directly must crop first.
+
+**Migration:**
+
+```typescript
+// Before
+'scale_opencl=cw=1280:ch=720:cx=320:cy=180'
+
+// After
+'crop=1280:720:320:180,scale_opencl=1280:720'
+```
+
+### Added
+
+- **VAAPI on Linux arm64.** The Linux arm64 prebuilds link VA-API like the x64 ones, so `HardwareContext.create(AV_HWDEVICE_TYPE_VAAPI)` and the `*_vaapi` codecs and filters work on arm64 boards with a VA-API driver.
+- **`AV_PROFILE_DTS_HD_HRA_X`, `AV_PROFILE_DTS_HD_HRA_X_IMAX` and `FF_DECODER_LIBCELT`.**
+
+### Changed
+
+- **Codec constants carry the right media type.** 13 encoders and 67 decoders were typed as video. Among them are audio codecs like `libgsm`, `libopencore_amrnb`, `libshine`, `ape` and `als`, and subtitle codecs like `mov_text`. `Encoder.create()`/`Decoder.create()` now type the options for what the codec really is.
+- **Option types match what FFmpeg reports at runtime.** The generators now expand macro-built option tables and resolve classes and option arrays across files. The output is checked against a runtime dump of the build.
+  - Many hardware codecs gained option types (`*_cuvid`, `*_qsv`, `*_rkmpp`, `*_v4l2m2m`, `*_mediacodec`, `*_amf`, …), as did raw, PCM and image-pipe formats and filters such as `vpp_qsv`, `scale_qsv`, the `*_d3d11` and `*_videotoolbox` filters, the biquad audio filters and `lut*`.
+  - Options that never existed are gone: `noise`'s `all`/`c0`–`c3` (really `all_seed`, `c0_strength`, …), `selectivecolor`'s `red`, `green`, … (really `reds`, `greens`, …), framesync options on `lut3d` and `tblend`, and `file` on `haldclut`.
+- **`MuxerFormat` and `DemuxerFormat` list every format.** 21 muxers and 75 demuxers were missing: PCM, raw bitstreams like `h264`, `hevc` and `mjpeg`, and the image pipes.
+- **The bundled Windows `ffmpeg.exe` has an application icon** (jellyfin's `fftools.ico`).
+
 ## [6.2.0] - 2026-11-01
 
 ### Performance
