@@ -44,7 +44,7 @@ Removed together with the master-only features:
 
 The NVENC headers move from SDK 13.1 to SDK 12.0, as in jellyfin-ffmpeg. NVENC now opens on drivers from 520.56 (Linux) and 522.25 (Windows). In 6.2.0, every `*_nvenc` encoder failed below driver 610 with "Driver does not support the required nvenc API version", so NVENC returns on older and stable-branch drivers (e.g. a GTX 1080 on 582).
 
-Not available in SDK 12.0:
+Not available in SDK 12.0, and no longer part of the encoders' option types:
 
 - split-frame encoding (`split_encode_mode`)
 - temporal filtering (`tf_level`)
