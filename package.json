@@ -72,6 +72,7 @@
     "generate:formats": "cross-env FFMPEG_DEV_PATH=externals/jellyfin-ffmpeg node scripts/generate-formats.js && prettier --write src/constants/formats.ts",
     "generate:bsf-options": "cross-env FFMPEG_DEV_PATH=externals/jellyfin-ffmpeg node scripts/generate-bsf-options.js && prettier --write src/constants/bsf-options.ts",
     "generate:filter-options": "cross-env FFMPEG_DEV_PATH=externals/jellyfin-ffmpeg node scripts/generate-filter-options.js && prettier --write src/constants/filter-options.ts",
+    "validate:options": "node scripts/validate-options.js",
     "install": "node install/check.js",
     "install-updates": "npm i --save",
     "lint": "eslint .",

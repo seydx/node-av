@@ -3,11 +3,10 @@
 
 /**
  * Generate codec private-option types (src/constants/options.ts) by parsing
- * libavcodec AVOption sources. Pass --emit-json to also dump _source.json for
- * the dormant validation harness (compare-options.js + generate-options.ts).
+ * libavcodec AVOption sources.
  */
 
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -46,15 +45,6 @@ const codecDoc = (name) => {
   lines.push(`@see https://ffmpeg.org/ffmpeg-codecs.html#${docAnchor(name)}`);
   return lines.join('\n');
 };
-
-// Optional JSON dump for the dormant validation harness (compare-options.js).
-if (process.argv.includes('--emit-json')) {
-  const outDir = join(__dirname, '.options-data');
-  mkdirSync(outDir, { recursive: true });
-  const jsonFile = join(outDir, '_source.json');
-  writeFileSync(jsonFile, JSON.stringify({ platform: 'source', encoders, decoders }, null, 2) + '\n');
-  console.log(`Wrote ${jsonFile}`);
-}
 
 const header = fileHeader(['Auto-generated codec private-option types.', 'Generated from FFmpeg codec AVOption sources (see scripts/generate-options-source.js).']);
 
