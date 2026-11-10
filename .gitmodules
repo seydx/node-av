@@ -6,3 +6,6 @@
 	path = externals/node-gyp
 	url = https://github.com/seydx/node-gyp.git
 	branch = main
+[submodule "externals/ffmpeg-msvc-prebuilt"]
+	path = externals/ffmpeg-msvc-prebuilt
+	url = https://github.com/seydx/ffmpeg-msvc-prebuilt.git
