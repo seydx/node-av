@@ -6,6 +6,7 @@ import {
   AV_HWDEVICE_TYPE_D3D12VA,
   AV_HWDEVICE_TYPE_DXVA2,
   AV_HWDEVICE_TYPE_MEDIACODEC,
+  AV_HWDEVICE_TYPE_OPENCL,
   AV_HWDEVICE_TYPE_VIDEOTOOLBOX,
   AV_PIX_FMT_YUV420P,
   AV_PIX_FMT_YUV444P,
@@ -225,6 +226,12 @@ describe('FilterPreset', () => {
       strictEqual(FilterPreset.chain(d3d12va).scale(1280, 720).build(), 'scale_d3d12=1280:720');
       strictEqual(FilterPreset.chain(d3d11va).scaleFormat('nv12').build(), 'scale_d3d11=format=nv12');
       strictEqual(FilterPreset.chain(d3d12va).scaleFormat('nv12').build(), 'scale_d3d12=format=nv12');
+    });
+
+    it('should crop OpenCL frames through scale_opencl at the crop size', () => {
+      // crop keeps the link size on hardware frames; without w:h scale_opencl scales the region back up
+      const opencl = fakeHardware(AV_HWDEVICE_TYPE_OPENCL, 'opencl');
+      strictEqual(FilterPreset.chain(opencl).crop(640, 360, 100, 50).build(), 'crop=640:360:100:50,scale_opencl=640:360');
     });
   });
 });

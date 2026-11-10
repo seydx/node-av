@@ -428,8 +428,9 @@ export class FilterPreset {
    */
   crop(width: number, height: number, x = 0, y = 0): FilterPreset {
     if (this.hardware?.deviceType === AV_HWDEVICE_TYPE_OPENCL) {
-      // crop only marks the region on hardware frames, scale_opencl then samples it
-      this.add(`crop=${width}:${height}:${x}:${y},scale_opencl`);
+      // crop only marks the region on hardware frames and keeps the link size, so
+      // scale_opencl needs the crop size or it scales the region back to full size
+      this.add(`crop=${width}:${height}:${x}:${y},scale_opencl=${width}:${height}`);
     } else {
       this.add(`crop=${width}:${height}:${x}:${y}`, true);
     }
