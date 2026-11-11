@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **`DeviceMode.codecId` identifies compressed capture modes** ([#349](https://github.com/seydx/node-av/issues/349)). MJPEG and H.264 (and HEVC on Linux) camera modes reported `pixelFormat: AV_PIX_FMT_NONE` and nothing else, so they couldn't be told apart. Raw modes now report `AV_CODEC_ID_RAWVIDEO` next to their pixel format, compressed modes their codec (`avGetCodecName(mode.codecId)` → `'mjpeg'`). On Windows, modes described by a `VIDEOINFOHEADER2` are listed too.
+
+### Performance
+
+- **HEVC software decoding is about 13 % faster** per thread (4K on Apple Silicon: ~128 → ~148 fps single-threaded, about 9 % less CPU multithreaded), from FFmpeg master's residual decoding and deblocking improvements. Output is bit-identical; the HEVC conformance suite passes.
+- **Hardware frame downloads reuse their buffers.** `av_hwframe_transfer_data()` into an empty frame (used by the `Decoder` and `Scaler` when they move hardware frames to system memory) now takes the buffer from a pool instead of allocating it per frame. Per download: CUDA on a GTX 1080 (Windows) 1.8 → 0.9 ms at 1080p and 6.2 → 2.5 ms at 4K, D3D11VA 1.8 → 1.1 ms and 6.9 → 3.9 ms, VAAPI on an Intel N100 7.0 → 3.3 ms at 1080p (4K unchanged). macOS's allocator already cached these buffers, so it shows no difference there.
+
+### Fixed
+
+- **Closing an RTSP input sends TEARDOWN.** `Demuxer.close()` interrupts pending I/O first, which also aborted the TEARDOWN, so cameras kept the session alive until it timed out (60 s with mediamtx over UDP) and could reject an immediate reconnect with "453 Not Enough Bandwidth". The TEARDOWN is now sent and its reply read within 500 ms.
+- **RTP/RTSP depacketizer fixes from FFmpeg master:** MPEG-TS over RTP no longer loses data after a reordered packet, RTCP receiver reports clamp cumulative loss correctly, SRTP setup errors are reported, and malformed H.264 framesize, Opus and AV1 payloads and SampleRate attributes are rejected. Redirects are limited.
+- **H.264 streams with lost frames decode better with hardware decoding.** Frames filling a `frame_num` gap had invalid field POCs and lacked the hardware decoder state of the frame they duplicate, so frames referencing them decoded wrong. With VAAPI on an Intel N100, 551 instead of 403 of 878 frames of a test stream with dropped frames now match the software decoder. NVIDIA (NVDEC, D3D11VA) was barely affected.
+- **HEVC deblocking and chroma SAO fixes** for deblocking offsets taken from the wrong CTB and chroma SAO with 16×16 CTBs.
+- **`h264_videotoolbox`/`hevc_videotoolbox` no longer crash when opened again in the same process** after encoding a transfer characteristic CoreVideo has no constant for (e.g. V-Log). Also fixes a double free when a frame submission fails, leaks when frames are dropped or on error paths, and timestamps when VideoToolbox returns another timescale.
+
 ## [7.0.0-beta.1] - 2026-11-10
 
 ### Breaking Changes
