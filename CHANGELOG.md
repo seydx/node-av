@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Breaking Changes
+
+#### The FFmpeg CLI is a separate package ([#332](https://github.com/seydx/node-av/issues/332))
+
+node-av no longer downloads the `ffmpeg` binary in a `postinstall` script. Install `@seydx/node-av-ffmpeg` next to it if you use `node-av/ffmpeg`:
+
+```bash
+npm install node-av @seydx/node-av-ffmpeg
+```
+
+Like the native bindings, the binary comes as one npm package per platform (`@seydx/node-av-ffmpeg-{darwin,linux,win32}-{arm64,x64}`), and npm installs only the matching one. Installs without the CLI are 29–63 MB smaller to download, depending on the platform. Installing no longer needs network access to GitHub. It also works where lifecycle scripts are blocked (pnpm 10+, bun, `--ignore-scripts`).
+
+- `ffmpegPath()` throws when the package is not installed instead of returning a path that doesn't exist. Check `isFfmpegAvailable()` first if the CLI is optional.
+- The binary moves from `node_modules/node-av/binary/` into `node_modules/@seydx/node-av-ffmpeg-<platform>/`. Electron apps must unpack it from the ASAR archive (e.g. `asarUnpack: node_modules/@seydx/**`).
+- `SKIP_FFMPEG` is gone, and node-av no longer depends on `unzipper`.
+
 ## [7.0.0-beta.2] - 2026-11-11
 
 ### Added
