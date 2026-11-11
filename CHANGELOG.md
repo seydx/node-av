@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [7.0.0-beta.2] - 2026-11-11
+
 ### Added
 
 - **`DeviceMode.codecId` identifies compressed capture modes** ([#349](https://github.com/seydx/node-av/issues/349)). MJPEG and H.264 (and HEVC on Linux) camera modes reported `pixelFormat: AV_PIX_FMT_NONE` and nothing else, so they couldn't be told apart. Raw modes now report `AV_CODEC_ID_RAWVIDEO` next to their pixel format, compressed modes their codec (`avGetCodecName(mode.codecId)` → `'mjpeg'`). On Windows, modes described by a `VIDEOINFOHEADER2` are listed too.
