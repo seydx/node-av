@@ -46,6 +46,21 @@ static AVPixelFormat v4l2FormatToAV(uint32_t fourcc) {
   }
 }
 
+// V4L2 fourcc → FFmpeg AVCodecID, as in libavdevice's v4l2 conversion table.
+// Compressed formats have no pixel format until they are decoded.
+static AVCodecID v4l2CodecToAV(uint32_t fourcc) {
+  switch (fourcc) {
+    case V4L2_PIX_FMT_MJPEG:
+    case V4L2_PIX_FMT_JPEG:    return AV_CODEC_ID_MJPEG;
+    case V4L2_PIX_FMT_H264:    return AV_CODEC_ID_H264;
+#ifdef V4L2_PIX_FMT_HEVC
+    case V4L2_PIX_FMT_HEVC:    return AV_CODEC_ID_HEVC;
+#endif
+    default:
+      return v4l2FormatToAV(fourcc) != AV_PIX_FMT_NONE ? AV_CODEC_ID_RAWVIDEO : AV_CODEC_ID_NONE;
+  }
+}
+
 std::vector<DeviceInfo> enumerateDevices() {
   std::vector<DeviceInfo> devices;
 
@@ -214,10 +229,9 @@ std::vector<DeviceMode> enumerateDeviceModes(const std::string& deviceName) {
   struct ModeKey {
     int w, h;
     AVPixelFormat pixelFormat;
+    AVCodecID codecId;
     bool operator<(const ModeKey& o) const {
-      if (w != o.w) return w < o.w;
-      if (h != o.h) return h < o.h;
-      return pixelFormat < o.pixelFormat;
+      return std::tie(w, h, pixelFormat, codecId) < std::tie(o.w, o.h, o.pixelFormat, o.codecId);
     }
   };
   std::map<ModeKey, std::pair<double, double>> modeMap;
@@ -229,6 +243,7 @@ std::vector<DeviceMode> enumerateDeviceModes(const std::string& deviceName) {
 
   for (fmt.index = 0; ioctl(fd, VIDIOC_ENUM_FMT, &fmt) == 0; fmt.index++) {
     AVPixelFormat pixFmt = v4l2FormatToAV(fmt.pixelformat);
+    AVCodecID codecId = v4l2CodecToAV(fmt.pixelformat);
 
     struct v4l2_frmsizeenum frmsize;
     memset(&frmsize, 0, sizeof(frmsize));
@@ -262,7 +277,7 @@ std::vector<DeviceMode> enumerateDeviceModes(const std::string& deviceName) {
         }
 
         if (maxFps > 0) {
-          ModeKey key{w, h, pixFmt};
+          ModeKey key{w, h, pixFmt, codecId};
           auto it = modeMap.find(key);
           if (it == modeMap.end()) {
             modeMap[key] = {minFps, maxFps};
@@ -284,6 +299,7 @@ std::vector<DeviceMode> enumerateDeviceModes(const std::string& deviceName) {
     mode.minFrameRate = fps.first;
     mode.maxFrameRate = fps.second;
     mode.pixelFormat = key.pixelFormat;
+    mode.codecId = key.codecId;
     modes.push_back(mode);
   }
 

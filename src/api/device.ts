@@ -214,7 +214,9 @@ export class DeviceAPI {
    * Query supported capture modes for a video device.
    *
    * Returns supported resolutions and frame rate ranges, sorted descending
-   * by resolution (area), then by max frame rate.
+   * by resolution (area), then by max frame rate. Raw modes report their pixel
+   * format; compressed modes such as MJPEG or H.264 report their codec in
+   * `codecId` and have no pixel format until decoded.
    *
    * @param deviceName - Device name as returned by `list()` (e.g. uniqueID on macOS)
    *
@@ -227,7 +229,8 @@ export class DeviceAPI {
    * if (camera) {
    *   const modes = await DeviceAPI.modes(camera.name);
    *   for (const mode of modes) {
-   *     console.log(`${mode.width}x${mode.height} @ ${mode.minFrameRate}-${mode.maxFrameRate} fps`);
+   *     const format = mode.codecId === AV_CODEC_ID_RAWVIDEO ? avGetPixFmtName(mode.pixelFormat) : avGetCodecName(mode.codecId);
+   *     console.log(`${mode.width}x${mode.height} ${format} @ ${mode.minFrameRate}-${mode.maxFrameRate} fps`);
    *   }
    * }
    * ```

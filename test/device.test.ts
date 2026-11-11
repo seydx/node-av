@@ -2,6 +2,7 @@ import assert from 'node:assert';
 import { describe, it } from 'node:test';
 
 import { DeviceAPI } from '../src/api/device.js';
+import { AV_CODEC_ID_RAWVIDEO, AV_PIX_FMT_NONE } from '../src/constants/constants.js';
 import { skipInCI } from './index.js';
 
 describe('Device', () => {
@@ -190,6 +191,9 @@ describe('Device', () => {
           assert(typeof mode.minFrameRate === 'number');
           assert(typeof mode.maxFrameRate === 'number');
           assert(typeof mode.pixelFormat === 'number');
+          assert(typeof mode.codecId === 'number');
+          // Raw modes have a pixel format, compressed or unknown ones don't
+          assert.strictEqual(mode.pixelFormat !== AV_PIX_FMT_NONE, mode.codecId === AV_CODEC_ID_RAWVIDEO);
           assert(mode.width > 0);
           assert(mode.height > 0);
           assert(mode.minFrameRate > 0);

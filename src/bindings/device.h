@@ -6,6 +6,7 @@
 #include <string>
 
 extern "C" {
+#include <libavcodec/codec_id.h>
 #include <libavutil/pixfmt.h>
 #include <libavutil/samplefmt.h>
 }
@@ -30,6 +31,7 @@ struct DeviceMode {
   double minFrameRate;
   double maxFrameRate;
   AVPixelFormat pixelFormat = AV_PIX_FMT_NONE;  // FFmpeg AVPixelFormat enum value
+  AVCodecID codecId = AV_CODEC_ID_NONE;         // RAWVIDEO for raw formats, the codec of compressed ones
 };
 
 struct AudioDeviceMode {

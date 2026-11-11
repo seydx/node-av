@@ -1,6 +1,10 @@
 #ifdef __APPLE__
 
+// device.h pulls in FFmpeg's enum AVMediaType (libavutil/avutil.h via codec_id.h),
+// which AVFoundation redeclares as an NSString typedef
+#define AVMediaType FFmpegAVMediaType
 #include "device.h"
+#undef AVMediaType
 #include <algorithm>
 #include <map>
 #include <set>
@@ -221,6 +225,7 @@ std::vector<DeviceMode> enumerateDeviceModes(const std::string& deviceName) {
       mode.minFrameRate = fps.first;
       mode.maxFrameRate = fps.second;
       mode.pixelFormat = key.pixelFormat;
+      mode.codecId = key.pixelFormat != AV_PIX_FMT_NONE ? AV_CODEC_ID_RAWVIDEO : AV_CODEC_ID_NONE;
       modes.push_back(mode);
     }
 

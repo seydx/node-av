@@ -1,6 +1,6 @@
 import { bindings } from './binding.js';
 
-import type { AVPixelFormat, AVSampleFormat } from '../constants/constants.js';
+import type { AVCodecID, AVPixelFormat, AVSampleFormat } from '../constants/constants.js';
 import type { NativeAudioDeviceMode, NativeDeviceInfo, NativeDeviceMode } from './native-types.js';
 
 /**
@@ -57,7 +57,10 @@ export interface DeviceMode {
   height: number;
   minFrameRate: number;
   maxFrameRate: number;
+  /** Pixel format of raw capture modes, `AV_PIX_FMT_NONE` for compressed ones */
   pixelFormat: AVPixelFormat;
+  /** `AV_CODEC_ID_RAWVIDEO` for raw capture modes, the codec of compressed ones (e.g. `AV_CODEC_ID_MJPEG`), `AV_CODEC_ID_NONE` if unknown */
+  codecId: AVCodecID;
 }
 
 /**
@@ -206,6 +209,7 @@ export class Device {
       minFrameRate: m.minFrameRate,
       maxFrameRate: m.maxFrameRate,
       pixelFormat: m.pixelFormat,
+      codecId: m.codecId,
     }));
   }
 
@@ -236,6 +240,7 @@ export class Device {
       minFrameRate: m.minFrameRate,
       maxFrameRate: m.maxFrameRate,
       pixelFormat: m.pixelFormat,
+      codecId: m.codecId,
     }));
   }
 

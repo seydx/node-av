@@ -6,8 +6,13 @@
 #include <set>
 #include <tuple>
 #include <dshow.h>
+#include <dvdmedia.h>
 #include <mmreg.h>
 #include <comdef.h>
+
+extern "C" {
+#include <libavformat/avformat.h>
+}
 
 #pragma comment(lib, "strmiids.lib")
 #pragma comment(lib, "ole32.lib")
@@ -48,6 +53,16 @@ static AVPixelFormat mediaSubtypeToAV(const GUID& subtype) {
   if (subtype == MEDIASUBTYPE_ARGB32) return AV_PIX_FMT_ARGB;
   if (subtype == MEDIASUBTYPE_RGB565) return AV_PIX_FMT_RGB565LE;
   return AV_PIX_FMT_NONE;
+}
+
+// Codec of a capture format. Like libavdevice's dshow, a compressed format is
+// resolved from the FOURCC in biCompression through the RIFF tag table.
+static AVCodecID mediaCodecToAV(const BITMAPINFOHEADER& bih, AVPixelFormat pixFmt) {
+  if (pixFmt != AV_PIX_FMT_NONE) return AV_CODEC_ID_RAWVIDEO;
+  const AVCodecTag* const tags[] = {avformat_get_riff_video_tags(), nullptr};
+  AVCodecID codecId = av_codec_get_id(tags, bih.biCompression);
+  // Raw frames without a known pixel format can't be described
+  return codecId == AV_CODEC_ID_RAWVIDEO ? AV_CODEC_ID_NONE : codecId;
 }
 
 // Helper function to enumerate devices of a specific category
@@ -211,10 +226,9 @@ std::vector<DeviceMode> enumerateDeviceModes(const std::string& deviceName) {
   struct ModeKey {
     int w, h;
     AVPixelFormat pixelFormat;
+    AVCodecID codecId;
     bool operator<(const ModeKey& o) const {
-      if (w != o.w) return w < o.w;
-      if (h != o.h) return h < o.h;
-      return pixelFormat < o.pixelFormat;
+      return std::tie(w, h, pixelFormat, codecId) < std::tie(o.w, o.h, o.pixelFormat, o.codecId);
     }
   };
   std::map<ModeKey, std::pair<double, double>> modeMap;
@@ -264,18 +278,28 @@ std::vector<DeviceMode> enumerateDeviceModes(const std::string& deviceName) {
                     BYTE* caps = new BYTE[size];
 
                     if (SUCCEEDED(streamConfig->GetStreamCaps(i, &mediaType, caps))) {
-                      if (mediaType->formattype == FORMAT_VideoInfo && mediaType->pbFormat) {
-                        VIDEOINFOHEADER* vih = reinterpret_cast<VIDEOINFOHEADER*>(mediaType->pbFormat);
-                        int w = vih->bmiHeader.biWidth;
-                        int h = abs(vih->bmiHeader.biHeight);
+                      // Compressed formats (H.264 in particular) often come with a VIDEOINFOHEADER2
+                      const BITMAPINFOHEADER* bih = nullptr;
+                      if (mediaType->pbFormat && mediaType->formattype == FORMAT_VideoInfo &&
+                          mediaType->cbFormat >= sizeof(VIDEOINFOHEADER)) {
+                        bih = &reinterpret_cast<VIDEOINFOHEADER*>(mediaType->pbFormat)->bmiHeader;
+                      } else if (mediaType->pbFormat && mediaType->formattype == FORMAT_VideoInfo2 &&
+                                 mediaType->cbFormat >= sizeof(VIDEOINFOHEADER2)) {
+                        bih = &reinterpret_cast<VIDEOINFOHEADER2*>(mediaType->pbFormat)->bmiHeader;
+                      }
+
+                      if (bih) {
+                        int w = bih->biWidth;
+                        int h = abs(bih->biHeight);
 
                         VIDEO_STREAM_CONFIG_CAPS* vscCaps = reinterpret_cast<VIDEO_STREAM_CONFIG_CAPS*>(caps);
                         double minFps = vscCaps->MaxFrameInterval > 0 ? 10000000.0 / vscCaps->MaxFrameInterval : 1.0;
                         double maxFps = vscCaps->MinFrameInterval > 0 ? 10000000.0 / vscCaps->MinFrameInterval : 30.0;
 
                         AVPixelFormat pixFmt = mediaSubtypeToAV(mediaType->subtype);
+                        AVCodecID codecId = mediaCodecToAV(*bih, pixFmt);
 
-                        ModeKey key{w, h, pixFmt};
+                        ModeKey key{w, h, pixFmt, codecId};
                         auto it = modeMap.find(key);
                         if (it == modeMap.end()) {
                           modeMap[key] = {minFps, maxFps};
@@ -332,6 +356,7 @@ std::vector<DeviceMode> enumerateDeviceModes(const std::string& deviceName) {
     mode.minFrameRate = fps.first;
     mode.maxFrameRate = fps.second;
     mode.pixelFormat = key.pixelFormat;
+    mode.codecId = key.codecId;
     modes.push_back(mode);
   }
 
