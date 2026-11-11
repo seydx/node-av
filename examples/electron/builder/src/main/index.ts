@@ -9,6 +9,7 @@ import {
   ffmpegPath,
   getFFmpegInfo,
   HardwareContext,
+  isFfmpegAvailable,
   SharedTexture
 } from 'node-av'
 import { Frame } from 'node-av/lib'
@@ -58,10 +59,11 @@ ipcMain.handle('get-ffmpeg-info', () => {
 
 // IPC handler for FFmpeg CLI version
 ipcMain.handle('get-ffmpeg-cli-version', async () => {
-  const ffmpeg = ffmpegPath()
-  if (!ffmpeg) {
-    return { error: 'FFmpeg binary not found' }
+  if (!isFfmpegAvailable()) {
+    return { error: 'FFmpeg CLI not installed (npm install @seydx/node-av-ffmpeg)' }
   }
+
+  const ffmpeg = ffmpegPath()
 
   try {
     const { stdout, stderr } = await execFileAsync(ffmpeg, ['-version'])

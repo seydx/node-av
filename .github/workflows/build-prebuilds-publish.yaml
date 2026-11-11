@@ -30,6 +30,10 @@ jobs:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
 
+      # Trusted publishing (OIDC, no token) needs npm >= 11.5.1
+      - name: Update npm
+        run: npm install -g npm@11
+
       - name: Install dependencies
         run: npm install --ignore-scripts
 
@@ -73,7 +77,9 @@ jobs:
 
       - name: Create platform packages
         run: |
-          node scripts/create-platform-packages.js
+          # Also creates the FFmpeg CLI packages (@seydx/node-av-ffmpeg and one
+          # per platform) and copies the binaries in; fails if one is missing.
+          node scripts/create-platform-packages.js "${GITHUB_REF#refs/tags/v}" --ffmpeg-binaries ffmpeg-binaries
 
           # Copy prebuilds to platform packages (already named node-av.node).
           for platform in darwin-x64 darwin-arm64 linux-x64 linux-arm64 win32-x64-msvc win32-arm64-msvc; do
@@ -153,8 +159,7 @@ jobs:
           echo "All release archives created:"
           ls -la *.zip
 
-          # Checksums over all release zips (verified by the FFmpeg postinstall
-          # download in src/ffmpeg/install.ts).
+          # Checksums over all release zips
           sha256sum *.zip > SHA256SUMS
           echo "SHA256SUMS:"
           cat SHA256SUMS
@@ -224,6 +229,10 @@ jobs:
           - \`@seydx/node-av-linux-x64@$VERSION_NO_V\`
           - \`@seydx/node-av-win32-arm64-msvc@$VERSION_NO_V\`
           - \`@seydx/node-av-win32-x64-msvc@$VERSION_NO_V\`
+
+          FFmpeg CLI (\`npm install @seydx/node-av-ffmpeg\`, used by \`node-av/ffmpeg\`):
+          - \`@seydx/node-av-ffmpeg@$VERSION_NO_V\`
+          - \`@seydx/node-av-ffmpeg-{darwin,linux,win32}-{arm64,x64}@$VERSION_NO_V\`
           EOF
 
           # Output the release notes
@@ -244,24 +253,33 @@ jobs:
             echo "NPM tag: latest"
           fi
 
+      # Trusted publishing: npm exchanges the job's OIDC token (id-token: write)
+      # for a publish token, so no NPM_TOKEN is needed. Every package needs a
+      # trusted publisher on npmjs.com for this workflow file.
       - name: Publish to NPM
         run: |
           NPM_TAG="${{ steps.npm_tag.outputs.tag }}"
           echo "Publishing with tag: $NPM_TAG"
 
-          # Publish platform packages
-          for pkg_dir in packages/*/; do
-            if [ -d "$pkg_dir" ]; then
-              cd "$pkg_dir"
-              npm publish --access public --tag "$NPM_TAG" --provenance
-              cd -
+          # Skips versions that are already on npm, so a failed run can be re-run
+          publish() {
+            local name version
+            name=$(node -p "require('./$1/package.json').name")
+            version=$(node -p "require('./$1/package.json').version")
+            if npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "$name@$version is already published, skipping"
+              return
             fi
-          done
+            (cd "$1" && npm publish --access public --tag "$NPM_TAG" --provenance)
+          }
 
-          # Publish main package
-          npm publish --access public --tag "$NPM_TAG" --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # Binary packages first, then the packages that depend on them
+          for pkg_dir in packages/*/; do
+            [ "$pkg_dir" = "packages/ffmpeg/" ] && continue
+            publish "${pkg_dir%/}"
+          done
+          publish packages/ffmpeg
+          publish .
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3

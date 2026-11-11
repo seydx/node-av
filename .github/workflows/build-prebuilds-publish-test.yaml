@@ -73,7 +73,8 @@ jobs:
 
       - name: Create platform packages
         run: |
-          node scripts/create-platform-packages.js
+          # Also creates the FFmpeg CLI packages and copies the binaries in
+          node scripts/create-platform-packages.js "${{ github.event.inputs.test_version }}" --ffmpeg-binaries ffmpeg-binaries
 
           # Copy prebuilds to platform packages (already named node-av.node).
           for platform in darwin-x64 darwin-arm64 linux-x64 linux-arm64 win32-x64-msvc win32-arm64-msvc; do
@@ -174,6 +175,8 @@ jobs:
           - @seydx/node-av-linux-x64@${{ github.event.inputs.test_version }}
           - @seydx/node-av-win32-arm64-msvc@${{ github.event.inputs.test_version }}
           - @seydx/node-av-win32-x64-msvc@${{ github.event.inputs.test_version }}
+          - @seydx/node-av-ffmpeg@${{ github.event.inputs.test_version }}
+          - @seydx/node-av-ffmpeg-{darwin,linux,win32}-{arm64,x64}@${{ github.event.inputs.test_version }}
           EOF
 
           # Add recent commits since last tag
@@ -242,5 +245,3 @@ jobs:
           echo ""
           echo "✅ Dry run completed successfully!"
           echo "No packages were actually published to NPM."
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

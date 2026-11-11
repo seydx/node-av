@@ -1,23 +1,68 @@
 import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { createRequire } from 'node:module';
+import { dirname, join, resolve } from 'node:path';
 
-import { getDirname } from '../utils/electron.js';
-import { getPlatform } from './utils.js';
+import { getDirname, getUnpackedPath } from '../utils/electron.js';
 import { FFMPEG_VERSION } from './version.js';
 
 const __dirname = getDirname(import.meta.url);
-const ffmpegBinaryPath = resolve(__dirname, '../../binary');
-const ffmpegFile = 'ffmpeg' + (getPlatform() === 'win32' ? '.exe' : '');
-const ffmpegExtractedFilePath = resolve(ffmpegBinaryPath, ffmpegFile);
+const require = createRequire(import.meta.url);
+
+const FFMPEG_PACKAGE = '@seydx/node-av-ffmpeg';
+const ffmpegFile = 'ffmpeg' + (process.platform === 'win32' ? '.exe' : '');
+
+// Local build (development, CI tests): binary/ next to dist/
+const localFfmpegPath = resolve(__dirname, '../../binary', ffmpegFile);
+
+let resolvedFfmpegPath: string | null = null;
+
+/**
+ * Find the FFmpeg binary.
+ *
+ * Checks the local `binary/` folder first, then the platform package installed by `@seydx/node-av-ffmpeg`.
+ *
+ * @returns Absolute path to the binary, or `null` if neither is installed
+ *
+ * @internal
+ */
+function findFfmpeg(): string | null {
+  if (resolvedFfmpegPath) {
+    return resolvedFfmpegPath;
+  }
+
+  if (existsSync(localFfmpegPath)) {
+    resolvedFfmpegPath = localFfmpegPath;
+    return resolvedFfmpegPath;
+  }
+
+  try {
+    // The platform package is a dependency of the meta package, not of node-av, so it is
+    // resolved from there (strict layouts like pnpm don't expose it to node-av directly).
+    const metaPackageJson = require.resolve(`${FFMPEG_PACKAGE}/package.json`);
+    const platformPackageJson = createRequire(metaPackageJson).resolve(`${FFMPEG_PACKAGE}-${process.platform}-${process.arch}/package.json`);
+    const path = getUnpackedPath(join(dirname(platformPackageJson), ffmpegFile));
+    if (existsSync(path)) {
+      resolvedFfmpegPath = path;
+      return resolvedFfmpegPath;
+    }
+  } catch {
+    // Not installed, or no build for this platform
+  }
+
+  return null;
+}
 
 /**
  * Get the absolute path to the FFmpeg binary.
  *
- * Returns the path to the FFmpeg executable that was automatically downloaded
- * during package installation. The binary is platform-specific and matches
- * the FFmpeg version used by the native bindings.
+ * The binary ships in the optional `@seydx/node-av-ffmpeg` package
+ * (`npm install @seydx/node-av-ffmpeg`), which installs the build for the
+ * current platform. It is built from the same FFmpeg as the native bindings.
+ * In Electron apps the path points into `app.asar.unpacked`.
  *
  * @returns Absolute path to the FFmpeg binary
+ *
+ * @throws {Error} If `@seydx/node-av-ffmpeg` is not installed or has no build for this platform
  *
  * @example
  * ```typescript
@@ -25,8 +70,7 @@ const ffmpegExtractedFilePath = resolve(ffmpegBinaryPath, ffmpegFile);
  *
  * const path = ffmpegPath();
  * console.log('FFmpeg binary at:', path);
- * // On Windows: C:\path\to\node_modules\node-av\binary\ffmpeg.exe
- * // On Unix: /path/to/node_modules/node-av/binary/ffmpeg
+ * // e.g. /path/to/node_modules/@seydx/node-av-ffmpeg-linux-x64/ffmpeg
  * ```
  *
  * @example Convert video using FFmpeg binary
@@ -51,17 +95,20 @@ const ffmpegExtractedFilePath = resolve(ffmpegBinaryPath, ffmpegFile);
  * ```
  */
 export function ffmpegPath(): string {
-  return ffmpegExtractedFilePath;
+  const path = findFfmpeg();
+  if (!path) {
+    throw new Error(`FFmpeg binary not found for ${process.platform}-${process.arch}. Install it with: npm install ${FFMPEG_PACKAGE}`);
+  }
+  return path;
 }
 
 /**
- * Check if the FFmpeg binary is available and executable.
+ * Check if the FFmpeg binary is available.
  *
- * Verifies that the FFmpeg binary exists at the expected location.
- * This is useful for checking if the installation was successful
- * before attempting to use the binary.
+ * Returns whether `@seydx/node-av-ffmpeg` is installed with a build for
+ * this platform, i.e. whether {@link ffmpegPath} will succeed.
  *
- * @returns `true` if FFmpeg binary exists, `false` otherwise
+ * @returns `true` if the FFmpeg binary exists, `false` otherwise
  *
  * @example
  * ```typescript
@@ -71,9 +118,7 @@ export function ffmpegPath(): string {
  *   console.log('FFmpeg is ready to use');
  *   // Safe to use ffmpegPath() and execute FFmpeg commands
  * } else {
- *   console.log('FFmpeg binary not found');
- *   console.log('Expected location:', ffmpegPath());
- *   console.log('Try running: npm install node-av');
+ *   console.log('FFmpeg binary not found, run: npm install @seydx/node-av-ffmpeg');
  * }
  * ```
  *
@@ -98,7 +143,7 @@ export function ffmpegPath(): string {
  * ```
  */
 export function isFfmpegAvailable(): boolean {
-  return existsSync(ffmpegExtractedFilePath);
+  return findFfmpeg() !== null;
 }
 
 /**

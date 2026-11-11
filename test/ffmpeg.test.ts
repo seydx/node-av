@@ -1,6 +1,7 @@
 import assert from 'node:assert';
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { isAbsolute } from 'node:path';
 import { describe, it } from 'node:test';
 import { promisify } from 'node:util';
 
@@ -10,36 +11,31 @@ const execFileAsync = promisify(execFile);
 
 describe('FFmpeg Binary Access', () => {
   describe('ffmpegPath()', () => {
-    it('should return a non-empty string path', () => {
+    it('should return an absolute path to the executable when available', (t) => {
+      if (!isFfmpegAvailable()) {
+        t.skip('FFmpeg binary not installed');
+        return;
+      }
+
       const path = ffmpegPath();
-      assert.strictEqual(typeof path, 'string');
-      assert.ok(path.length > 0);
+      assert.ok(isAbsolute(path));
+      assert.ok(path.endsWith(process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg'));
+      assert.ok(existsSync(path));
     });
 
-    it('should return absolute path', () => {
-      const path = ffmpegPath();
-      assert.ok(path.startsWith('/') || /^[A-Z]:\\/.exec(path)); // Unix or Windows absolute path
-    });
+    it('should throw with an install hint when not available', (t) => {
+      if (isFfmpegAvailable()) {
+        t.skip('FFmpeg binary is installed');
+        return;
+      }
 
-    it('should return path ending with ffmpeg executable', () => {
-      const path = ffmpegPath();
-      const isWindows = process.platform === 'win32';
-      const expectedEnding = isWindows ? 'ffmpeg.exe' : 'ffmpeg';
-      assert.ok(path.endsWith(expectedEnding));
+      assert.throws(() => ffmpegPath(), /npm install @seydx\/node-av-ffmpeg/);
     });
   });
 
   describe('isFfmpegAvailable()', () => {
     it('should return a boolean', () => {
-      const available = isFfmpegAvailable();
-      assert.strictEqual(typeof available, 'boolean');
-    });
-
-    it('should match file existence check', () => {
-      const available = isFfmpegAvailable();
-      const path = ffmpegPath();
-      const exists = existsSync(path);
-      assert.strictEqual(available, exists);
+      assert.strictEqual(typeof isFfmpegAvailable(), 'boolean');
     });
   });
 
@@ -117,43 +113,6 @@ describe('FFmpeg Binary Access', () => {
       const output = stdout + stderr;
       assert.ok(output.includes('Formats:'), 'Output should contain formats list');
       assert.ok(output.includes('mp4'), 'Should list mp4 format');
-    });
-  });
-
-  describe('Platform-specific behavior', () => {
-    it('should provide correct binary for current platform', () => {
-      const path = ffmpegPath();
-
-      if (process.platform === 'win32') {
-        assert.ok(path.endsWith('.exe'), 'Windows binary should have .exe extension');
-      } else {
-        assert.ok(!path.endsWith('.exe'), 'Non-Windows binary should not have .exe extension');
-      }
-    });
-
-    it('should handle cross-compilation environment variables', () => {
-      // Test that the path doesn't throw when npm_config_* vars might be set
-      const originalOs = process.env.npm_config_os;
-      const originalCpu = process.env.npm_config_cpu;
-
-      try {
-        // This should not crash even if env vars are set
-        const path = ffmpegPath();
-        assert.strictEqual(typeof path, 'string');
-      } finally {
-        // Restore original values
-        if (originalOs !== undefined) {
-          process.env.npm_config_os = originalOs;
-        } else {
-          delete process.env.npm_config_os;
-        }
-
-        if (originalCpu !== undefined) {
-          process.env.npm_config_cpu = originalCpu;
-        } else {
-          delete process.env.npm_config_cpu;
-        }
-      }
     });
   });
 

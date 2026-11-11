@@ -55,6 +55,12 @@ Native Node.js bindings for FFmpeg with full TypeScript support - including type
 npm install node-av
 ```
 
+The FFmpeg command-line tool is a separate, optional package (see [FFmpeg Binary Access](#ffmpeg-binary-access)):
+
+```bash
+npm install @seydx/node-av-ffmpeg
+```
+
 ## Quick Start
 
 ### Low-Level API
@@ -388,7 +394,11 @@ await using screen2 = await DeviceAPI.openScreen({
 
 ## FFmpeg Binary Access
 
-Need direct access to the FFmpeg binary? The library provides an easy way to get FFmpeg binaries that automatically downloads and manages platform-specific builds.
+Need the FFmpeg command-line tool as well? Install `@seydx/node-av-ffmpeg` next to `node-av`. npm installs only the binary for your platform, built from the same FFmpeg as the native bindings, and `node-av/ffmpeg` finds it:
+
+```bash
+npm install node-av @seydx/node-av-ffmpeg
+```
 
 ```typescript
 import { ffmpegPath, isFfmpegAvailable } from 'node-av/ffmpeg';
@@ -405,7 +415,7 @@ if (isFfmpegAvailable()) {
   const { stdout } = await execFileAsync(ffmpegPath(), ['-version']);
   console.log(stdout);
 } else {
-  console.log('FFmpeg binary not available - install may have failed');
+  console.log('FFmpeg binary not available - run: npm install @seydx/node-av-ffmpeg');
 }
 
 // Direct usage example
@@ -422,7 +432,7 @@ async function convertVideo(input: string, output: string) {
 }
 ```
 
-The FFmpeg binary is automatically downloaded during installation from GitHub releases and matches the same build used by the native bindings.
+`ffmpegPath()` throws if the package is not installed, so check `isFfmpegAvailable()` first when the CLI is optional. In Electron apps, unpack `node_modules/@seydx/**` from the ASAR archive so the binary can be executed.
 
 ## Resource Management
 
@@ -556,17 +566,18 @@ Prebuilt binaries are available for multiple platforms:
 
 ### Cross-Platform Packaging (CI/CD)
 
-By default the install step fetches the native binding and FFmpeg binary for the
-host platform. When packaging for a different target (e.g. building a Windows
-Electron app from a Linux CI runner), pass npm's standard `--os` / `--cpu` flags:
+By default npm installs the native binding (and the FFmpeg binary, if
+`@seydx/node-av-ffmpeg` is installed) for the host platform. When packaging for
+a different target (e.g. building a Windows Electron app from a Linux CI
+runner), pass npm's standard `--os` / `--cpu` flags:
 
 ```bash
 # Install Windows x64 binaries while running on Linux
 npm install --os=win32 --cpu=x64
 ```
 
-npm filters the platform-specific `optionalDependencies` by these flags, and the
-postinstall hook honors them for the bundled FFmpeg binary as well.
+npm filters the platform-specific `optionalDependencies` of both packages by
+these flags.
 
 ## Troubleshooting
 

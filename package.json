@@ -79,7 +79,6 @@
     "lint:fix": "eslint --fix .",
     "lint:gyp": "node scripts/check-gyp-sync.js",
     "patch:ffmpeg": "node scripts/patch-ffmpeg.js",
-    "postinstall": "node dist/ffmpeg/install.js",
     "predocs": "typedoc && cpy README.md docs/ --rename=index.md",
     "release:patch": "npm run build:tsc && node scripts/prepare-release.js patch",
     "release:minor": "npm run build:tsc && node scripts/prepare-release.js minor",
@@ -91,9 +90,6 @@
     "test:all": "npm run build:tests && npm run build:tsc && tsx --test test/*.test.ts",
     "update": "updates --update ./"
   },
-  "dependencies": {
-    "unzipper": "^0.12.5"
-  },
   "optionalDependencies": {
     "@seydx/node-av-darwin-arm64": "7.0.0-beta.2",
     "@seydx/node-av-darwin-x64": "7.0.0-beta.2",
@@ -103,9 +99,13 @@
     "@seydx/node-av-win32-x64-msvc": "7.0.0-beta.2"
   },
   "peerDependencies": {
+    "@seydx/node-av-ffmpeg": "*",
     "werift": ">=0.24.3"
   },
   "peerDependenciesMeta": {
+    "@seydx/node-av-ffmpeg": {
+      "optional": true
+    },
     "werift": {
       "optional": true
     }
@@ -115,7 +115,6 @@
     "@types/node": "^26.6.6",
     "@types/node-abi": "^3.0.3",
     "@types/semver": "^7.8.0",
-    "@types/unzipper": "^0.10.11",
     "@types/ws": "^8.18.2",
     "@typescript-eslint/parser": "^8.72.2",
     "concurrently": "^10.0.7",
