@@ -172,14 +172,22 @@ jobs:
           - @seydx/node-av-darwin-arm64@${{ github.event.inputs.test_version }}
           - @seydx/node-av-darwin-x64@${{ github.event.inputs.test_version }}
           - @seydx/node-av-linux-arm64@${{ github.event.inputs.test_version }}
-          - @seydx/node-av-linux-arm64-musl@${{ github.event.inputs.test_version }}
           - @seydx/node-av-linux-x64@${{ github.event.inputs.test_version }}
+          - @seydx/node-av-linux-arm64-musl@${{ github.event.inputs.test_version }}
           - @seydx/node-av-linux-x64-musl@${{ github.event.inputs.test_version }}
           - @seydx/node-av-win32-arm64-msvc@${{ github.event.inputs.test_version }}
           - @seydx/node-av-win32-x64-msvc@${{ github.event.inputs.test_version }}
+
+          FFmpeg CLI:
           - @seydx/node-av-ffmpeg@${{ github.event.inputs.test_version }}
-          - @seydx/node-av-ffmpeg-{darwin,linux,win32}-{arm64,x64}@${{ github.event.inputs.test_version }}
-          - @seydx/node-av-ffmpeg-linux-{arm64,x64}-musl@${{ github.event.inputs.test_version }}
+          - @seydx/node-av-ffmpeg-darwin-arm64@${{ github.event.inputs.test_version }}
+          - @seydx/node-av-ffmpeg-darwin-x64@${{ github.event.inputs.test_version }}
+          - @seydx/node-av-ffmpeg-linux-arm64@${{ github.event.inputs.test_version }}
+          - @seydx/node-av-ffmpeg-linux-x64@${{ github.event.inputs.test_version }}
+          - @seydx/node-av-ffmpeg-linux-arm64-musl@${{ github.event.inputs.test_version }}
+          - @seydx/node-av-ffmpeg-linux-x64-musl@${{ github.event.inputs.test_version }}
+          - @seydx/node-av-ffmpeg-win32-arm64@${{ github.event.inputs.test_version }}
+          - @seydx/node-av-ffmpeg-win32-x64@${{ github.event.inputs.test_version }}
           EOF
 
           # Add recent commits since last tag

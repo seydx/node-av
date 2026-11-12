@@ -226,16 +226,22 @@ jobs:
           - \`@seydx/node-av-darwin-arm64@$VERSION_NO_V\`
           - \`@seydx/node-av-darwin-x64@$VERSION_NO_V\`
           - \`@seydx/node-av-linux-arm64@$VERSION_NO_V\`
-          - \`@seydx/node-av-linux-arm64-musl@$VERSION_NO_V\`
           - \`@seydx/node-av-linux-x64@$VERSION_NO_V\`
+          - \`@seydx/node-av-linux-arm64-musl@$VERSION_NO_V\`
           - \`@seydx/node-av-linux-x64-musl@$VERSION_NO_V\`
           - \`@seydx/node-av-win32-arm64-msvc@$VERSION_NO_V\`
           - \`@seydx/node-av-win32-x64-msvc@$VERSION_NO_V\`
 
-          FFmpeg CLI (\`npm install @seydx/node-av-ffmpeg\`, used by \`node-av/ffmpeg\`):
+          FFmpeg CLI:
           - \`@seydx/node-av-ffmpeg@$VERSION_NO_V\`
-          - \`@seydx/node-av-ffmpeg-{darwin,linux,win32}-{arm64,x64}@$VERSION_NO_V\`
-          - \`@seydx/node-av-ffmpeg-linux-{arm64,x64}-musl@$VERSION_NO_V\`
+          - \`@seydx/node-av-ffmpeg-darwin-arm64@$VERSION_NO_V\`
+          - \`@seydx/node-av-ffmpeg-darwin-x64@$VERSION_NO_V\`
+          - \`@seydx/node-av-ffmpeg-linux-arm64@$VERSION_NO_V\`
+          - \`@seydx/node-av-ffmpeg-linux-x64@$VERSION_NO_V\`
+          - \`@seydx/node-av-ffmpeg-linux-arm64-musl@$VERSION_NO_V\`
+          - \`@seydx/node-av-ffmpeg-linux-x64-musl@$VERSION_NO_V\`
+          - \`@seydx/node-av-ffmpeg-win32-arm64@$VERSION_NO_V\`
+          - \`@seydx/node-av-ffmpeg-win32-x64@$VERSION_NO_V\`
           EOF
 
           # Output the release notes
