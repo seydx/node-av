@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [7.0.0] - 2026-11-12
+
 ### Breaking Changes
 
 #### The FFmpeg CLI is a separate package ([#332](https://github.com/seydx/node-av/issues/332))
