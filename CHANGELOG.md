@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [7.0.3] - 2026-11-12
+
 ### Fixed
 
 - **Installing for another platform no longer fails.** With `npm install --os=linux --cpu=arm64` (plus `--libc=musl` for Alpine), e.g. to build an arm64 image on an x64 machine, npm installs the target's prebuilt package. The install check looked for the build host's package instead and aborted with "No prebuilt binary available".
