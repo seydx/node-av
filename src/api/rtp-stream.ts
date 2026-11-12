@@ -7,7 +7,6 @@ import { Rational } from '../lib/rational.js';
 import { avChannelLayoutDefault } from '../lib/utilities.js';
 import { BitStreamFilterAPI } from './bitstream-filter.js';
 import { MAX_PACKET_SIZE } from './constants.js';
-import { Decoder } from './decoder.js';
 import { Demuxer } from './demuxer.js';
 import { Encoder } from './encoder.js';
 import { FilterPreset } from './filter-presets.js';
@@ -15,12 +14,14 @@ import { FilterAPI } from './filter.js';
 import { HardwareContext } from './hardware.js';
 import { Muxer } from './muxer.js';
 import { interruptibleFrameSource, pipeline } from './pipeline.js';
+import { openAudioDecoder } from './utilities/audio-transcode.js';
 import { pickSupportedLayout, pickSupportedRate, pickSupportedSampleFormat } from './utilities/codec-format.js';
 import { configureLiveDecoderThreading } from './utilities/live-decoding.js';
 import { transcodeScale } from './utilities/scale-size.js';
 import { applyVideoBitrate, createVideoTranscodeFilter, findSoftwareEncoder, findUsableHardwareEncoder, openTranscodeDecoder } from './utilities/video-transcode.js';
 
 import type { AVCodecID, AVHWDeviceType, AVSampleFormat, FFAudioEncoder, FFHWDeviceType, FFVideoEncoder } from '../constants/index.js';
+import type { Decoder } from './decoder.js';
 import type { DemuxerOptions } from './demuxer.js';
 import type { EncoderOptions } from './encoder.js';
 import type { PipelineControl, PipelineProgress } from './pipeline.js';
@@ -113,6 +114,8 @@ export interface RTPStreamOptions {
     sampleFormat?: AVSampleFormat;
     sampleRate?: number;
     channels?: number;
+    /** Transcode even when the source codec is one of `supportedAudioCodecs`. */
+    transcode?: boolean;
     encoderOptions?: EncoderOptions['options'];
   };
 
@@ -295,6 +298,7 @@ export class RTPStream {
         mtu: options.audio?.mtu ?? MAX_PACKET_SIZE,
         sampleRate: options.audio?.sampleRate,
         channels: options.audio?.channels,
+        transcode: options.audio?.transcode,
         encoderOptions: options.audio?.encoderOptions,
         sampleFormat: options.audio?.sampleFormat,
       },
@@ -564,8 +568,8 @@ export class RTPStream {
     this.throwIfStopRequested();
 
     // Setup audio if available and needs transcoding
-    if (audioStream && !this.isAudioCodecSupported(audioStream.codecpar.codecId)) {
-      this.audioDecoder = await Decoder.create(audioStream, {
+    if (audioStream && (this.options.audio.transcode || !this.isAudioCodecSupported(audioStream.codecpar.codecId))) {
+      this.audioDecoder = await openAudioDecoder(audioStream, {
         exitOnError: false,
       });
 

@@ -13,7 +13,6 @@ import { FF_ENCODER_AAC, FF_ENCODER_LIBOPUS, FF_ENCODER_LIBX264 } from '../const
 import { Codec } from '../lib/codec.js';
 import { Rational } from '../lib/rational.js';
 import { avGetCodecString, avGetMediaTypeString } from '../lib/utilities.js';
-import { Decoder } from './decoder.js';
 import { Demuxer } from './demuxer.js';
 import { Encoder } from './encoder.js';
 import { FilterPreset } from './filter-presets.js';
@@ -21,12 +20,14 @@ import { FilterAPI } from './filter.js';
 import { HardwareContext } from './hardware.js';
 import { Muxer } from './muxer.js';
 import { consumeStreamInParallel, interruptibleFrameSource, pipeline, PipelineControlImpl } from './pipeline.js';
+import { openAudioDecoder } from './utilities/audio-transcode.js';
 import { configureLiveDecoderThreading } from './utilities/live-decoding.js';
 import { PacketAgeWatchdog } from './utilities/packet-age-watchdog.js';
 import { transcodeScale } from './utilities/scale-size.js';
 import { applyVideoBitrate, createVideoTranscodeFilter, findUsableHardwareEncoder, openTranscodeDecoder } from './utilities/video-transcode.js';
 
 import type { AVCodecID, AVHWDeviceType, FFHWDeviceType } from '../constants/index.js';
+import type { Decoder } from './decoder.js';
 import type { DemuxerOptions } from './demuxer.js';
 import type { EncoderOptions } from './encoder.js';
 import type { IOOutputCallbacks } from './io-stream.js';
@@ -975,7 +976,7 @@ export class FMP4Stream {
     const needsAudioTranscode = audioStream && !this.isAudioCodecSupported(audioStream.codecpar.codecId);
 
     if (needsAudioTranscode) {
-      this.audioDecoder = await Decoder.create(audioStream, {
+      this.audioDecoder = await openAudioDecoder(audioStream, {
         exitOnError: false,
       });
 

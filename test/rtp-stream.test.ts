@@ -2,11 +2,24 @@ import assert from 'node:assert';
 import { writeFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 
-import { AV_CODEC_ID_H264, AV_PIX_FMT_NV12, AV_PIX_FMT_YUV420P, avGetPixFmtName, FF_ENCODER_LIBX264 } from '../src/index.js';
+import {
+  AV_CODEC_ID_H264,
+  AV_PIX_FMT_NV12,
+  AV_PIX_FMT_YUV420P,
+  avGetPixFmtName,
+  Decoder,
+  Demuxer,
+  Encoder,
+  FF_ENCODER_LIBOPUS,
+  FF_ENCODER_LIBX264,
+  FilterAPI,
+  Muxer,
+  pipeline,
+} from '../src/index.js';
 import { encoderInputFormat, getInputFile, getOutputFile, prepareTestEnvironment, stallingFrameSource, syntheticVideoFrame, yuvj422pSource } from './index.js';
 
 import type { RtpPacket } from 'werift';
-import type { AVPixelFormat, Encoder, Frame } from '../src/index.js';
+import type { AVPixelFormat, Frame } from '../src/index.js';
 import type { RTPStreamOptions } from '../src/webrtc/index.js';
 
 prepareTestEnvironment();
@@ -192,6 +205,48 @@ describe('RTPStream', skipWerift, () => {
 
     it('passes a supported codec through without transcode', async () => {
       assert.equal(await videoEncoderWidth({ video: { width: 160 } }), undefined);
+    });
+
+    // stereo, the RTP payload format for opus carries at most two channels
+    async function opusFile(): Promise<string> {
+      const file = getOutputFile('rtp-opus.mka');
+      await using input = await Demuxer.open(getInputFile('audio-speech.wav'));
+      using decoder = await Decoder.create(input.audio()!);
+      using filter = FilterAPI.create('aformat=sample_rates=48000:sample_fmts=s16:channel_layouts=stereo');
+      using encoder = await Encoder.create(FF_ENCODER_LIBOPUS);
+      const output = await Muxer.open(file);
+      await pipeline(input, decoder, filter, encoder, output).completion;
+      await output.close();
+      return file;
+    }
+
+    async function audioDecoderName(options: RTPStreamOptions): Promise<string | null | undefined> {
+      const { RTPStream } = await import('../src/webrtc/index.js');
+
+      let sawPacket!: () => void;
+      const firstPacket = new Promise<void>((resolve) => (sawPacket = resolve));
+
+      const stream = RTPStream.create(await opusFile(), {
+        ...options,
+        supportedAudioCodecs: [FF_ENCODER_LIBOPUS],
+        onAudioPacket: () => sawPacket(),
+      });
+
+      await stream.start();
+      try {
+        await withTimeout(firstPacket, 15000);
+        return (stream as unknown as { audioDecoder?: Decoder }).audioDecoder?.getCodec().name;
+      } finally {
+        await stream.stop();
+      }
+    }
+
+    it('transcodes a supported audio codec when transcode is set, decoding opus with libopus', async () => {
+      assert.equal(await audioDecoderName({ audio: { transcode: true, channels: 1 } }), 'libopus');
+    });
+
+    it('passes a supported audio codec through without transcode', async () => {
+      assert.equal(await audioDecoderName({}), undefined);
     });
   });
 
