@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **`audio.transcode` on `RTPStream`.** The audio is encoded again even when its codec is one of `supportedAudioCodecs`, so the encoder options apply, e.g. for a receiver that negotiated Opus in 20 ms frames from a source that sends 60 ms.
+
+### Fixed
+
+- **`RTPStream` and `FMP4Stream` decode Opus with libopus.** FFmpeg's own Opus decoder turned SILK frames with in-band FEC into loud noise, e.g. the audio of Ring cameras.
+
 ## [7.0.0] - 2026-11-12
 
 ### Breaking Changes
