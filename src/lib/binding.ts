@@ -11,6 +11,7 @@ import { resolve } from 'node:path';
 import { isMainThread } from 'node:worker_threads';
 
 import { getDirname } from '../utils/electron.js';
+import { isMusl } from '../utils/libc.js';
 
 import type {
   AVCodecID,
@@ -422,9 +423,9 @@ function loadBinding(): NativeBinding {
         errors.push(new Error(`MSVC package not found or loading failed: ${err}`));
       }
     } else {
-      // Non-Windows platforms
+      // Non-Windows platforms. musl (Alpine) needs its own build, a glibc one doesn't load there.
       try {
-        const packageName = `@seydx/node-av-${platformArch}`;
+        const packageName = `@seydx/node-av-${platformArch}${isMusl() ? '-musl' : ''}`;
         return require(`${packageName}/node-av.node`);
       } catch (err) {
         errors.push(new Error(`Platform package not found or loading failed: ${err}`));

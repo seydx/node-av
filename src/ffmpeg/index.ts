@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 
 import { getDirname, getUnpackedPath } from '../utils/electron.js';
+import { isMusl } from '../utils/libc.js';
 import { FFMPEG_VERSION } from './version.js';
 
 const __dirname = getDirname(import.meta.url);
@@ -39,7 +40,8 @@ function findFfmpeg(): string | null {
     // The platform package is a dependency of the meta package, not of node-av, so it is
     // resolved from there (strict layouts like pnpm don't expose it to node-av directly).
     const metaPackageJson = require.resolve(`${FFMPEG_PACKAGE}/package.json`);
-    const platformPackageJson = createRequire(metaPackageJson).resolve(`${FFMPEG_PACKAGE}-${process.platform}-${process.arch}/package.json`);
+    const platformPackage = `${FFMPEG_PACKAGE}-${process.platform}-${process.arch}${isMusl() ? '-musl' : ''}`;
+    const platformPackageJson = createRequire(metaPackageJson).resolve(`${platformPackage}/package.json`);
     const path = getUnpackedPath(join(dirname(platformPackageJson), ffmpegFile));
     if (existsSync(path)) {
       resolvedFfmpegPath = path;

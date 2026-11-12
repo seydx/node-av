@@ -38,9 +38,42 @@ extern "C" {
 #include "sync_queue.h"
 #include "device.h"
 
+#if defined(__linux__) && !defined(__ANDROID__)
+#include <pthread.h>
+#if !defined(__GLIBC__)
+#define NODE_AV_MUSL 1
+#endif
+#endif
+
 namespace ffmpeg {
 
+#ifdef NODE_AV_MUSL
+/**
+ * Raises musl's default stack size for threads created without attributes.
+ *
+ * musl gives such threads 128 KiB, too little for FFmpeg's frame and slice threads and
+ * for the x264/x265 thread pools, which all create theirs without attributes. An
+ * executable raises the default through its PT_GNU_STACK size, but node sets none and
+ * musl ignores the size of libraries loaded at runtime, so the addon sets it here.
+ * musl never lowers the default this way, and caps it at 8 MiB.
+ */
+static void RaiseDefaultThreadStackSize() {
+  pthread_attr_t attr;
+  if (pthread_getattr_default_np(&attr) != 0) {
+    return;
+  }
+  // Same size as the -z stack-size of the musl ffmpeg CLI
+  pthread_attr_setstacksize(&attr, 2 * 1024 * 1024);
+  pthread_setattr_default_np(&attr);
+  pthread_attr_destroy(&attr);
+}
+#endif
+
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
+#ifdef NODE_AV_MUSL
+  RaiseDefaultThreadStackSize();
+#endif
+
   // Register all input/output devices (avfoundation, v4l2, dshow, etc.)
   avdevice_register_all();
 
