@@ -9,12 +9,15 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, '..');
 const packagesDir = join(rootDir, 'packages');
 
-// Platform configurations
+// Platform configurations. Linux has a glibc and a musl (Alpine) build, the
+// package managers pick the right one through the libc field.
 const platforms = [
   { name: 'darwin-arm64', os: 'darwin', cpu: 'arm64' },
   { name: 'darwin-x64', os: 'darwin', cpu: 'x64' },
-  { name: 'linux-arm64', os: 'linux', cpu: 'arm64' },
-  { name: 'linux-x64', os: 'linux', cpu: 'x64' },
+  { name: 'linux-arm64', os: 'linux', cpu: 'arm64', libc: 'glibc' },
+  { name: 'linux-arm64-musl', os: 'linux', cpu: 'arm64', libc: 'musl' },
+  { name: 'linux-x64', os: 'linux', cpu: 'x64', libc: 'glibc' },
+  { name: 'linux-x64-musl', os: 'linux', cpu: 'x64', libc: 'musl' },
   // MinGW builds are discontinued
   // { name: 'win32-arm64-mingw', os: 'win32', cpu: 'arm64' },
   // { name: 'win32-x64-mingw', os: 'win32', cpu: 'x64' },
@@ -49,6 +52,9 @@ platforms.forEach((platform) => {
   packageJson.description = `node-av (${platform.name} binary)`;
   packageJson.os = [platform.os];
   packageJson.cpu = [platform.cpu];
+  if (platform.libc) {
+    packageJson.libc = [platform.libc];
+  }
 
   writeFileSync(join(packageDir, 'package.json'), JSON.stringify(packageJson, null, 2) + '\n');
 
@@ -62,7 +68,7 @@ Platform-specific binary for [node-av](https://github.com/seydx/node-av).
 ## Platform
 
 - OS: ${platform.os}
-- Architecture: ${platform.cpu}
+- Architecture: ${platform.cpu}${platform.libc ? `\n- C library: ${platform.libc}` : ''}
 
 ## License
 
@@ -82,8 +88,10 @@ MIT
 const ffmpegPlatforms = [
   { name: 'darwin-arm64', os: 'darwin', cpu: 'arm64', artifact: 'macos-arm64-jellyfin' },
   { name: 'darwin-x64', os: 'darwin', cpu: 'x64', artifact: 'macos-x64-jellyfin' },
-  { name: 'linux-arm64', os: 'linux', cpu: 'arm64', artifact: 'linux-arm64-jellyfin' },
-  { name: 'linux-x64', os: 'linux', cpu: 'x64', artifact: 'linux-x64-jellyfin' },
+  { name: 'linux-arm64', os: 'linux', cpu: 'arm64', libc: 'glibc', artifact: 'linux-arm64-jellyfin' },
+  { name: 'linux-arm64-musl', os: 'linux', cpu: 'arm64', libc: 'musl', artifact: 'linux-arm64-musl-jellyfin' },
+  { name: 'linux-x64', os: 'linux', cpu: 'x64', libc: 'glibc', artifact: 'linux-x64-jellyfin' },
+  { name: 'linux-x64-musl', os: 'linux', cpu: 'x64', libc: 'musl', artifact: 'linux-x64-musl-jellyfin' },
   { name: 'win32-arm64', os: 'win32', cpu: 'arm64', artifact: 'win-arm64' },
   { name: 'win32-x64', os: 'win32', cpu: 'x64', artifact: 'win-x64' },
 ];
@@ -133,13 +141,14 @@ ffmpegPlatforms.forEach((platform) => {
     files: [binary],
     os: [platform.os],
     cpu: [platform.cpu],
+    ...(platform.libc && { libc: [platform.libc] }),
   };
 
   writeFileSync(join(packageDir, 'package.json'), JSON.stringify(packageJson, null, 2) + '\n');
 
   const readme = `# @seydx/node-av-ffmpeg-${platform.name}
 
-FFmpeg CLI binary for [node-av](https://github.com/seydx/node-av) on ${platform.os} ${platform.cpu}.
+FFmpeg CLI binary for [node-av](https://github.com/seydx/node-av) on ${platform.os} ${platform.cpu}${platform.libc ? ` (${platform.libc})` : ''}.
 
 **This package is installed by \`@seydx/node-av-ffmpeg\`. You should not install it directly.**
 

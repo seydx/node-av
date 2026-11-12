@@ -41,7 +41,8 @@ const tryLoadPrebuilt = () => {
       // Package not installed
     }
   } else {
-    const packageName = `@seydx/node-av-${platform}-${arch}`;
+    // musl (Alpine) has its own build, a glibc one doesn't load there
+    const packageName = `@seydx/node-av-${platform}-${arch}${isMuslLibc() ? '-musl' : ''}`;
 
     try {
       // Check if the package is installed (don't check for .node file yet - it may be extracted by postinstall)
@@ -80,13 +81,7 @@ const isMuslLibc = () => {
 
 const noPrebuiltError = () => {
   log('');
-  log(`No prebuilt binary available for ${process.platform}-${process.arch}.`);
-
-  if (isMuslLibc()) {
-    log('Note: You appear to be on a musl-based system (e.g. Alpine Linux).');
-    log('Prebuilt binaries are only provided for glibc-based Linux distributions.');
-  }
-
+  log(`No prebuilt binary available for ${process.platform}-${process.arch}${isMuslLibc() ? ' (musl)' : ''}.`);
   log('The published npm package does not contain the native sources,');
   log('so it cannot be built from source inside node_modules.');
   log('To build from source, clone the repository and follow the build instructions:');

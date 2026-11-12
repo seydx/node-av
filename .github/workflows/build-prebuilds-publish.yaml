@@ -66,7 +66,7 @@ jobs:
 
           # Verify we have all expected platforms
           echo -e "\nVerifying platform coverage:"
-          for platform in darwin-x64 darwin-arm64 linux-x64 linux-arm64 win32-x64-msvc win32-arm64-msvc; do
+          for platform in darwin-x64 darwin-arm64 linux-x64 linux-arm64 linux-x64-musl linux-arm64-musl win32-x64-msvc win32-arm64-msvc; do
             if [ -d "prebuilds/$platform" ]; then
               echo "✓ $platform"
             else
@@ -82,7 +82,7 @@ jobs:
           node scripts/create-platform-packages.js "${GITHUB_REF#refs/tags/v}" --ffmpeg-binaries ffmpeg-binaries
 
           # Copy prebuilds to platform packages (already named node-av.node).
-          for platform in darwin-x64 darwin-arm64 linux-x64 linux-arm64 win32-x64-msvc win32-arm64-msvc; do
+          for platform in darwin-x64 darwin-arm64 linux-x64 linux-arm64 linux-x64-musl linux-arm64-musl win32-x64-msvc win32-arm64-msvc; do
             if [ -d "prebuilds/$platform" ]; then
               cp "prebuilds/$platform/node-av.node" "packages/$platform/node-av.node"
               echo "Copied binary for $platform"
@@ -129,7 +129,7 @@ jobs:
       - name: Create release archives
         run: |
           # Create archives for each platform (including new Windows variants)
-          for platform in darwin-x64 darwin-arm64 linux-x64 linux-arm64 win32-x64-msvc win32-arm64-msvc; do
+          for platform in darwin-x64 darwin-arm64 linux-x64 linux-arm64 linux-x64-musl linux-arm64-musl win32-x64-msvc win32-arm64-msvc; do
             if [ -d "prebuilds/$platform" ]; then
               zip -r "node-av-${platform}-${GITHUB_REF#refs/tags/}.zip" "prebuilds/$platform"
               echo "Created: node-av-${platform}-${GITHUB_REF#refs/tags/}.zip"
@@ -226,13 +226,16 @@ jobs:
           - \`@seydx/node-av-darwin-arm64@$VERSION_NO_V\`
           - \`@seydx/node-av-darwin-x64@$VERSION_NO_V\`
           - \`@seydx/node-av-linux-arm64@$VERSION_NO_V\`
+          - \`@seydx/node-av-linux-arm64-musl@$VERSION_NO_V\`
           - \`@seydx/node-av-linux-x64@$VERSION_NO_V\`
+          - \`@seydx/node-av-linux-x64-musl@$VERSION_NO_V\`
           - \`@seydx/node-av-win32-arm64-msvc@$VERSION_NO_V\`
           - \`@seydx/node-av-win32-x64-msvc@$VERSION_NO_V\`
 
           FFmpeg CLI (\`npm install @seydx/node-av-ffmpeg\`, used by \`node-av/ffmpeg\`):
           - \`@seydx/node-av-ffmpeg@$VERSION_NO_V\`
           - \`@seydx/node-av-ffmpeg-{darwin,linux,win32}-{arm64,x64}@$VERSION_NO_V\`
+          - \`@seydx/node-av-ffmpeg-linux-{arm64,x64}-musl@$VERSION_NO_V\`
           EOF
 
           # Output the release notes

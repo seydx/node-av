@@ -561,7 +561,7 @@ The repository ships 60+ runnable examples covering both API levels — high-lev
 Prebuilt binaries are available for multiple platforms:
 
 - **macOS**: x64, ARM64
-- **Linux**: x64, ARM64
+- **Linux**: x64, ARM64 (glibc and musl, e.g. Alpine)
 - **Windows**: x64, ARM64
 
 ### Cross-Platform Packaging (CI/CD)
@@ -569,11 +569,14 @@ Prebuilt binaries are available for multiple platforms:
 By default npm installs the native binding (and the FFmpeg binary, if
 `@seydx/node-av-ffmpeg` is installed) for the host platform. When packaging for
 a different target (e.g. building a Windows Electron app from a Linux CI
-runner), pass npm's standard `--os` / `--cpu` flags:
+runner), pass npm's standard `--os` / `--cpu` / `--libc` flags:
 
 ```bash
 # Install Windows x64 binaries while running on Linux
 npm install --os=win32 --cpu=x64
+
+# Install the musl binaries for an Alpine image while running on a glibc Linux
+npm install --os=linux --cpu=x64 --libc=musl
 ```
 
 npm filters the platform-specific `optionalDependencies` of both packages by
