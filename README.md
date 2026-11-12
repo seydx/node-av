@@ -6,7 +6,7 @@
 
 [![npm version](https://img.shields.io/npm/v/node-av.svg)](https://www.npmjs.com/package/node-av)
 [![npm downloads](https://img.shields.io/npm/dt/node-av.svg)](https://www.npmjs.com/package/node-av)
-[![Socket Badge](https://badge.socket.dev/npm/package/node-av/6.2.0)](https://socket.dev/npm/package/node-av)
+[![Socket Badge](https://badge.socket.dev/npm/package/node-av/7.0.1)](https://socket.dev/npm/package/node-av)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Ready-blue.svg)](https://www.typescriptlang.org/)
 [![FFmpeg](https://img.shields.io/badge/FFmpeg-8.1.3-green.svg)](https://ffmpeg.org)
@@ -616,6 +616,18 @@ vulkaninfo
 ```
 
 **Note**: If you're running an older Ubuntu version (< 24.04) or Debian version (< 13), you'll need to upgrade your OS to use hardware acceleration with this library.
+
+#### Alpine Linux
+
+```bash
+# VAAPI, QSV and Vulkan
+apk add libva intel-media-driver onevpl-intel-gpu vulkan-loader mesa-vulkan-intel
+
+# OpenCL (OpenCL filters, Whisper)
+apk add intel-compute-runtime intel-graphics-compiler
+```
+
+The OpenCL packages need Alpine 3.23 or newer. Alpine's `intel-compute-runtime` does not pull in `intel-graphics-compiler`, so install both. Without the compiler, OpenCL cannot build any kernels. Use `vainfo` (`libva-utils`) and `vulkaninfo` (`vulkan-tools`) to verify the setup.
 
 ## License
 
