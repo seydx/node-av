@@ -4,8 +4,6 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-## [7.0.0-beta.3] - 2026-11-11
-
 ### Breaking Changes
 
 #### The FFmpeg CLI is a separate package ([#332](https://github.com/seydx/node-av/issues/332))
@@ -16,34 +14,11 @@ node-av no longer downloads the `ffmpeg` binary in a `postinstall` script. Insta
 npm install node-av @seydx/node-av-ffmpeg
 ```
 
-Like the native bindings, the binary comes as one npm package per platform (`@seydx/node-av-ffmpeg-{darwin,linux,win32}-{arm64,x64}`), and npm installs only the matching one. Installs without the CLI are 29–63 MB smaller to download, depending on the platform. Installing no longer needs network access to GitHub. It also works where lifecycle scripts are blocked (pnpm 10+, bun, `--ignore-scripts`).
+Like the native bindings, the binary comes as one npm package per platform (`@seydx/node-av-ffmpeg-{darwin,linux,win32}-{arm64,x64}`, plus `-musl` variants for Linux), and npm installs only the matching one. Installs without the CLI are 29–63 MB smaller to download, depending on the platform. Installing no longer needs network access to GitHub. It also works where lifecycle scripts are blocked (pnpm 10+, bun, `--ignore-scripts`).
 
 - `ffmpegPath()` throws when the package is not installed instead of returning a path that doesn't exist. Check `isFfmpegAvailable()` first if the CLI is optional.
 - The binary moves from `node_modules/node-av/binary/` into `node_modules/@seydx/node-av-ffmpeg-<platform>/`. Electron apps must unpack it from the ASAR archive (e.g. `asarUnpack: node_modules/@seydx/**`).
 - `SKIP_FFMPEG` is gone, and node-av no longer depends on `unzipper`.
-
-## [7.0.0-beta.2] - 2026-11-11
-
-### Added
-
-- **`DeviceMode.codecId` identifies compressed capture modes** ([#349](https://github.com/seydx/node-av/issues/349)). MJPEG and H.264 (and HEVC on Linux) camera modes reported `pixelFormat: AV_PIX_FMT_NONE` and nothing else, so they couldn't be told apart. Raw modes now report `AV_CODEC_ID_RAWVIDEO` next to their pixel format, compressed modes their codec (`avGetCodecName(mode.codecId)` → `'mjpeg'`). On Windows, modes described by a `VIDEOINFOHEADER2` are listed too.
-
-### Performance
-
-- **HEVC software decoding is about 13 % faster** per thread (4K on Apple Silicon: ~128 → ~148 fps single-threaded, about 9 % less CPU multithreaded), from FFmpeg master's residual decoding and deblocking improvements. Output is bit-identical; the HEVC conformance suite passes.
-- **Hardware frame downloads reuse their buffers.** `av_hwframe_transfer_data()` into an empty frame (used by the `Decoder` and `Scaler` when they move hardware frames to system memory) now takes the buffer from a pool instead of allocating it per frame. Per download: CUDA on a GTX 1080 (Windows) 1.8 → 0.9 ms at 1080p and 6.2 → 2.5 ms at 4K, D3D11VA 1.8 → 1.1 ms and 6.9 → 3.9 ms, VAAPI on an Intel N100 7.0 → 3.3 ms at 1080p (4K unchanged). macOS's allocator already cached these buffers, so it shows no difference there.
-
-### Fixed
-
-- **Closing an RTSP input sends TEARDOWN.** `Demuxer.close()` interrupts pending I/O first, which also aborted the TEARDOWN, so cameras kept the session alive until it timed out (60 s with mediamtx over UDP) and could reject an immediate reconnect with "453 Not Enough Bandwidth". The TEARDOWN is now sent and its reply read within 500 ms.
-- **RTP/RTSP depacketizer fixes from FFmpeg master:** MPEG-TS over RTP no longer loses data after a reordered packet, RTCP receiver reports clamp cumulative loss correctly, SRTP setup errors are reported, and malformed H.264 framesize, Opus and AV1 payloads and SampleRate attributes are rejected. Redirects are limited.
-- **H.264 streams with lost frames decode better with hardware decoding.** Frames filling a `frame_num` gap had invalid field POCs and lacked the hardware decoder state of the frame they duplicate, so frames referencing them decoded wrong. With VAAPI on an Intel N100, 551 instead of 403 of 878 frames of a test stream with dropped frames now match the software decoder. NVIDIA (NVDEC, D3D11VA) was barely affected.
-- **HEVC deblocking and chroma SAO fixes** for deblocking offsets taken from the wrong CTB and chroma SAO with 16×16 CTBs.
-- **`h264_videotoolbox`/`hevc_videotoolbox` no longer crash when opened again in the same process** after encoding a transfer characteristic CoreVideo has no constant for (e.g. V-Log). Also fixes a double free when a frame submission fails, leaks when frames are dropped or on error paths, and timestamps when VideoToolbox returns another timescale.
-
-## [7.0.0-beta.1] - 2026-11-10
-
-### Breaking Changes
 
 #### FFmpeg 8.1.3 from jellyfin-ffmpeg instead of an FFmpeg development snapshot
 
@@ -110,8 +85,15 @@ The `cw`, `ch`, `cx` and `cy` options of `scale_opencl` came from a node-av FFmp
 
 ### Added
 
+- **Prebuilt binaries for musl Linux (Alpine)** ([#280](https://github.com/seydx/node-av/issues/280)). node-av and `@seydx/node-av-ffmpeg` now install on Alpine and other musl distributions (x64 and arm64), from the new packages `@seydx/node-av-linux-{arm64,x64}-musl` and `@seydx/node-av-ffmpeg-linux-{arm64,x64}-musl`. They are built from the same FFmpeg with the same codecs, filters and hardware APIs as the glibc builds. NVIDIA (CUDA, NVENC, NVDEC) and AMD AMF are unavailable on musl, because their drivers exist only for glibc. VAAPI, QSV and Vulkan need the drivers from Alpine's packages (e.g. `mesa-va-gallium`, `intel-media-driver`, `onevpl-intel-gpu`, `vulkan-loader`). The Linux packages now declare their C library, so npm and pnpm install only the matching one. To install the musl binaries from a glibc system (e.g. for an Alpine image), pass `--libc=musl`.
 - **VAAPI on Linux arm64.** The Linux arm64 prebuilds link VA-API like the x64 ones, so `HardwareContext.create(AV_HWDEVICE_TYPE_VAAPI)` and the `*_vaapi` codecs and filters work on arm64 boards with a VA-API driver.
+- **`DeviceMode.codecId` identifies compressed capture modes** ([#349](https://github.com/seydx/node-av/issues/349)). MJPEG and H.264 (and HEVC on Linux) camera modes reported `pixelFormat: AV_PIX_FMT_NONE` and nothing else, so they couldn't be told apart. Raw modes now report `AV_CODEC_ID_RAWVIDEO` next to their pixel format, compressed modes their codec (`avGetCodecName(mode.codecId)` → `'mjpeg'`). On Windows, modes described by a `VIDEOINFOHEADER2` are listed too.
 - **`AV_PROFILE_DTS_HD_HRA_X`, `AV_PROFILE_DTS_HD_HRA_X_IMAX` and `FF_DECODER_LIBCELT`.**
+
+### Performance
+
+- **HEVC software decoding is about 13 % faster** per thread (4K on Apple Silicon: ~128 → ~148 fps single-threaded, about 9 % less CPU multithreaded), from FFmpeg master's residual decoding and deblocking improvements. Output is bit-identical; the HEVC conformance suite passes.
+- **Hardware frame downloads reuse their buffers.** `av_hwframe_transfer_data()` into an empty frame (used by the `Decoder` and `Scaler` when they move hardware frames to system memory) now takes the buffer from a pool instead of allocating it per frame. Per download: CUDA on a GTX 1080 (Windows) 1.8 → 0.9 ms at 1080p and 6.2 → 2.5 ms at 4K, D3D11VA 1.8 → 1.1 ms and 6.9 → 3.9 ms, VAAPI on an Intel N100 7.0 → 3.3 ms at 1080p (4K unchanged). macOS's allocator already cached these buffers, so it shows no difference there.
 
 ### Changed
 
@@ -121,6 +103,15 @@ The `cw`, `ch`, `cx` and `cy` options of `scale_opencl` came from a node-av FFmp
   - Options that never existed are gone: `noise`'s `all`/`c0`–`c3` (really `all_seed`, `c0_strength`, …), `selectivecolor`'s `red`, `green`, … (really `reds`, `greens`, …), framesync options on `lut3d` and `tblend`, and `file` on `haldclut`.
 - **`MuxerFormat` and `DemuxerFormat` list every format.** 21 muxers and 75 demuxers were missing: PCM, raw bitstreams like `h264`, `hevc` and `mjpeg`, and the image pipes.
 - **The bundled Windows `ffmpeg.exe` has an application icon** (jellyfin's `fftools.ico`).
+
+### Fixed
+
+- **The `whisper` filter no longer crashes the process on Linux systems without a Vulkan loader** (`libvulkan.so.1`), e.g. Docker containers without a GPU stack. Transcribing there (`WhisperTranscriber` or the filter directly) ended in a segmentation fault, even with GPU use disabled. ggml now skips its Vulkan backend when no loader is found and transcribes on the CPU.
+- **Closing an RTSP input sends TEARDOWN.** `Demuxer.close()` interrupts pending I/O first, which also aborted the TEARDOWN, so cameras kept the session alive until it timed out (60 s with mediamtx over UDP) and could reject an immediate reconnect with "453 Not Enough Bandwidth". The TEARDOWN is now sent and its reply read within 500 ms.
+- **RTP/RTSP depacketizer fixes from FFmpeg master:** MPEG-TS over RTP no longer loses data after a reordered packet, RTCP receiver reports clamp cumulative loss correctly, SRTP setup errors are reported, and malformed H.264 framesize, Opus and AV1 payloads and SampleRate attributes are rejected. Redirects are limited.
+- **H.264 streams with lost frames decode better with hardware decoding.** Frames filling a `frame_num` gap had invalid field POCs and lacked the hardware decoder state of the frame they duplicate, so frames referencing them decoded wrong. With VAAPI on an Intel N100, 551 instead of 403 of 878 frames of a test stream with dropped frames now match the software decoder. NVIDIA (NVDEC, D3D11VA) was barely affected.
+- **HEVC deblocking and chroma SAO fixes** for deblocking offsets taken from the wrong CTB and chroma SAO with 16×16 CTBs.
+- **`h264_videotoolbox`/`hevc_videotoolbox` no longer crash when opened again in the same process** after encoding a transfer characteristic CoreVideo has no constant for (e.g. V-Log). Also fixes a double free when a frame submission fails, leaks when frames are dropped or on error paths, and timestamps when VideoToolbox returns another timescale.
 
 ## [6.2.0] - 2026-11-01
 
