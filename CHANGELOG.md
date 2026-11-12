@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [7.0.1] - 2026-11-12
+
 ### Added
 
 - **`audio.transcode` on `RTPStream`.** The audio is encoded again even when its codec is one of `supportedAudioCodecs`, so the encoder options apply, e.g. for a receiver that negotiated Opus in 20 ms frames from a source that sends 60 ms.
