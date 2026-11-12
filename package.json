@@ -127,7 +127,7 @@
     "globals": "^17.14.0",
     "node-addon-api": "^8.9.2",
     "node-gyp": "^13.1.0",
-    "prettier": "^3.9.10",
+    "prettier": "^3.10.1",
     "rimraf": "^6.1.4",
     "sharp": "^0.35.5",
     "tsx": "^4.23.15",
