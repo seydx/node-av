@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A broken OpenCL installation no longer exits the process when Whisper starts (Linux).** whisper.cpp's OpenCL backend called `exit(1)` when its kernels failed to compile, e.g. on Alpine with `intel-compute-runtime` but without `intel-graphics-compiler`. The kernels compile while the backend probes the devices, so this hit every `WhisperTranscriber`, even with `useGpu: false`. The device is now skipped and Whisper runs on Vulkan or the CPU.
+
 ## [7.0.1] - 2026-11-12
 
 ### Added

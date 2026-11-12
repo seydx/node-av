@@ -6,7 +6,7 @@
 
 [![npm version](https://img.shields.io/npm/v/node-av.svg)](https://www.npmjs.com/package/node-av)
 [![npm downloads](https://img.shields.io/npm/dt/node-av.svg)](https://www.npmjs.com/package/node-av)
-[![Socket Badge](https://badge.socket.dev/npm/package/node-av/7.0.1)](https://socket.dev/npm/package/node-av)
+[![Socket Badge](https://badge.socket.dev/npm/package/node-av/7.0.2)](https://socket.dev/npm/package/node-av)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Ready-blue.svg)](https://www.typescriptlang.org/)
 [![FFmpeg](https://img.shields.io/badge/FFmpeg-8.1.3-green.svg)](https://ffmpeg.org)
