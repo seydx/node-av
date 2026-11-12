@@ -585,17 +585,27 @@ jobs:
           if-no-files-found: ignore
 
   build_linux:
-    name: "Linux ${{ matrix.arch }}"
+    name: "Linux ${{ matrix.arch }}${{ matrix.suffix }}"
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
+        # target: jellyfin builder target; suffix: musl builds get their own
+        # cache, prebuild folder, artifacts and packages (linux-<arch>-musl)
         include:
           - arch: x64
-            target: amd64
+            target: linux64
             runner: ubuntu-latest
           - arch: arm64
-            target: arm64
+            target: linuxarm64
+            runner: ubuntu-24.04-arm
+          - arch: x64
+            target: linuxmusl64
+            suffix: -musl
+            runner: ubuntu-latest
+          - arch: arm64
+            target: linuxmuslarm64
+            suffix: -musl
             runner: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v7
@@ -635,7 +645,7 @@ jobs:
           path: |
             /opt/ffbuild/prefix
             externals/jellyfin-ffmpeg/config*.h
-          key: ffmpeg-linux-${{ matrix.arch }}-${{ env.CACHE_VERSION_LINUX }}-${{ steps.ffmpeg-hash.outputs.hash }}
+          key: ffmpeg-linux-${{ matrix.arch }}${{ matrix.suffix }}-${{ env.CACHE_VERSION_LINUX }}-${{ steps.ffmpeg-hash.outputs.hash }}
 
       - name: Build FFmpeg
         id: build-ffmpeg
@@ -649,12 +659,7 @@ jobs:
 
           cd externals/jellyfin-ffmpeg/builder
 
-          # Determine target
-          if [ "${{ matrix.target }}" = "amd64" ]; then
-            TARGET="linux64"
-          else
-            TARGET="linuxarm64"
-          fi
+          TARGET="${{ matrix.target }}"
 
           # Determine Docker image to use
           IMAGE="ghcr.io/seydx/jellyfin-ffmpeg/${TARGET}-gpl:latest"
@@ -732,13 +737,13 @@ jobs:
           path: |
             /opt/ffbuild/prefix
             externals/jellyfin-ffmpeg/config*.h
-          key: ffmpeg-linux-${{ matrix.arch }}-${{ env.CACHE_VERSION_LINUX }}-${{ steps.ffmpeg-hash.outputs.hash }}
+          key: ffmpeg-linux-${{ matrix.arch }}${{ matrix.suffix }}-${{ env.CACHE_VERSION_LINUX }}-${{ steps.ffmpeg-hash.outputs.hash }}
 
       - name: Upload FFmpeg cache as artifact
         if: inputs.upload_caches == true
         uses: actions/upload-artifact@v7
         with:
-          name: ffmpeg-cache-linux-${{ matrix.arch }}
+          name: ffmpeg-cache-linux-${{ matrix.arch }}${{ matrix.suffix }}
           path: /opt/ffbuild/prefix
           retention-days: 7
 
@@ -746,10 +751,10 @@ jobs:
         run: |
           FFMPEG_BIN="/opt/ffbuild/prefix/bin/ffmpeg"
           if [ -f "$FFMPEG_BIN" ]; then
-            mkdir -p ffmpeg-binary-linux-${{ matrix.arch }}-jellyfin
-            cp "$FFMPEG_BIN" ffmpeg-binary-linux-${{ matrix.arch }}-jellyfin/ffmpeg
-            strip ffmpeg-binary-linux-${{ matrix.arch }}-jellyfin/ffmpeg
-            echo "Packaged FFmpeg binary for linux-${{ matrix.arch }}-jellyfin"
+            mkdir -p ffmpeg-binary-linux-${{ matrix.arch }}${{ matrix.suffix }}-jellyfin
+            cp "$FFMPEG_BIN" ffmpeg-binary-linux-${{ matrix.arch }}${{ matrix.suffix }}-jellyfin/ffmpeg
+            strip ffmpeg-binary-linux-${{ matrix.arch }}${{ matrix.suffix }}-jellyfin/ffmpeg
+            echo "Packaged FFmpeg binary for linux-${{ matrix.arch }}${{ matrix.suffix }}-jellyfin"
           else
             echo "Warning: FFmpeg binary not found at $FFMPEG_BIN"
           fi
@@ -758,12 +763,7 @@ jobs:
         run: |
           cp binding-jellyfin.gyp binding.gyp
 
-          # Determine target based on architecture
-          if [ "${{ matrix.target }}" = "amd64" ]; then
-            TARGET="linux64"
-          else
-            TARGET="linuxarm64"
-          fi
+          TARGET="${{ matrix.target }}"
 
           # Determine Docker image to use
           IMAGE="ghcr.io/seydx/jellyfin-ffmpeg/${TARGET}-gpl:latest"
@@ -815,14 +815,20 @@ jobs:
             mv "$BUILT_FILE" "$DIR/node-av.node"
             echo "Renamed $(basename $BUILT_FILE) -> node-av.node"
 
+            # prebuildify names the folder linux-<arch> for either C library
+            if [ -n "${{ matrix.suffix }}" ]; then
+              mv "$DIR" "$DIR${{ matrix.suffix }}"
+              DIR="$DIR${{ matrix.suffix }}"
+            fi
+
             # Copy binary for tests
             mkdir -p binary
             cp "$DIR/node-av.node" binary/node-av.node
             echo "Copied binary for tests"
 
             # Copy FFmpeg binary to binary folder
-            if [ -f "ffmpeg-binary-linux-${{ matrix.arch }}-jellyfin/ffmpeg" ]; then
-              cp "ffmpeg-binary-linux-${{ matrix.arch }}-jellyfin/ffmpeg" binary/ffmpeg
+            if [ -f "ffmpeg-binary-linux-${{ matrix.arch }}${{ matrix.suffix }}-jellyfin/ffmpeg" ]; then
+              cp "ffmpeg-binary-linux-${{ matrix.arch }}${{ matrix.suffix }}-jellyfin/ffmpeg" binary/ffmpeg
               echo "Copied FFmpeg binary for tests"
             fi
           else
@@ -840,15 +846,28 @@ jobs:
           key: whisper-models-v1
 
       - name: Run Tests
+        if: matrix.suffix != '-musl'
         env:
           AV_FROM_SOURCE: 1
         run: npm run test:all
+
+      # The musl build only loads on a musl system. The container has no Vulkan
+      # loader, so the whisper tests also cover ggml's CPU fallback.
+      - name: Run Tests (Alpine)
+        if: matrix.suffix == '-musl'
+        run: |
+          docker run --rm \
+            -v "$(pwd)":/workspace \
+            -w /workspace \
+            -e AV_FROM_SOURCE=1 \
+            node:24-alpine \
+            sh -c 'npm run test:all; status=$?; chown -R 1001:127 /workspace; exit $status'
 
       - name: Upload Prebuild
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: prebuild-linux-${{ matrix.arch }}
+          name: prebuild-linux-${{ matrix.arch }}${{ matrix.suffix }}
           path: prebuilds/
           if-no-files-found: ignore
 
@@ -856,8 +875,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: ffmpeg-v${{ steps.ffmpeg-version.outputs.version }}-linux-${{ matrix.arch }}-jellyfin.zip
-          path: ffmpeg-binary-linux-${{ matrix.arch }}-jellyfin/
+          name: ffmpeg-v${{ steps.ffmpeg-version.outputs.version }}-linux-${{ matrix.arch }}${{ matrix.suffix }}-jellyfin.zip
+          path: ffmpeg-binary-linux-${{ matrix.arch }}${{ matrix.suffix }}-jellyfin/
           if-no-files-found: ignore
 
   build_macos:
@@ -1127,6 +1146,8 @@ jobs:
           # no windows keys: the MinGW job is disabled, its caches are stale
           KEEP="ffmpeg-linux-x64-${CACHE_VERSION_LINUX}-${HASH}
           ffmpeg-linux-arm64-${CACHE_VERSION_LINUX}-${HASH}
+          ffmpeg-linux-x64-musl-${CACHE_VERSION_LINUX}-${HASH}
+          ffmpeg-linux-arm64-musl-${CACHE_VERSION_LINUX}-${HASH}
           ffmpeg-macos-x64-${CACHE_VERSION_MACOS}-xcode${XCODE_VERSION}-${HASH}
           ffmpeg-macos-arm64-${CACHE_VERSION_MACOS}-xcode${XCODE_VERSION}-${HASH}"
           KEEP="$(echo "$KEEP" | sed 's/^ *//')"

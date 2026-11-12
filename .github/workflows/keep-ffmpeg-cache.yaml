@@ -18,6 +18,8 @@ jobs:
       # windows-arm64: ${{ steps.keys.outputs.windows-arm64 }}
       linux-x64: ${{ steps.keys.outputs.linux-x64 }}
       linux-arm64: ${{ steps.keys.outputs.linux-arm64 }}
+      linux-x64-musl: ${{ steps.keys.outputs.linux-x64-musl }}
+      linux-arm64-musl: ${{ steps.keys.outputs.linux-arm64-musl }}
       macos-x64: ${{ steps.keys.outputs.macos-x64 }}
       macos-arm64: ${{ steps.keys.outputs.macos-arm64 }}
     steps:
@@ -42,6 +44,8 @@ jobs:
             # echo "windows-arm64=ffmpeg-windows-arm64-${WINDOWS}-${HASH}"
             echo "linux-x64=ffmpeg-linux-x64-${LINUX}-${HASH}"
             echo "linux-arm64=ffmpeg-linux-arm64-${LINUX}-${HASH}"
+            echo "linux-x64-musl=ffmpeg-linux-x64-musl-${LINUX}-${HASH}"
+            echo "linux-arm64-musl=ffmpeg-linux-arm64-musl-${LINUX}-${HASH}"
             echo "macos-x64=ffmpeg-macos-x64-${MACOS}-xcode${XCODE}-${HASH}"
             echo "macos-arm64=ffmpeg-macos-arm64-${MACOS}-xcode${XCODE}-${HASH}"
           } | tee -a "$GITHUB_OUTPUT"
@@ -64,6 +68,12 @@ jobs:
             runner: ubuntu-latest
             path: /opt/ffbuild/prefix
           - key: linux-arm64
+            runner: ubuntu-24.04-arm
+            path: /opt/ffbuild/prefix
+          - key: linux-x64-musl
+            runner: ubuntu-latest
+            path: /opt/ffbuild/prefix
+          - key: linux-arm64-musl
             runner: ubuntu-24.04-arm
             path: /opt/ffbuild/prefix
           - key: macos-x64
