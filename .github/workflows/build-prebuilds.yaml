@@ -418,11 +418,13 @@ jobs:
   #           if-no-files-found: ignore
 
   build_windows_msvc:
-    name: "Windows MSVC ${{ matrix.os.arch }}"
+    name: "Windows MSVC ${{ matrix.os.arch }} (${{ matrix.variant }})"
     runs-on: ${{ matrix.os.runner }}
     strategy:
       fail-fast: false
       matrix:
+        # gpl is node-av, lgpl node-av-lgpl and light node-av-light (scripts/ffmpeg-variant.js)
+        variant: [gpl, lgpl, light]
         os:
           - arch: x64
             runner: windows-2022
@@ -430,6 +432,12 @@ jobs:
             runner: windows-11-arm
     env:
       SDK_VER: 10.0.22621.0
+      NODE_AV_VARIANT: ${{ matrix.variant }}
+      # Prebuild folder prefix and artifact suffix, empty for gpl (lgpl-win32-x64-msvc, ffmpeg-v8.1.3-win-x64-lgpl.zip)
+      VARIANT_PREFIX: ${{ matrix.variant != 'gpl' && format('{0}-', matrix.variant) || '' }}
+      VARIANT_SUFFIX: ${{ matrix.variant != 'gpl' && format('-{0}', matrix.variant) || '' }}
+      # The full suite needs GPL components (libx264, ...), the other variants run their own checks
+      TEST_SCRIPT: ${{ matrix.variant == 'gpl' && 'test:all' || 'test:variant' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -468,9 +476,9 @@ jobs:
           # reproducible (see FFMPEG_MSVC_PREBUILT_TAG at the workflow top).
           RELEASE_URL="https://api.github.com/repos/seydx/ffmpeg-msvc-prebuilt/releases/tags/${FFMPEG_MSVC_PREBUILT_TAG}"
 
-          # Find the correct asset URL
+          # Find the correct asset URL (ffmpeg-gpl-amd64-static.zip, ffmpeg-lgpl-amd64-static.zip, ...)
           ASSET_URL=$(curl -s -H "Authorization: Bearer ${GITHUB_TOKEN}" "$RELEASE_URL" | \
-            grep "browser_download_url.*ffmpeg.*gpl-${ARCH_SUFFIX}-static.zip" | \
+            grep "browser_download_url.*/ffmpeg-${NODE_AV_VARIANT}-${ARCH_SUFFIX}-static.zip" | \
             cut -d '"' -f 4)
 
           if [ -z "$ASSET_URL" ]; then
@@ -493,7 +501,7 @@ jobs:
         if: inputs.upload_caches == true
         uses: actions/upload-artifact@v7
         with:
-          name: ffmpeg-cache-windows-msvc-${{ matrix.os.arch }}
+          name: ffmpeg-cache-windows-msvc-${{ matrix.os.arch }}${{ env.VARIANT_SUFFIX }}
           path: ffmpeg-msvc/
           retention-days: 7
 
@@ -512,12 +520,13 @@ jobs:
           npx node-gyp build --arch=${{ matrix.os.arch }} --verbose --release
 
           # Create prebuilds directory structure
+          $prebuildDir = "prebuilds\${env:VARIANT_PREFIX}win32-${{ matrix.os.arch }}-msvc"
           New-Item -ItemType Directory -Path "binary" -Force
-          New-Item -ItemType Directory -Path "prebuilds\win32-${{ matrix.os.arch }}-msvc" -Force
+          New-Item -ItemType Directory -Path $prebuildDir -Force
 
           # Copy the built .node file
           Copy-Item "build\Release\*.node" "binary\node-av.node"
-          Copy-Item "build\Release\*.node" "prebuilds\win32-${{ matrix.os.arch }}-msvc\node-av.node"
+          Copy-Item "build\Release\*.node" "$prebuildDir\node-av.node"
 
           Write-Host "Build completed successfully"
 
@@ -558,6 +567,7 @@ jobs:
       # Hugging Face on every build (parallel jobs sharing the runner IP pool
       # get rate-limited with HTTP 429).
       - name: Cache Whisper Models
+        if: matrix.variant == 'gpl'
         uses: actions/cache@v6
         with:
           path: models
@@ -566,13 +576,13 @@ jobs:
       - name: Run Tests
         env:
           AV_FROM_SOURCE: 1
-        run: npm run test:all
+        run: npm run ${{ env.TEST_SCRIPT }}
 
       - name: Upload prebuilds
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: prebuild-win32-msvc-${{ matrix.os.arch }}
+          name: prebuild-${{ env.VARIANT_PREFIX }}win32-msvc-${{ matrix.os.arch }}
           path: prebuilds/
           if-no-files-found: ignore
 
@@ -580,33 +590,43 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: ffmpeg-v${{ steps.ffmpeg-version.outputs.version }}-win-${{ matrix.os.arch }}.zip
+          name: ffmpeg-v${{ steps.ffmpeg-version.outputs.version }}-win-${{ matrix.os.arch }}${{ env.VARIANT_SUFFIX }}.zip
           path: ffmpeg-binary-win-${{ matrix.os.arch }}/
           if-no-files-found: ignore
 
   build_linux:
-    name: "Linux ${{ matrix.arch }}${{ matrix.suffix }}"
+    name: "Linux ${{ matrix.arch }}${{ matrix.suffix }} (${{ matrix.variant }})"
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
+        # gpl is node-av, lgpl node-av-lgpl and light node-av-light (scripts/ffmpeg-variant.js)
+        variant: [gpl, lgpl, light]
         # target: jellyfin builder target; suffix: musl builds get their own
         # cache, prebuild folder, artifacts and packages (linux-<arch>-musl)
+        target: [linux64, linuxarm64, linuxmusl64, linuxmuslarm64]
         include:
-          - arch: x64
-            target: linux64
+          - target: linux64
+            arch: x64
             runner: ubuntu-latest
-          - arch: arm64
-            target: linuxarm64
+          - target: linuxarm64
+            arch: arm64
             runner: ubuntu-24.04-arm
-          - arch: x64
-            target: linuxmusl64
+          - target: linuxmusl64
+            arch: x64
             suffix: -musl
             runner: ubuntu-latest
-          - arch: arm64
-            target: linuxmuslarm64
+          - target: linuxmuslarm64
+            arch: arm64
             suffix: -musl
             runner: ubuntu-24.04-arm
+    env:
+      NODE_AV_VARIANT: ${{ matrix.variant }}
+      # Prebuild folder prefix and artifact suffix, empty for gpl (lgpl-linux-x64, ffmpeg-v8.1.3-linux-x64-jellyfin-lgpl.zip)
+      VARIANT_PREFIX: ${{ matrix.variant != 'gpl' && format('{0}-', matrix.variant) || '' }}
+      VARIANT_SUFFIX: ${{ matrix.variant != 'gpl' && format('-{0}', matrix.variant) || '' }}
+      # The full suite needs GPL components (libx264, ...), the other variants run their own checks
+      TEST_SCRIPT: ${{ matrix.variant == 'gpl' && 'test:all' || 'test:variant' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -645,7 +665,7 @@ jobs:
           path: |
             /opt/ffbuild/prefix
             externals/jellyfin-ffmpeg/config*.h
-          key: ffmpeg-linux-${{ matrix.arch }}${{ matrix.suffix }}-${{ env.CACHE_VERSION_LINUX }}-${{ steps.ffmpeg-hash.outputs.hash }}
+          key: ffmpeg-linux-${{ matrix.arch }}${{ matrix.suffix }}${{ env.VARIANT_SUFFIX }}-${{ env.CACHE_VERSION_LINUX }}-${{ steps.ffmpeg-hash.outputs.hash }}
 
       - name: Build FFmpeg
         id: build-ffmpeg
@@ -661,7 +681,8 @@ jobs:
 
           TARGET="${{ matrix.target }}"
 
-          # Determine Docker image to use
+          # Determine Docker image to use. Every variant builds in the gpl image, they
+          # only configure FFmpeg differently (see builder/util/vars.sh).
           IMAGE="ghcr.io/seydx/jellyfin-ffmpeg/${TARGET}-gpl:latest"
 
           # Try to pull image from registry first
@@ -678,7 +699,7 @@ jobs:
           export GITHUB_REPOSITORY="seydx/jellyfin-ffmpeg"
 
           # Run Jellyfin build script
-          ./build.sh "${TARGET}" gpl
+          ./build.sh "${TARGET}" "${NODE_AV_VARIANT}"
 
           # Now extract the prefix directory which contains all headers and static libraries
           if [ -d ffbuild/prefix ]; then
@@ -737,13 +758,13 @@ jobs:
           path: |
             /opt/ffbuild/prefix
             externals/jellyfin-ffmpeg/config*.h
-          key: ffmpeg-linux-${{ matrix.arch }}${{ matrix.suffix }}-${{ env.CACHE_VERSION_LINUX }}-${{ steps.ffmpeg-hash.outputs.hash }}
+          key: ffmpeg-linux-${{ matrix.arch }}${{ matrix.suffix }}${{ env.VARIANT_SUFFIX }}-${{ env.CACHE_VERSION_LINUX }}-${{ steps.ffmpeg-hash.outputs.hash }}
 
       - name: Upload FFmpeg cache as artifact
         if: inputs.upload_caches == true
         uses: actions/upload-artifact@v7
         with:
-          name: ffmpeg-cache-linux-${{ matrix.arch }}${{ matrix.suffix }}
+          name: ffmpeg-cache-linux-${{ matrix.arch }}${{ matrix.suffix }}${{ env.VARIANT_SUFFIX }}
           path: /opt/ffbuild/prefix
           retention-days: 7
 
@@ -782,6 +803,7 @@ jobs:
             -v /opt/ffbuild:/opt/ffbuild \
             -w /workspace \
             -e PKG_CONFIG_PATH="/opt/ffbuild/prefix/lib/pkgconfig" \
+            -e NODE_AV_VARIANT \
             "${IMAGE}" \
             bash -c "
               set -e
@@ -815,10 +837,11 @@ jobs:
             mv "$BUILT_FILE" "$DIR/node-av.node"
             echo "Renamed $(basename $BUILT_FILE) -> node-av.node"
 
-            # prebuildify names the folder linux-<arch> for either C library
-            if [ -n "${{ matrix.suffix }}" ]; then
-              mv "$DIR" "$DIR${{ matrix.suffix }}"
-              DIR="$DIR${{ matrix.suffix }}"
+            # prebuildify names the folder linux-<arch> for either C library and variant
+            NAME="${VARIANT_PREFIX}$(basename "$DIR")${{ matrix.suffix }}"
+            if [ "$NAME" != "$(basename "$DIR")" ]; then
+              mv "$DIR" "prebuilds/$NAME"
+              DIR="prebuilds/$NAME"
             fi
 
             # Copy binary for tests
@@ -840,6 +863,7 @@ jobs:
       # Hugging Face on every build (parallel jobs sharing the runner IP pool
       # get rate-limited with HTTP 429).
       - name: Cache Whisper Models
+        if: matrix.variant == 'gpl'
         uses: actions/cache@v6
         with:
           path: models
@@ -849,7 +873,7 @@ jobs:
         if: matrix.suffix != '-musl'
         env:
           AV_FROM_SOURCE: 1
-        run: npm run test:all
+        run: npm run ${{ env.TEST_SCRIPT }}
 
       # The musl build only loads on a musl system. The container has no Vulkan
       # loader, so the whisper tests also cover ggml's CPU fallback.
@@ -860,14 +884,16 @@ jobs:
             -v "$(pwd)":/workspace \
             -w /workspace \
             -e AV_FROM_SOURCE=1 \
+            -e NODE_AV_VARIANT \
+            -e TEST_SCRIPT \
             node:24-alpine \
-            sh -c 'npm run test:all; status=$?; chown -R 1001:127 /workspace; exit $status'
+            sh -c 'npm run "$TEST_SCRIPT"; status=$?; chown -R 1001:127 /workspace; exit $status'
 
       - name: Upload Prebuild
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: prebuild-linux-${{ matrix.arch }}${{ matrix.suffix }}
+          name: prebuild-${{ env.VARIANT_PREFIX }}linux-${{ matrix.arch }}${{ matrix.suffix }}
           path: prebuilds/
           if-no-files-found: ignore
 
@@ -875,12 +901,12 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: ffmpeg-v${{ steps.ffmpeg-version.outputs.version }}-linux-${{ matrix.arch }}${{ matrix.suffix }}-jellyfin.zip
+          name: ffmpeg-v${{ steps.ffmpeg-version.outputs.version }}-linux-${{ matrix.arch }}${{ matrix.suffix }}-jellyfin${{ env.VARIANT_SUFFIX }}.zip
           path: ffmpeg-binary-linux-${{ matrix.arch }}${{ matrix.suffix }}-jellyfin/
           if-no-files-found: ignore
 
   build_macos:
-    name: "macOS ${{ matrix.arch }}"
+    name: "macOS ${{ matrix.arch }} (${{ matrix.variant }})"
     # Pinned image generation: macos-latest resolves to different images during
     # GitHub's label rollouts (mixed Xcode sets across the pool), which broke
     # both the FFmpeg cache key and the XCODE_VERSION pin. Bump together with
@@ -889,7 +915,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # gpl is node-av, lgpl node-av-lgpl and light node-av-light (scripts/ffmpeg-variant.js)
+        variant: [gpl, lgpl, light]
         arch: [x64, arm64]
+    env:
+      NODE_AV_VARIANT: ${{ matrix.variant }}
+      # Prebuild folder prefix and artifact suffix, empty for gpl (lgpl-darwin-arm64, ffmpeg-v8.1.3-macos-arm64-jellyfin-lgpl.zip)
+      VARIANT_PREFIX: ${{ matrix.variant != 'gpl' && format('{0}-', matrix.variant) || '' }}
+      VARIANT_SUFFIX: ${{ matrix.variant != 'gpl' && format('-{0}', matrix.variant) || '' }}
+      # The full suite needs GPL components (libx264, ...), the other variants run their own checks
+      TEST_SCRIPT: ${{ matrix.variant == 'gpl' && 'test:all' || 'test:variant' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -946,7 +981,7 @@ jobs:
           path: |
             /opt/ffbuild/prefix
             externals/jellyfin-ffmpeg/config*.h
-          key: ffmpeg-macos-${{ matrix.arch }}-${{ env.CACHE_VERSION_MACOS }}-xcode${{ env.XCODE_VERSION }}-${{ steps.ffmpeg-hash.outputs.hash }}
+          key: ffmpeg-macos-${{ matrix.arch }}${{ env.VARIANT_SUFFIX }}-${{ env.CACHE_VERSION_MACOS }}-xcode${{ env.XCODE_VERSION }}-${{ steps.ffmpeg-hash.outputs.hash }}
 
       - name: Ensure Metal Toolchain
         if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
@@ -977,7 +1012,7 @@ jobs:
           fi
 
           # Run Jellyfin build script
-          ./buildmac.sh $ARCH_NAME
+          ./buildmac.sh $ARCH_NAME "${NODE_AV_VARIANT}"
 
           # The build script uses /ffbuild/prefix but we need /opt/ffbuild/prefix
           # Also need to run make install to get FFmpeg libraries
@@ -1011,13 +1046,13 @@ jobs:
           path: |
             /opt/ffbuild/prefix
             externals/jellyfin-ffmpeg/config*.h
-          key: ffmpeg-macos-${{ matrix.arch }}-${{ env.CACHE_VERSION_MACOS }}-xcode${{ env.XCODE_VERSION }}-${{ steps.ffmpeg-hash.outputs.hash }}
+          key: ffmpeg-macos-${{ matrix.arch }}${{ env.VARIANT_SUFFIX }}-${{ env.CACHE_VERSION_MACOS }}-xcode${{ env.XCODE_VERSION }}-${{ steps.ffmpeg-hash.outputs.hash }}
 
       - name: Upload FFmpeg cache as artifact
         if: inputs.upload_caches == true
         uses: actions/upload-artifact@v7
         with:
-          name: ffmpeg-cache-macos-${{ matrix.arch }}
+          name: ffmpeg-cache-macos-${{ matrix.arch }}${{ env.VARIANT_SUFFIX }}
           path: /opt/ffbuild/prefix
           retention-days: 7
 
@@ -1066,6 +1101,12 @@ jobs:
             mv "$BUILT_FILE" "$DIR/node-av.node"
             echo "Renamed $(basename $BUILT_FILE) -> node-av.node"
 
+            # The variant's packages get their own folder (lgpl-darwin-arm64)
+            if [ -n "$VARIANT_PREFIX" ]; then
+              mv "$DIR" "prebuilds/${VARIANT_PREFIX}$(basename "$DIR")"
+              DIR="prebuilds/${VARIANT_PREFIX}$(basename "$DIR")"
+            fi
+
             # Copy binary for tests
             mkdir -p binary
             cp "$DIR/node-av.node" binary/node-av.node
@@ -1084,7 +1125,7 @@ jobs:
       # Cache the Whisper test models (see the other test jobs - avoids HTTP 429
       # rate limits from Hugging Face when runners share an IP pool).
       - name: Cache Whisper Models
-        if: matrix.arch == 'arm64'
+        if: matrix.arch == 'arm64' && matrix.variant == 'gpl'
         uses: actions/cache@v6
         with:
           path: models
@@ -1094,7 +1135,7 @@ jobs:
         if: matrix.arch == 'arm64'
         env:
           AV_FROM_SOURCE: 1
-        run: npm run test:all
+        run: npm run ${{ env.TEST_SCRIPT }}
 
       - name: Run Tests
         if: matrix.arch == 'x64'
@@ -1114,7 +1155,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: prebuild-macos-${{ matrix.arch }}
+          name: prebuild-${{ env.VARIANT_PREFIX }}macos-${{ matrix.arch }}
           path: prebuilds/
           if-no-files-found: ignore
 
@@ -1122,7 +1163,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: ffmpeg-v${{ steps.ffmpeg-version.outputs.version }}-macos-${{ matrix.arch }}-jellyfin.zip
+          name: ffmpeg-v${{ steps.ffmpeg-version.outputs.version }}-macos-${{ matrix.arch }}-jellyfin${{ env.VARIANT_SUFFIX }}.zip
           path: ffmpeg-binary-macos-${{ matrix.arch }}-jellyfin/
           if-no-files-found: ignore
 
@@ -1144,13 +1185,15 @@ jobs:
           # The submodule pointer is part of the tree - no submodule checkout needed
           HASH="${JELLYFIN_FFMPEG_HASH:-$(git ls-tree HEAD --object-only externals/jellyfin-ffmpeg)}"
           # no windows keys: the MinGW job is disabled, its caches are stale
-          KEEP="ffmpeg-linux-x64-${CACHE_VERSION_LINUX}-${HASH}
-          ffmpeg-linux-arm64-${CACHE_VERSION_LINUX}-${HASH}
-          ffmpeg-linux-x64-musl-${CACHE_VERSION_LINUX}-${HASH}
-          ffmpeg-linux-arm64-musl-${CACHE_VERSION_LINUX}-${HASH}
-          ffmpeg-macos-x64-${CACHE_VERSION_MACOS}-xcode${XCODE_VERSION}-${HASH}
-          ffmpeg-macos-arm64-${CACHE_VERSION_MACOS}-xcode${XCODE_VERSION}-${HASH}"
-          KEEP="$(echo "$KEEP" | sed 's/^ *//')"
+          KEEP=""
+          for variant in "" -lgpl -light; do
+            for platform in linux-x64 linux-arm64 linux-x64-musl linux-arm64-musl; do
+              KEEP+="ffmpeg-${platform}${variant}-${CACHE_VERSION_LINUX}-${HASH}"$'\n'
+            done
+            for arch in x64 arm64; do
+              KEEP+="ffmpeg-macos-${arch}${variant}-${CACHE_VERSION_MACOS}-xcode${XCODE_VERSION}-${HASH}"$'\n'
+            done
+          done
 
           gh cache list --limit 100 --json id,key --jq '.[] | select(.key | startswith("ffmpeg-")) | "\(.id) \(.key)"' |
           while read -r id key; do

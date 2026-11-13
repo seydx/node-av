@@ -52,7 +52,8 @@ jobs:
         run: |
           mkdir -p prebuilds
 
-          # Copy all prebuilds to a single directory structure
+          # Copy all prebuilds to a single directory structure, one folder per
+          # variant and platform (linux-x64, lgpl-linux-x64, light-linux-x64, ...)
           for dir in prebuilds-artifacts/*/; do
             cp -r "$dir"* prebuilds/
           done
@@ -60,29 +61,13 @@ jobs:
           echo "Combined prebuilds structure:"
           ls -laR prebuilds/
 
-          # Verify we have all expected platforms
-          echo -e "\nVerifying platform coverage:"
-          for platform in darwin-x64 darwin-arm64 linux-x64 linux-arm64 linux-x64-musl linux-arm64-musl win32-x64-msvc win32-arm64-msvc; do
-            if [ -d "prebuilds/$platform" ]; then
-              echo "✓ $platform"
-            else
-              echo "✗ $platform missing"
-              exit 1
-            fi
-          done
-
       - name: Create platform packages
         run: |
-          # Also creates the FFmpeg CLI packages and copies the binaries in
-          node scripts/create-platform-packages.js "${{ github.event.inputs.test_version }}" --ffmpeg-binaries ffmpeg-binaries
-
-          # Copy prebuilds to platform packages (already named node-av.node).
-          for platform in darwin-x64 darwin-arm64 linux-x64 linux-arm64 linux-x64-musl linux-arm64-musl win32-x64-msvc win32-arm64-msvc; do
-            if [ -d "prebuilds/$platform" ]; then
-              cp "prebuilds/$platform/node-av.node" "packages/$platform/node-av.node"
-              echo "Copied binary for $platform"
-            fi
-          done
+          # Creates the packages of every variant and copies the prebuilds and
+          # FFmpeg binaries in; fails if one is missing
+          node scripts/create-platform-packages.js "${{ github.event.inputs.test_version }}" \
+            --prebuilds prebuilds \
+            --ffmpeg-binaries ffmpeg-binaries
 
           echo "Platform packages created:"
           ls -la packages/
@@ -123,13 +108,12 @@ jobs:
 
       - name: Create release archives (TEST)
         run: |
-          # Create archives for each platform (including new Windows variants)
+          # Create archives for each variant and platform
           VERSION="${{ github.event.inputs.test_version }}"
-          for platform in darwin-x64 darwin-arm64 linux-x64 linux-arm64 linux-x64-musl linux-arm64-musl win32-x64-msvc win32-arm64-msvc; do
-            if [ -d "prebuilds/$platform" ]; then
-              zip -r "node-av-${platform}-${VERSION}.zip" "prebuilds/$platform"
-              echo "Created: node-av-${platform}-${VERSION}.zip"
-            fi
+          for dir in prebuilds/*/; do
+            platform=$(basename "$dir")
+            zip -r "node-av-${platform}-${VERSION}.zip" "prebuilds/$platform"
+            echo "Created: node-av-${platform}-${VERSION}.zip"
           done
 
           # Copy FFmpeg binaries to root for release
@@ -162,33 +146,18 @@ jobs:
           # Get the most recent tag
           LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
 
-          # Build the test release notes
-          cat > test_release_notes.md << 'EOF'
-          ## node-av Test Release ${{ github.event.inputs.test_version }}
-
-          ### 📦 Test Packages (NOT PUBLISHED)
-
-          The following platform packages would be updated to ${{ github.event.inputs.test_version }}:
-          - @seydx/node-av-darwin-arm64@${{ github.event.inputs.test_version }}
-          - @seydx/node-av-darwin-x64@${{ github.event.inputs.test_version }}
-          - @seydx/node-av-linux-arm64@${{ github.event.inputs.test_version }}
-          - @seydx/node-av-linux-x64@${{ github.event.inputs.test_version }}
-          - @seydx/node-av-linux-arm64-musl@${{ github.event.inputs.test_version }}
-          - @seydx/node-av-linux-x64-musl@${{ github.event.inputs.test_version }}
-          - @seydx/node-av-win32-arm64-msvc@${{ github.event.inputs.test_version }}
-          - @seydx/node-av-win32-x64-msvc@${{ github.event.inputs.test_version }}
-
-          FFmpeg CLI:
-          - @seydx/node-av-ffmpeg@${{ github.event.inputs.test_version }}
-          - @seydx/node-av-ffmpeg-darwin-arm64@${{ github.event.inputs.test_version }}
-          - @seydx/node-av-ffmpeg-darwin-x64@${{ github.event.inputs.test_version }}
-          - @seydx/node-av-ffmpeg-linux-arm64@${{ github.event.inputs.test_version }}
-          - @seydx/node-av-ffmpeg-linux-x64@${{ github.event.inputs.test_version }}
-          - @seydx/node-av-ffmpeg-linux-arm64-musl@${{ github.event.inputs.test_version }}
-          - @seydx/node-av-ffmpeg-linux-x64-musl@${{ github.event.inputs.test_version }}
-          - @seydx/node-av-ffmpeg-win32-arm64@${{ github.event.inputs.test_version }}
-          - @seydx/node-av-ffmpeg-win32-x64@${{ github.event.inputs.test_version }}
-          EOF
+          # Build the test release notes, packages in publish order
+          VERSION="${{ github.event.inputs.test_version }}"
+          {
+            echo "## node-av Test Release $VERSION"
+            echo ""
+            echo "### 📦 Test Packages (NOT PUBLISHED)"
+            echo ""
+            echo "The following packages would be updated to $VERSION:"
+            for dir in $(jq -r '.[]' packages/publish-order.json); do
+              echo "- $(jq -r .name "$dir/package.json")@$VERSION"
+            done
+          } > test_release_notes.md
 
           # Add recent commits since last tag
           if [ -n "$LATEST_TAG" ]; then
@@ -231,27 +200,16 @@ jobs:
           echo "================================================"
           echo ""
 
-          # Test publish platform packages
-          echo "Testing platform package publishing:"
-          for pkg_dir in packages/*/; do
-            if [ -d "$pkg_dir" ]; then
-              echo ""
-              echo "📦 Testing publish for $(basename "$pkg_dir"):"
-              cd "$pkg_dir"
-              npm publish --access public --dry-run --tag test
-              cd -
-            fi
-          done
-
-          echo ""
-          echo "Testing main package publishing:"
-          echo "📦 Testing publish for node-av:"
-
-          # Clean up artifacts that shouldn't be in the package
+          # Clean up artifacts that shouldn't be in the main package
           rm -rf prebuilds-artifacts
           rm -f *.zip
 
-          npm publish --access public --dry-run --tag test
+          # Same order as the release: binaries, FFmpeg CLI meta packages, main packages
+          for dir in $(jq -r '.[]' packages/publish-order.json); do
+            echo ""
+            echo "📦 Testing publish for $(jq -r .name "$dir/package.json"):"
+            (cd "$dir" && npm publish --access public --dry-run --tag test)
+          done
 
           echo ""
           echo "✅ Dry run completed successfully!"
