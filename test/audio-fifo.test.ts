@@ -848,6 +848,41 @@ describe('AudioFifo', () => {
     });
   });
 
+  describe('Buffer Length Validation', () => {
+    it('refuses buffers that hold fewer samples than asked for', async () => {
+      // interleaved S16 stereo: 4 bytes per sample
+      const packed = new AudioFifo();
+      packed.alloc(AV_SAMPLE_FMT_S16, 2, 1024);
+      const short = Buffer.alloc(1024 * 4 - 1);
+      assert.throws(() => packed.writeSync(short, 1024), RangeError);
+      assert.throws(() => packed.readSync(short, 1024), RangeError);
+      assert.throws(() => packed.peekSync(short, 1024), RangeError);
+      await assert.rejects(async () => packed.write(short, 1024), RangeError);
+      await assert.rejects(async () => packed.read(short, 1024), RangeError);
+      await assert.rejects(async () => packed.peek(short, 1024), RangeError);
+      assert.equal(packed.writeSync(Buffer.alloc(1024 * 4), 1024), 1024);
+      assert.equal(packed.readSync(Buffer.alloc(1024 * 4), 1024), 1024);
+      packed.free();
+
+      // planar FLT stereo: 4 bytes per sample in each plane
+      const planar = new AudioFifo();
+      planar.alloc(AV_SAMPLE_FMT_FLTP, 2, 1024);
+      const planes = [Buffer.alloc(1024 * 4), Buffer.alloc(1024 * 4 - 1)];
+      assert.throws(() => planar.writeSync(planes, 1024), RangeError);
+      await assert.rejects(async () => planar.read(planes, 1024), RangeError);
+      assert.equal(planar.writeSync([Buffer.alloc(1024 * 4), Buffer.alloc(1024 * 4)], 1024), 1024);
+      assert.equal(planar.size, 1024);
+      planar.free();
+    });
+
+    it('refuses a plane that is not a Buffer', () => {
+      const fifo = new AudioFifo();
+      fifo.alloc(AV_SAMPLE_FMT_FLTP, 2, 1024);
+      assert.throws(() => fifo.writeSync([Buffer.alloc(1024 * 4), null as unknown as Buffer], 1024), TypeError);
+      fifo.free();
+    });
+  });
+
   describe('Memory Management', () => {
     it('should handle multiple allocations', () => {
       const fifo = new AudioFifo();

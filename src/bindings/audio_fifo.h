@@ -24,10 +24,12 @@ private:
 
   AVAudioFifo* fifo_ = nullptr;
   int nb_buffers_ = 0;  // Plane buffers required per write/read/peek (planar: channels, interleaved: 1)
+  size_t bytes_per_sample_ = 0;  // Bytes one sample takes in each of those buffers
   AsyncOpCounter async_ops_;
 
   // Shared validation for the sync and async write/read/peek paths
   bool ValidateBufferCount(Napi::Env env, uint32_t count);
+  bool ValidateBuffers(Napi::Env env, const Napi::Value& data, int nb_samples);
 
   Napi::Value Alloc(const Napi::CallbackInfo& info);
   Napi::Value Free(const Napi::CallbackInfo& info);

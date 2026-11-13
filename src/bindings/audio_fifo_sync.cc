@@ -28,7 +28,7 @@ Napi::Value AudioFifo::WriteSync(const Napi::CallbackInfo& info) {
   if (info[0].IsArray()) {
     Napi::Array dataArray = info[0].As<Napi::Array>();
 
-    if (!ValidateBufferCount(env, dataArray.Length())) {
+    if (!ValidateBuffers(env, info[0], nb_samples)) {
       return env.Undefined();
     }
 
@@ -54,7 +54,7 @@ Napi::Value AudioFifo::WriteSync(const Napi::CallbackInfo& info) {
   }
   // Handle single buffer (interleaved format)
   else if (info[0].IsBuffer()) {
-    if (!ValidateBufferCount(env, 1)) {
+    if (!ValidateBuffers(env, info[0], nb_samples)) {
       return env.Undefined();
     }
 
@@ -92,7 +92,7 @@ Napi::Value AudioFifo::ReadSync(const Napi::CallbackInfo& info) {
   if (info[0].IsArray()) {
     Napi::Array dataArray = info[0].As<Napi::Array>();
 
-    if (!ValidateBufferCount(env, dataArray.Length())) {
+    if (!ValidateBuffers(env, info[0], nb_samples)) {
       return env.Undefined();
     }
 
@@ -118,7 +118,7 @@ Napi::Value AudioFifo::ReadSync(const Napi::CallbackInfo& info) {
   }
   // Handle single buffer (interleaved format)
   else if (info[0].IsBuffer()) {
-    if (!ValidateBufferCount(env, 1)) {
+    if (!ValidateBuffers(env, info[0], nb_samples)) {
       return env.Undefined();
     }
 
@@ -156,7 +156,7 @@ Napi::Value AudioFifo::PeekSync(const Napi::CallbackInfo& info) {
   if (info[0].IsArray()) {
     Napi::Array dataArray = info[0].As<Napi::Array>();
 
-    if (!ValidateBufferCount(env, dataArray.Length())) {
+    if (!ValidateBuffers(env, info[0], nb_samples)) {
       return env.Undefined();
     }
 
@@ -182,7 +182,7 @@ Napi::Value AudioFifo::PeekSync(const Napi::CallbackInfo& info) {
   }
   // Handle single buffer (interleaved format)
   else if (info[0].IsBuffer()) {
-    if (!ValidateBufferCount(env, 1)) {
+    if (!ValidateBuffers(env, info[0], nb_samples)) {
       return env.Undefined();
     }
 

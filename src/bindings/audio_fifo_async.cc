@@ -45,7 +45,7 @@ Napi::Value AudioFifo::WriteAsync(const Napi::CallbackInfo& info) {
     return env.Undefined();
   }
 
-  if (!ValidateBufferCount(env, info[0].IsArray() ? info[0].As<Napi::Array>().Length() : 1)) {
+  if (!ValidateBuffers(env, info[0], nb_samples)) {
     return env.Undefined();
   }
 
@@ -76,7 +76,7 @@ Napi::Value AudioFifo::ReadAsync(const Napi::CallbackInfo& info) {
     return env.Undefined();
   }
 
-  if (!ValidateBufferCount(env, info[0].IsArray() ? info[0].As<Napi::Array>().Length() : 1)) {
+  if (!ValidateBuffers(env, info[0], nb_samples)) {
     return env.Undefined();
   }
 
@@ -107,7 +107,7 @@ Napi::Value AudioFifo::PeekAsync(const Napi::CallbackInfo& info) {
     return env.Undefined();
   }
 
-  if (!ValidateBufferCount(env, info[0].IsArray() ? info[0].As<Napi::Array>().Length() : 1)) {
+  if (!ValidateBuffers(env, info[0], nb_samples)) {
     return env.Undefined();
   }
 

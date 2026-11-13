@@ -81,6 +81,7 @@ Napi::Value AudioFifo::Alloc(const Napi::CallbackInfo& info) {
   // Mirror the fifo's internal nb_buffers (audio_fifo.c): planar formats use one
   // buffer per channel, interleaved formats use a single buffer.
   nb_buffers_ = av_sample_fmt_is_planar(sample_fmt) ? channels : 1;
+  bytes_per_sample_ = static_cast<size_t>(av_get_bytes_per_sample(sample_fmt)) * (av_sample_fmt_is_planar(sample_fmt) ? 1 : channels);
 
   return env.Undefined();
 }
@@ -94,6 +95,36 @@ bool AudioFifo::ValidateBufferCount(Napi::Env env, uint32_t count) {
     Napi::TypeError::New(env, "Expected " + std::to_string(nb_buffers_) + " buffer(s) for this AudioFifo, got " + std::to_string(count))
         .ThrowAsJavaScriptException();
     return false;
+  }
+  return true;
+}
+
+bool AudioFifo::ValidateBuffers(Napi::Env env, const Napi::Value& data, int nb_samples) {
+  bool is_array = data.IsArray();
+  uint32_t count = is_array ? data.As<Napi::Array>().Length() : 1;
+  if (!ValidateBufferCount(env, count)) {
+    return false;
+  }
+  if (nb_samples <= 0) {
+    return true;
+  }
+
+  // av_audio_fifo_write/read/peek copy nb_samples per buffer without knowing
+  // its length: a shorter buffer is read or written past its end
+  size_t needed = static_cast<size_t>(nb_samples) * bytes_per_sample_;
+  for (uint32_t i = 0; i < count; i++) {
+    Napi::Value entry = is_array ? data.As<Napi::Array>().Get(i) : data;
+    if (!entry.IsBuffer()) {
+      Napi::TypeError::New(env, "Expected a Buffer for plane " + std::to_string(i)).ThrowAsJavaScriptException();
+      return false;
+    }
+    size_t length = entry.As<Napi::Buffer<uint8_t>>().Length();
+    if (length < needed) {
+      Napi::RangeError::New(env, "Buffer " + std::to_string(i) + " holds " + std::to_string(length) + " bytes, " +
+                                 std::to_string(nb_samples) + " samples need " + std::to_string(needed))
+          .ThrowAsJavaScriptException();
+      return false;
+    }
   }
   return true;
 }
