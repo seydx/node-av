@@ -199,7 +199,8 @@ describe('RTPStream', skipWerift, () => {
       }
     }
 
-    it('transcodes a supported codec when transcode is set', async () => {
+    // needs libx264 on a machine without a hardware encoder, like the CI runners
+    it('transcodes a supported codec when transcode is set', needsX264, async () => {
       assert.equal(await videoEncoderWidth({ video: { transcode: true, width: 160 } }), 160);
     });
 
