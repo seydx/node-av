@@ -669,6 +669,11 @@ Napi::Value FormatContext::SendRTSPPacketSync(const Napi::CallbackInfo& info) {
       return Napi::Number::New(env, AVERROR(ENOTSUP)); // No TCP connection
     }
 
+    // The interleaved header carries the length in 16 bits
+    if (len > 0xFFFF) {
+      return Napi::Number::New(env, AVERROR(EINVAL));
+    }
+
     // Build interleaved packet: $ + channel_id + length (2 bytes) + RTP data
     int channel_id = rtsp_st->interleaved_min;
     size_t total_len = 4 + len;
