@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [7.1.0-beta.1] - 2026-11-13
+
 ### Added
 
 - **node-av-lgpl, an LGPL build of node-av** ([#99](https://github.com/seydx/node-av/issues/99)). Same API, linked against FFmpeg built without GPL components: no libx264, libx265 and chromaprint, no GPL-only filters, and no libfdk_aac, which has its own license (AAC goes through FFmpeg's own encoder). H.264 and H.265 are encoded only with a hardware encoder: there is no LGPL software encoder for them, and `FMP4Stream` says so when it has to transcode without one. Install it as `npm install node-av@npm:node-av-lgpl` to keep the `node-av/...` imports. Its FFmpeg CLI is `@seydx/node-av-ffmpeg-lgpl`.
