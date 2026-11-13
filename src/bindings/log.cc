@@ -8,6 +8,8 @@ namespace ffmpeg {
 // Static member definitions
 thread_local Napi::FunctionReference Log::constructor;
 Napi::ThreadSafeFunction Log::tsfn = nullptr;
+std::shared_mutex Log::tsfn_mutex;
+uint64_t Log::tsfn_generation = 0;
 std::atomic<bool> Log::callback_active(false);
 std::atomic<int> Log::callback_max_level(AV_LOG_INFO);
 std::queue<std::pair<int, std::string>> Log::log_queue;
@@ -82,11 +84,7 @@ Napi::Value Log::SetCallback(const Napi::CallbackInfo& info) {
     callback_active.store(false);
     queue_cv.notify_all();  // Wake up worker thread
 
-    if (tsfn) {
-      // Always use Release (not Abort) to allow graceful shutdown
-      tsfn.Release();
-      tsfn = nullptr;
-    }
+    ReleaseCallbackFunction();
 
     // Clear queue
     {
@@ -117,20 +115,35 @@ Napi::Value Log::SetCallback(const Napi::CallbackInfo& info) {
   
   callback_max_level.store(maxLevel);
   
-  // Create ThreadSafeFunction for non-blocking callback
-  tsfn = Napi::ThreadSafeFunction::New(
-    env,
-    info[0].As<Napi::Function>(),  // JavaScript function
-    "FFmpegLogCallback",            // Resource name
-    0,                              // Unlimited queue
-    1,                              // Only one thread
-    [](Napi::Env) {                // Finalizer - called when TSFN is destroyed
-      // Cleanup complete
-    }
-  );
+  // A callback set from another env (worker thread) is replaced, not leaked
+  ReleaseCallbackFunction();
 
-  // Unref the TSFN so it doesn't keep the event loop alive
-  tsfn.Unref(env);
+  {
+    std::unique_lock<std::shared_mutex> lock(tsfn_mutex);
+    uint64_t generation = ++tsfn_generation;
+
+    // Create ThreadSafeFunction for non-blocking callback
+    tsfn = Napi::ThreadSafeFunction::New(
+      env,
+      info[0].As<Napi::Function>(),  // JavaScript function
+      "FFmpegLogCallback",            // Resource name
+      0,                              // Unlimited queue
+      1,                              // Only one thread
+      [generation](Napi::Env) {
+        // Finalized without a reset (its env exits): FFmpeg threads that
+        // still log must not reach the function again
+        std::unique_lock<std::shared_mutex> lock(tsfn_mutex);
+        if (tsfn_generation == generation) {
+          av_log_set_callback(av_log_default_callback);
+          callback_active.store(false);
+          tsfn = nullptr;
+        }
+      }
+    );
+
+    // Unref the TSFN so it doesn't keep the event loop alive
+    tsfn.Unref(env);
+  }
 
   callback_active.store(true);
   
@@ -177,11 +190,7 @@ Napi::Value Log::ResetCallback(const Napi::CallbackInfo& info) {
   callback_active.store(false);
   queue_cv.notify_all();
 
-  if (tsfn) {
-    // Always use Release for graceful shutdown
-    tsfn.Release();
-    tsfn = nullptr;
-  }
+  ReleaseCallbackFunction();
 
   {
     std::lock_guard<std::mutex> lock(queue_mutex);
@@ -193,6 +202,21 @@ Napi::Value Log::ResetCallback(const Napi::CallbackInfo& info) {
 }
 
 // === Internal ===
+
+void Log::ReleaseCallbackFunction() {
+  Napi::ThreadSafeFunction previous;
+  {
+    std::unique_lock<std::shared_mutex> lock(tsfn_mutex);
+    previous = tsfn;
+    tsfn = nullptr;
+    ++tsfn_generation;
+  }
+  // Outside the lock, the finalizer takes it too. Release, not Abort, for a
+  // graceful shutdown
+  if (previous) {
+    previous.Release();
+  }
+}
 
 void Log::LogCallback(void* ptr, int level, const char* fmt, va_list vl) {
   // Early exit if not active or level filtered
@@ -214,6 +238,7 @@ void Log::LogCallback(void* ptr, int level, const char* fmt, va_list vl) {
   auto message = std::make_pair(level, std::string(buffer));
   
   // Non-blocking send to JavaScript
+  std::shared_lock<std::shared_mutex> lock(tsfn_mutex);
   if (tsfn) {
     // Use ThreadSafeFunction to call JavaScript callback
     // This is non-blocking and thread-safe

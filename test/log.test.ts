@@ -1,4 +1,5 @@
 import assert from 'node:assert';
+import { spawn } from 'node:child_process';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 
 import { AV_LOG_DEBUG, AV_LOG_ERROR, AV_LOG_FATAL, AV_LOG_INFO, AV_LOG_PANIC, AV_LOG_QUIET, AV_LOG_TRACE, AV_LOG_VERBOSE, AV_LOG_WARNING, Log } from '../src/index.js';
@@ -420,6 +421,42 @@ describe('Log', () => {
       Log.resetCallback();
 
       assert.ok(true, 'Cleanup on reset tested');
+    });
+  });
+
+  describe('Worker threads', () => {
+    it('keeps logging after a worker that set the callback has ended', { timeout: 30000 }, async () => {
+      const script = `
+        import { Worker, isMainThread, parentPort } from 'node:worker_threads';
+        const { Log, AV_LOG_ERROR } = await import(${JSON.stringify(new URL('../src/index.ts', import.meta.url).href)});
+        if (isMainThread) {
+          for (let round = 0; round < 5; round++) {
+            const worker = new Worker(process.env.NODE_AV_LOG_WORKER, { eval: true, execArgv: process.execArgv });
+            await new Promise((resolve) => worker.once('message', resolve));
+            await worker.terminate();
+            // the callback's function is gone with the worker's env
+            for (let i = 0; i < 100; i++) Log.log(AV_LOG_ERROR, 'after the worker');
+          }
+          console.log('done');
+        } else {
+          Log.setCallback(() => {}, { maxLevel: AV_LOG_ERROR });
+          Log.log(AV_LOG_ERROR, 'from the worker');
+          parentPort.postMessage('ready');
+          setInterval(() => {}, 1000);
+        }
+      `;
+      const result = await new Promise<{ code: number | null; signal: string | null; stdout: string }>((resolve) => {
+        const child = spawn(process.execPath, ['--import', import.meta.resolve('tsx'), '--input-type=module', '-e', script], {
+          stdio: ['ignore', 'pipe', 'ignore'],
+          env: { ...process.env, NODE_AV_LOG_WORKER: script },
+        });
+        let stdout = '';
+        child.stdout.on('data', (d: Buffer) => (stdout += d.toString()));
+        child.on('close', (code, signal) => resolve({ code, signal, stdout }));
+      });
+      assert.equal(result.signal, null);
+      assert.equal(result.code, 0);
+      assert.match(result.stdout, /done/);
     });
   });
 });

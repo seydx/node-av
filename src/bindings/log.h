@@ -4,6 +4,7 @@
 #include <napi.h>
 #include <queue>
 #include <mutex>
+#include <shared_mutex>
 #include <condition_variable>
 #include <atomic>
 
@@ -21,7 +22,12 @@ public:
   ~Log();
   
 private:
+  // FFmpeg logs from any thread while JS swaps or drops the callback, and env
+  // teardown finalizes the function: tsfn is read and written under tsfn_mutex
   static Napi::ThreadSafeFunction tsfn;
+  static std::shared_mutex tsfn_mutex;
+  static uint64_t tsfn_generation;
+  static void ReleaseCallbackFunction();
   static std::atomic<bool> callback_active;
   static std::atomic<int> callback_max_level;
   static std::queue<std::pair<int, std::string>> log_queue;
