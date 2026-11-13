@@ -4,12 +4,14 @@ import { dirname, join, resolve } from 'node:path';
 
 import { getDirname, getUnpackedPath } from '../utils/electron.js';
 import { isMusl } from '../utils/libc.js';
+import { ffmpegPackageName } from '../utils/variant.js';
 import { FFMPEG_VERSION } from './version.js';
 
 const __dirname = getDirname(import.meta.url);
 const require = createRequire(import.meta.url);
 
-const FFMPEG_PACKAGE = '@seydx/node-av-ffmpeg';
+// @seydx/node-av-ffmpeg, or the -lgpl / -light package of the other variants
+const FFMPEG_PACKAGE = ffmpegPackageName();
 const ffmpegFile = 'ffmpeg' + (process.platform === 'win32' ? '.exe' : '');
 
 // Local build (development, CI tests): binary/ next to dist/
@@ -20,7 +22,7 @@ let resolvedFfmpegPath: string | null = null;
 /**
  * Find the FFmpeg binary.
  *
- * Checks the local `binary/` folder first, then the platform package installed by `@seydx/node-av-ffmpeg`.
+ * Checks the local `binary/` folder first, then the platform package installed by the variant's FFmpeg CLI package.
  *
  * @returns Absolute path to the binary, or `null` if neither is installed
  *
@@ -59,12 +61,14 @@ function findFfmpeg(): string | null {
  *
  * The binary ships in the optional `@seydx/node-av-ffmpeg` package
  * (`npm install @seydx/node-av-ffmpeg`), which installs the build for the
- * current platform. It is built from the same FFmpeg as the native bindings.
+ * current platform. It is built from the same FFmpeg as the native bindings,
+ * so node-av-lgpl and node-av-light use `@seydx/node-av-ffmpeg-lgpl` and
+ * `@seydx/node-av-ffmpeg-light` instead.
  * In Electron apps the path points into `app.asar.unpacked`.
  *
  * @returns Absolute path to the FFmpeg binary
  *
- * @throws {Error} If `@seydx/node-av-ffmpeg` is not installed or has no build for this platform
+ * @throws {Error} If the FFmpeg CLI package is not installed or has no build for this platform
  *
  * @example
  * ```typescript
@@ -107,8 +111,9 @@ export function ffmpegPath(): string {
 /**
  * Check if the FFmpeg binary is available.
  *
- * Returns whether `@seydx/node-av-ffmpeg` is installed with a build for
- * this platform, i.e. whether {@link ffmpegPath} will succeed.
+ * Returns whether the FFmpeg CLI package (`@seydx/node-av-ffmpeg`, or the
+ * one of the node-av-lgpl and node-av-light variants) is installed with a
+ * build for this platform, i.e. whether {@link ffmpegPath} will succeed.
  *
  * @returns `true` if the FFmpeg binary exists, `false` otherwise
  *

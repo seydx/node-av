@@ -1,12 +1,17 @@
 #!/usr/bin/env node
 
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 
 import { log } from './ffmpeg.js';
 
 const require = createRequire(import.meta.url);
+
+// node-av, node-av-lgpl and node-av-light each install their own platform packages
+// (@seydx/node-av-linux-x64, @seydx/node-av-lgpl-linux-x64, ...)
+const { name } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+const packagePrefix = `@seydx/${name}`;
 
 const tryLoadPrebuilt = () => {
   // Try to load from platform-specific package (optionalDependencies)
@@ -29,7 +34,7 @@ const tryLoadPrebuilt = () => {
     // }
 
     try {
-      const packageName = `@seydx/node-av-${platform}-${arch}-msvc`;
+      const packageName = `${packagePrefix}-${platform}-${arch}-msvc`;
       // Check if the package is installed (don't check for .node file yet - it may be extracted by postinstall)
       const packageJsonPath = require.resolve(`${packageName}/package.json`);
       if (existsSync(packageJsonPath)) {
@@ -41,7 +46,7 @@ const tryLoadPrebuilt = () => {
     }
   } else {
     // musl (Alpine) has its own build, a glibc one doesn't load there
-    const packageName = `@seydx/node-av-${platform}-${arch}${musl ? '-musl' : ''}`;
+    const packageName = `${packagePrefix}-${platform}-${arch}${musl ? '-musl' : ''}`;
 
     try {
       // Check if the package is installed (don't check for .node file yet - it may be extracted by postinstall)

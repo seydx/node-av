@@ -12,6 +12,7 @@ import { isMainThread } from 'node:worker_threads';
 
 import { getDirname } from '../utils/electron.js';
 import { isMusl } from '../utils/libc.js';
+import { nativePackagePrefix } from '../utils/variant.js';
 
 import type {
   AVCodecID,
@@ -384,6 +385,8 @@ function loadBinding(): NativeBinding {
   const arch = process.arch;
   const platformArch = `${platform}-${arch}`;
   const loadLocal = process.env.AV_FROM_SOURCE === '1';
+  // node-av, node-av-lgpl and node-av-light each depend on their own platform packages
+  const packagePrefix = nativePackagePrefix();
 
   // Local build directory (--build-from-source)
   try {
@@ -417,7 +420,7 @@ function loadBinding(): NativeBinding {
       // }
 
       try {
-        const packageName = `@seydx/node-av-${platformArch}-msvc`;
+        const packageName = `${packagePrefix}-${platformArch}-msvc`;
         return require(`${packageName}/node-av.node`);
       } catch (err) {
         errors.push(new Error(`MSVC package not found or loading failed: ${err}`));
@@ -425,7 +428,7 @@ function loadBinding(): NativeBinding {
     } else {
       // Non-Windows platforms. musl (Alpine) needs its own build, a glibc one doesn't load there.
       try {
-        const packageName = `@seydx/node-av-${platformArch}${isMusl() ? '-musl' : ''}`;
+        const packageName = `${packagePrefix}-${platformArch}${isMusl() ? '-musl' : ''}`;
         return require(`${packageName}/node-av.node`);
       } catch (err) {
         errors.push(new Error(`Platform package not found or loading failed: ${err}`));

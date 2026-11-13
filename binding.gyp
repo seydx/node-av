@@ -83,6 +83,8 @@
             "cflags!": ["-fno-exceptions"],
             "cflags_cc!": ["-fno-exceptions"],
             "defines": ["NAPI_DISABLE_CPP_EXCEPTIONS", "NODE_API_SWALLOW_UNTHROWABLE_EXCEPTIONS"],
+            # Drops the libraries the variant's FFmpeg doesn't build (scripts/ffmpeg-variant.js)
+            "libraries/": [["exclude", "<!(node scripts/ffmpeg-variant.js gyp-exclude)"]],
             "libraries": [
                 "-Wl,-force_load,/opt/ffbuild/prefix/lib/libavformat.a",
                 "-Wl,-force_load,/opt/ffbuild/prefix/lib/libavcodec.a",

@@ -84,6 +84,8 @@
             "cflags!": ["-fno-exceptions"],
             "cflags_cc!": ["-fno-exceptions"],
             "defines": ["NAPI_DISABLE_CPP_EXCEPTIONS", "NODE_API_SWALLOW_UNTHROWABLE_EXCEPTIONS"],
+            # Drops the libraries the variant's FFmpeg doesn't build (scripts/ffmpeg-variant.js)
+            "libraries/": [["exclude", "<!(node scripts/ffmpeg-variant.js gyp-exclude)"]],
             "msbuild_toolset": "v143",
             "msvs_settings": {
                 "VCCLCompilerTool": {

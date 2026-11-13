@@ -1,11 +1,14 @@
 /**
  * Copies the built node-av.node to node_modules/@seydx/node-av-{platform}-{arch}/
- * so bundlers like Vite (Electron Forge) can resolve it correctly.
+ * so bundlers like Vite (Electron Forge) can resolve it correctly. A build for
+ * another variant (NODE_AV_VARIANT) goes to its package, e.g. @seydx/node-av-lgpl-{platform}-{arch}.
  */
 
 import { cpSync, mkdirSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { currentVariant, VARIANTS } from './ffmpeg-variant.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '..');
@@ -23,7 +26,8 @@ if (!existsSync(source)) {
 }
 
 for (const toolchain of toolchains) {
-  const packageName = toolchain ? `@seydx/node-av-${platform}-${arch}-${toolchain}` : `@seydx/node-av-${platform}-${arch}`;
+  const prefix = `@seydx/${VARIANTS[currentVariant()].package}`;
+  const packageName = toolchain ? `${prefix}-${platform}-${arch}-${toolchain}` : `${prefix}-${platform}-${arch}`;
 
   const dest = resolve(root, 'node_modules', packageName, 'node-av.node');
   mkdirSync(dirname(dest), { recursive: true });
