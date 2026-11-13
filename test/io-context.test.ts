@@ -1962,5 +1962,68 @@ describe('IOContext', () => {
       assert.equal(result.code, 0, result.stderr);
       assert.match(result.stdout, /alone 1000\npb 1024/);
     });
+
+    it('ends the reads of an input that outlives its collected IO context', { timeout: 30000 }, async () => {
+      const script = `
+        const { FormatContext, IOContext, Packet, AVSEEK_SIZE } = await import(${JSON.stringify(new URL('../src/index.ts', import.meta.url).href)});
+        const { readFileSync } = await import('node:fs');
+        const data = readFileSync(${JSON.stringify(testVideoFile)});
+        const ctx = new FormatContext();
+        ctx.allocContext();
+        await (async () => {
+          let position = 0;
+          const io = new IOContext();
+          io.allocContextWithCallbacks(
+            4096,
+            0,
+            (size) => {
+              if (position >= data.length) return null;
+              const chunk = data.subarray(position, Math.min(position + size, data.length));
+              position += chunk.length;
+              return chunk;
+            },
+            null,
+            (offset, whence) => {
+              if (whence === AVSEEK_SIZE) return BigInt(data.length);
+              position = Number(offset);
+              return BigInt(position);
+            },
+          );
+          ctx.pb = io;
+          await ctx.openInput('', null, null);
+          // the reader thread now reads through the IO context
+          const packet = new Packet();
+          packet.alloc();
+          await ctx.readFrame(packet);
+          packet.free();
+        })();
+        // only the IO context goes out of reach: its callback data has to
+        // stay valid for the reader, which finds the callbacks switched off
+        ctx._ioContext = null;
+        for (let i = 0; i < 8; i++) { globalThis.gc(); await new Promise((resolve) => setImmediate(resolve)); }
+        const packet = new Packet();
+        packet.alloc();
+        let result = 0;
+        for (let i = 0; i < 500 && result >= 0; i++) {
+          result = await ctx.readFrame(packet);
+          packet.unref();
+        }
+        packet.free();
+        await ctx.closeInput();
+        console.log('ended', result < 0);
+      `;
+      const result = await new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve) => {
+        const child = spawn(process.execPath, ['--expose-gc', '--import', import.meta.resolve('tsx'), '--input-type=module', '-e', script], {
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        let stdout = '';
+        let stderr = '';
+        child.stdout.on('data', (d: Buffer) => (stdout += d.toString()));
+        child.stderr.on('data', (d: Buffer) => (stderr += d.toString()));
+        child.on('close', (code) => resolve({ code, stdout, stderr }));
+      });
+      assert.equal(result.code, 0, result.stderr);
+      assert.match(result.stdout, /ended true/);
+    });
   });
 });

@@ -137,7 +137,7 @@ private:
   static thread_local std::shared_ptr<IOExitState> exit_state_;
 
   // Helper to clean up callbacks
-  void CleanupCallbacks();
+  void CleanupCallbacks(bool keep_allocated = false);
 
   // Callback-aware async-op guard for free/close/replace paths
   bool GuardOps(Napi::Env env);

@@ -335,7 +335,9 @@ IOContext::~IOContext() {
 
   // Opened with avio_open2(): its opaque is the protocol handle to close
   bool opened = ctx_ && !callback_data_ && ctx_->opaque;
-  CleanupCallbacks();
+  // The work that keeps ctx_ alive still calls into it with the callback data
+  // as its opaque, so the data stays allocated with ctx_, switched off
+  CleanupCallbacks(ctx_ && busy);
 
   if (frees) {
     if (opened) {
@@ -791,7 +793,7 @@ bool IOContext::GuardOps(Napi::Env env) {
   return GuardAsyncOps(env, async_ops_, "IOContext");
 }
 
-void IOContext::CleanupCallbacks() {
+void IOContext::CleanupCallbacks(bool keep_allocated) {
   if (callback_data_ && callback_data_->active) {
     callback_data_->active = false;
     // A round-trip still waiting on these callbacks fails now rather than once
@@ -812,7 +814,11 @@ void IOContext::CleanupCallbacks() {
       callback_data_->seek_callback_direct.Reset();
       callback_data_->has_seek_callback = false;
     }
-    callback_data_.reset();
+    if (keep_allocated) {
+      (void)callback_data_.release();
+    } else {
+      callback_data_.reset();
+    }
   }
 }
 
