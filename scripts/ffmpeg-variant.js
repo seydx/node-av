@@ -19,6 +19,12 @@ const GPL_LICENSE_TEXT =
   'FFmpeg is built with GPL components (x264, x265), so it is licensed under the GPL v3 or later. ' +
   'It also links libfdk_aac, which is licensed under the Fraunhofer FDK AAC license';
 
+// The license texts (licenses/ in the repository) the binaries of node-av and node-av-light carry
+const GPL_LICENSE_FILES = {
+  'GPL-3.0.txt': 'FFmpeg is built with GPL components (x264, x265), so it is licensed under the GNU General Public License v3 or later',
+  'FDK-AAC.txt': 'libfdk_aac, built from fdk-aac-stripped, is licensed under the Fraunhofer FDK AAC license',
+};
+
 export const VARIANTS = {
   gpl: {
     package: 'node-av',
@@ -27,6 +33,7 @@ export const VARIANTS = {
     // SPDX license of the binaries: FFmpeg, plus libfdk_aac in the GPL variants
     license: 'GPL-3.0-or-later AND FDK-AAC',
     licenseText: GPL_LICENSE_TEXT,
+    licenseFiles: GPL_LICENSE_FILES,
     excludedLibs: [],
   },
   lgpl: {
@@ -35,6 +42,10 @@ export const VARIANTS = {
     title: 'the LGPL build of node-av',
     license: 'LGPL-3.0-or-later',
     licenseText: 'FFmpeg is built without GPL components and without libfdk_aac, so it is licensed under the LGPL v3 or later',
+    licenseFiles: {
+      'LGPL-3.0.txt': 'FFmpeg is licensed under the GNU Lesser General Public License v3 or later',
+      'GPL-3.0.txt': 'The LGPL v3 adds its permissions to the GNU General Public License v3',
+    },
     // GPL libraries, chromaprint which links fftw3f on Linux, and libfdk_aac, which has
     // its own license
     excludedLibs: ['libx264', 'libx265', 'x265-static', 'libfftw3f', 'libchromaprint', 'libfdk-aac', 'fdk-aac'],
@@ -45,6 +56,7 @@ export const VARIANTS = {
     title: 'the light build of node-av',
     license: 'GPL-3.0-or-later AND FDK-AAC',
     licenseText: GPL_LICENSE_TEXT,
+    licenseFiles: GPL_LICENSE_FILES,
     // Mirrors FF_SKIP_SCRIPTS in the builder's variants/defaults-light.sh
     excludedLibs: [
       // whisper

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { execFileSync } from 'child_process';
 import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
@@ -110,9 +111,73 @@ const findFfmpegBinary = (artifact, binary) => {
   return path;
 };
 
-const licenseSection = (variant) => `## License
+/**
+ * Get the revisions the packaged FFmpeg is built from.
+ *
+ * Linux and macOS build the jellyfin-ffmpeg submodule, Windows uses the ffmpeg-msvc-prebuilt
+ * release the build workflow pins. Both pin every library FFmpeg links.
+ *
+ * @returns {{ jellyfinCommit: string, msvcTag: string }} Submodule commit and MSVC release tag
+ * @throws {Error} If the submodule commit or the MSVC tag can't be read
+ */
+const readFfmpegSources = () => {
+  const jellyfinCommit = execFileSync('git', ['rev-parse', 'HEAD:externals/jellyfin-ffmpeg'], { cwd: rootDir, encoding: 'utf8' }).trim();
+  const workflow = readFileSync(join(rootDir, '.github', 'workflows', 'build-prebuilds.yaml'), 'utf8');
+  const msvcTag = /FFMPEG_MSVC_PREBUILT_TAG:\s*"([^"]+)"/.exec(workflow)?.[1];
+  if (!msvcTag) {
+    throw new Error('FFMPEG_MSVC_PREBUILT_TAG not found in .github/workflows/build-prebuilds.yaml');
+  }
+  return { jellyfinCommit, msvcTag };
+};
 
-${variant.licenseText}.
+const ffmpegSources = readFfmpegSources();
+
+/**
+ * Add the license texts to a package that contains an FFmpeg build.
+ *
+ * LICENSE.md names the licenses and where the sources are, licenses/ holds the full
+ * texts. The package's files field has to list both.
+ *
+ * @param {string} packageDir - Package folder
+ * @param {object} variant - Variant from VARIANTS
+ * @param {{ os: string }} platform - Target platform
+ */
+const writeLicenses = (packageDir, variant, platform) => {
+  mkdirSync(join(packageDir, 'licenses'), { recursive: true });
+  for (const file of Object.keys(variant.licenseFiles)) {
+    copyFileSync(join(rootDir, 'licenses', file), join(packageDir, 'licenses', file));
+  }
+
+  const { jellyfinCommit, msvcTag } = ffmpegSources;
+  const msvcUrl = `https://github.com/seydx/ffmpeg-msvc-prebuilt/tree/${msvcTag}`;
+  const jellyfinUrl = `https://github.com/seydx/jellyfin-ffmpeg/tree/${jellyfinCommit}`;
+  const source =
+    platform.os === 'win32'
+      ? `[seydx/ffmpeg-msvc-prebuilt at ${msvcTag}](${msvcUrl}), which pins the jellyfin-ffmpeg revision and every library in \`sources.sh\``
+      : `[seydx/jellyfin-ffmpeg at ${jellyfinCommit.slice(0, 12)}](${jellyfinUrl}), whose builder pins every library in \`builder/scripts.d\``;
+
+  writeFileSync(
+    join(packageDir, 'LICENSE.md'),
+    `# Licenses
+
+The binary in this package contains the FFmpeg of ${variant.title} and the libraries it links statically.
+
+${Object.entries(variant.licenseFiles)
+  .map(([file, description]) => `- ${description} ([licenses/${file}](licenses/${file})).`)
+  .join('\n')}
+
+The other libraries keep their own licenses, which are part of their sources.
+
+## Source code
+
+FFmpeg and the libraries it links are built from ${source}.
+`,
+  );
+};
+
+const licenseSection = (variant, withTexts = false) => `## License
+
+${variant.licenseText}.${withTexts ? ' See LICENSE.md for the license texts and the sources.' : ''}
 `;
 
 for (const [variantName, variant] of Object.entries(VARIANTS)) {
@@ -127,6 +192,7 @@ for (const [variantName, variant] of Object.entries(VARIANTS)) {
       version,
       description: `${variant.package} (${platform.name} binary)`,
       license: variant.license,
+      files: ['node-av.node', 'LICENSE.md', 'licenses'],
       os: [platform.os],
       cpu: [platform.cpu],
       ...(platform.libc && { libc: [platform.libc] }),
@@ -143,9 +209,10 @@ Platform-specific binary for [${variant.package}](https://github.com/seydx/node-
 - OS: ${platform.os}
 - Architecture: ${platform.cpu}${platform.libc ? `\n- C library: ${platform.libc}` : ''}
 
-${licenseSection(variant)}`;
+${licenseSection(variant, true)}`;
 
     const packageDir = writePackage(packageJson, readme);
+    writeLicenses(packageDir, variant, platform);
     publishOrder.binaries.push(`packages/${packageFolder(name)}`);
 
     if (prebuildsDir) {
@@ -181,7 +248,7 @@ ${licenseSection(variant)}`;
       version,
       description: `FFmpeg CLI for ${variant.package} (${platform.name})`,
       ...ffmpegCommon,
-      files: [binary],
+      files: [binary, 'LICENSE.md', 'licenses'],
       os: [platform.os],
       cpu: [platform.cpu],
       ...(platform.libc && { libc: [platform.libc] }),
@@ -193,9 +260,10 @@ FFmpeg CLI binary for [${variant.package}](https://github.com/seydx/node-av) on 
 
 **This package is installed by \`${variant.ffmpegPackage}\`. You should not install it directly.**
 
-${licenseSection(variant)}`;
+${licenseSection(variant, true)}`;
 
     const packageDir = writePackage(packageJson, readme);
+    writeLicenses(packageDir, variant, platform);
     publishOrder.binaries.push(`packages/${packageFolder(name)}`);
 
     if (ffmpegBinariesDir) {
