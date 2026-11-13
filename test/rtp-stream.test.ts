@@ -703,6 +703,28 @@ describe('RTPStream', skipWerift, () => {
       }
     }
 
+    it('closes the input when a codec refuses to close', async () => {
+      const { RTPStream } = await import('../src/webrtc/index.js');
+      const failure = new Error('CodecContext is busy');
+      const closed: string[] = [];
+      const stream = RTPStream.create(getInputFile('video.mp4'));
+      const internals = stream as unknown as TeardownInternals;
+      internals.videoDecoder = {
+        close: () => {
+          throw failure;
+        },
+      };
+      internals.input = {
+        close: async () => {
+          closed.push('input');
+        },
+      };
+
+      await assert.rejects(stream.stop(), failure);
+      assert.deepEqual(closed, ['input']);
+      assert.equal(internals.input, undefined);
+    });
+
     it('releases every resource and reports the error once when closing an output rethrows it', async () => {
       const { RTPStream } = await import('../src/webrtc/index.js');
       const failure = new Error('write failed');

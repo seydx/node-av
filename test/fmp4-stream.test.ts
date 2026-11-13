@@ -1405,6 +1405,27 @@ describe('FMP4Stream', () => {
       await withTimeout(stream.stop(), 1000);
     });
 
+    it('closes the input when a codec refuses to close', async () => {
+      const failure = new Error('CodecContext is busy');
+      const closed: string[] = [];
+      const stream = FMP4Stream.create('unused');
+      const internals = stream as unknown as TeardownInternals;
+      internals.videoDecoder = {
+        close: () => {
+          throw failure;
+        },
+      };
+      internals.input = {
+        close: async () => {
+          closed.push('input');
+        },
+      };
+
+      await assert.rejects(withTimeout(stream.stop(), 1000), failure);
+      assert.deepEqual(closed, ['input']);
+      assert.equal(internals.input, undefined);
+    });
+
     it('calls a throwing onClose once, logs its error and leaves no rejected promise', async () => {
       for (const outcome of ['resolved', 'rejected'] as const) {
         let calls = 0;

@@ -1121,25 +1121,29 @@ export class RTPStream {
       }
       this.audioOutput = undefined;
 
-      this.videoEncoder?.close();
-      this.videoEncoder = undefined;
-      this.videoFilter?.close();
-      this.videoFilter = undefined;
-      this.videoDecoder?.close();
-      this.videoDecoder = undefined;
+      // A codec that refuses to close (still busy) must not leave the input,
+      // an RTSP connection, open.
+      try {
+        this.videoEncoder?.close();
+        this.videoEncoder = undefined;
+        this.videoFilter?.close();
+        this.videoFilter = undefined;
+        this.videoDecoder?.close();
+        this.videoDecoder = undefined;
 
-      this.audioEncoder?.close();
-      this.audioEncoder = undefined;
-      this.audioFilter?.close();
-      this.audioFilter = undefined;
-      this.audioDecoder?.close();
-      this.audioDecoder = undefined;
+        this.audioEncoder?.close();
+        this.audioEncoder = undefined;
+        this.audioFilter?.close();
+        this.audioFilter = undefined;
+        this.audioDecoder?.close();
+        this.audioDecoder = undefined;
 
-      this.hardwareContext?.dispose();
-      this.hardwareContext = undefined;
-
-      await this.input?.close();
-      this.input = undefined;
+        this.hardwareContext?.dispose();
+        this.hardwareContext = undefined;
+      } finally {
+        await this.input?.close();
+        this.input = undefined;
+      }
     } finally {
       this.stopRequested = false;
     }

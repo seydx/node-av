@@ -1395,25 +1395,29 @@ export class FMP4Stream {
       this.output = undefined;
       this.packetAgeWatchdog = undefined;
 
-      this.videoDecoder?.close();
-      this.videoDecoder = undefined;
-      this.videoFilter?.close();
-      this.videoFilter = undefined;
-      this.videoEncoder?.close();
-      this.videoEncoder = undefined;
+      // A codec that refuses to close (still busy) must not leave the input,
+      // an RTSP connection, open.
+      try {
+        this.videoDecoder?.close();
+        this.videoDecoder = undefined;
+        this.videoFilter?.close();
+        this.videoFilter = undefined;
+        this.videoEncoder?.close();
+        this.videoEncoder = undefined;
 
-      this.audioDecoder?.close();
-      this.audioDecoder = undefined;
-      this.audioFilter?.close();
-      this.audioFilter = undefined;
-      this.audioEncoder?.close();
-      this.audioEncoder = undefined;
+        this.audioDecoder?.close();
+        this.audioDecoder = undefined;
+        this.audioFilter?.close();
+        this.audioFilter = undefined;
+        this.audioEncoder?.close();
+        this.audioEncoder = undefined;
 
-      this.hardwareContext?.dispose();
-      this.hardwareContext = undefined;
-
-      await this.input?.close();
-      this.input = undefined;
+        this.hardwareContext?.dispose();
+        this.hardwareContext = undefined;
+      } finally {
+        await this.input?.close();
+        this.input = undefined;
+      }
 
       // Reset parser and init segment state so a restart parses a clean stream.
       this.incompleteBoxBuffer = null;
