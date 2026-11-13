@@ -420,7 +420,7 @@ jobs:
   #           if-no-files-found: ignore
 
   # The native addon is cached like FFmpeg: a job whose addon inputs and FFmpeg are unchanged
-  # reuses the last addon that passed its tests instead of compiling it again
+  # reuses the addon built from them instead of compiling it again
   addon_key:
     name: "Native addon cache key"
     runs-on: ubuntu-latest
@@ -534,15 +534,15 @@ jobs:
       - name: Install Node dependencies
         run: npm install --ignore-scripts
 
-      # Saved after the job succeeded, i.e. only an addon that passed its tests is reused
       - name: Restore native addon cache
         id: cache-addon
-        uses: actions/cache@v6
+        uses: actions/cache/restore@v6
         with:
           path: .addon-cache
           key: addon-win32-${{ matrix.os.arch }}${{ env.VARIANT_SUFFIX }}-${{ needs.addon_key.outputs.inputs }}-${{ env.FFMPEG_MSVC_PREBUILT_TAG }}
 
       - name: Build Native Addon
+        id: build-addon
         if: steps.cache-addon.outputs.cache-hit != 'true'
         shell: powershell
         run: |
@@ -558,6 +558,15 @@ jobs:
           Copy-Item "build\Release\*.node" ".addon-cache\node-av.node"
 
           Write-Host "Build completed successfully"
+
+      # Saved right after the build, whatever the tests say: the key covers everything the
+      # addon is built from, so a fix outside the bindings reuses it and one inside rebuilds
+      - name: Save native addon cache
+        if: steps.cache-addon.outputs.cache-hit != 'true' && steps.build-addon.outcome == 'success'
+        uses: actions/cache/save@v6
+        with:
+          path: .addon-cache
+          key: addon-win32-${{ matrix.os.arch }}${{ env.VARIANT_SUFFIX }}-${{ needs.addon_key.outputs.inputs }}-${{ env.FFMPEG_MSVC_PREBUILT_TAG }}
 
       - name: Collect Native Addon
         shell: powershell
@@ -822,15 +831,15 @@ jobs:
             echo "Warning: FFmpeg binary not found at $FFMPEG_BIN"
           fi
 
-      # Saved after the job succeeded, i.e. only an addon that passed its tests is reused
       - name: Restore native addon cache
         id: cache-addon
-        uses: actions/cache@v6
+        uses: actions/cache/restore@v6
         with:
           path: .addon-cache
           key: addon-linux-${{ matrix.arch }}${{ matrix.suffix }}${{ env.VARIANT_SUFFIX }}-${{ needs.addon_key.outputs.inputs }}-${{ env.CACHE_VERSION_LINUX }}
 
       - name: Build Native Addon in Docker
+        id: build-addon
         if: steps.cache-addon.outputs.cache-hit != 'true'
         run: |
           cp binding-jellyfin.gyp binding.gyp
@@ -889,6 +898,15 @@ jobs:
           mkdir -p .addon-cache
           mv "$BUILT_FILE" .addon-cache/node-av.node
           rm -rf prebuilds
+
+      # Saved right after the build, whatever the tests say: the key covers everything the
+      # addon is built from, so a fix outside the bindings reuses it and one inside rebuilds
+      - name: Save native addon cache
+        if: steps.cache-addon.outputs.cache-hit != 'true' && steps.build-addon.outcome == 'success'
+        uses: actions/cache/save@v6
+        with:
+          path: .addon-cache
+          key: addon-linux-${{ matrix.arch }}${{ matrix.suffix }}${{ env.VARIANT_SUFFIX }}-${{ needs.addon_key.outputs.inputs }}-${{ env.CACHE_VERSION_LINUX }}
 
       # The addon build installs them inside its container
       - name: Install Node dependencies
@@ -1123,15 +1141,15 @@ jobs:
       - name: Install Node dependencies
         run: npm install --ignore-scripts
 
-      # Saved after the job succeeded, i.e. only an addon that passed its tests is reused
       - name: Restore native addon cache
         id: cache-addon
-        uses: actions/cache@v6
+        uses: actions/cache/restore@v6
         with:
           path: .addon-cache
           key: addon-macos-${{ matrix.arch }}${{ env.VARIANT_SUFFIX }}-${{ needs.addon_key.outputs.inputs }}-${{ env.CACHE_VERSION_MACOS }}-xcode${{ env.XCODE_VERSION }}
 
       - name: Build Native Addon
+        id: build-addon
         if: steps.cache-addon.outputs.cache-hit != 'true'
         run: |
           cp binding-jellyfin.gyp binding.gyp
@@ -1163,6 +1181,15 @@ jobs:
           mkdir -p .addon-cache
           mv "$BUILT_FILE" .addon-cache/node-av.node
           rm -rf prebuilds
+
+      # Saved right after the build, whatever the tests say: the key covers everything the
+      # addon is built from, so a fix outside the bindings reuses it and one inside rebuilds
+      - name: Save native addon cache
+        if: steps.cache-addon.outputs.cache-hit != 'true' && steps.build-addon.outcome == 'success'
+        uses: actions/cache/save@v6
+        with:
+          path: .addon-cache
+          key: addon-macos-${{ matrix.arch }}${{ env.VARIANT_SUFFIX }}-${{ needs.addon_key.outputs.inputs }}-${{ env.CACHE_VERSION_MACOS }}-xcode${{ env.XCODE_VERSION }}
 
       - name: Collect Native Addon
         run: |
