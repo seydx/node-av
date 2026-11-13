@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **node-av-lgpl, an LGPL build of node-av** ([#99](https://github.com/seydx/node-av/issues/99)). Same API, linked against FFmpeg built without GPL components: no libx264, libx265 and chromaprint, no GPL-only filters, and no libfdk_aac, which has its own license (AAC goes through FFmpeg's own encoder). Install it as `npm install node-av@npm:node-av-lgpl` to keep the `node-av/...` imports. Its FFmpeg CLI is `@seydx/node-av-ffmpeg-lgpl`.
+- **node-av-light, a smaller build of node-av** ([#69](https://github.com/seydx/node-av/issues/69)). It keeps all of FFmpeg's own components and every hardware backend, plus x264, x265, Opus and libfdk_aac, and leaves out the less common external libraries: Whisper, libplacebo, libvpx, SVT-AV1, JPEG XL, WebP, Vorbis, Theora, libass, zimg, SRT, Blu-ray, teletext and tracker music. Its FFmpeg CLI is `@seydx/node-av-ffmpeg-light`.
+
+### Changed
+
+- **The platform and FFmpeg CLI packages declare the license of the FFmpeg they contain.** They said MIT, which only covers node-av's own code. The native binding links FFmpeg statically, so the packages now say `GPL-3.0-or-later AND FDK-AAC` (`LGPL-3.0-or-later` for node-av-lgpl). The README lists what each variant contains and points out that node-av and node-av-light include libfdk_aac under the Fraunhofer FDK AAC license.
+- **The platform and FFmpeg CLI packages ship their license texts.** Each one contains the GPL or LGPL text of its FFmpeg, the Fraunhofer FDK AAC license where libfdk_aac is linked, and a LICENSE.md that links the exact FFmpeg sources the binary was built from.
+- **The Windows (MSVC) FFmpeg compiles its CUDA filters with clang instead of nvcc.** nvcc needs `--enable-nonfree`, which made the Windows x64 binaries non-redistributable. The filters (`scale_cuda`, `overlay_cuda`, `tonemap_cuda`, ...) stay the same, and node-av-lgpl has them as well.
+
+### Fixed
+
+- **node-av can be imported in an Electron renderer.** The demuxer created a `SharedArrayBuffer` when the module loaded, which a renderer without cross-origin isolation doesn't have, so the import failed. It is now created on the first EAGAIN retry in `packetsSync()`. Closing a demuxer also no longer calls `unref()` on the browser timers of a renderer, which are plain numbers.
+
 ## [7.0.4-beta.1] - 2026-11-13
 
 ### Fixed
