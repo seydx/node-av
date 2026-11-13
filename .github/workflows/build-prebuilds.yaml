@@ -436,8 +436,9 @@ jobs:
       # Prebuild folder prefix and artifact suffix, empty for gpl (lgpl-win32-x64-msvc, ffmpeg-v8.1.3-win-x64-lgpl.zip)
       VARIANT_PREFIX: ${{ matrix.variant != 'gpl' && format('{0}-', matrix.variant) || '' }}
       VARIANT_SUFFIX: ${{ matrix.variant != 'gpl' && format('-{0}', matrix.variant) || '' }}
-      # The full suite needs GPL components (libx264, ...), the other variants run their own checks
-      TEST_SCRIPT: ${{ matrix.variant == 'gpl' && 'test:all' || 'test:variant' }}
+      # The full suite needs GPL components (libx264, ...), lgpl runs its own checks. light runs
+      # the full suite, the whisper tests skip themselves without the whisper filter
+      TEST_SCRIPT: ${{ matrix.variant == 'lgpl' && 'test:variant' || 'test:all' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -625,8 +626,9 @@ jobs:
       # Prebuild folder prefix and artifact suffix, empty for gpl (lgpl-linux-x64, ffmpeg-v8.1.3-linux-x64-jellyfin-lgpl.zip)
       VARIANT_PREFIX: ${{ matrix.variant != 'gpl' && format('{0}-', matrix.variant) || '' }}
       VARIANT_SUFFIX: ${{ matrix.variant != 'gpl' && format('-{0}', matrix.variant) || '' }}
-      # The full suite needs GPL components (libx264, ...), the other variants run their own checks
-      TEST_SCRIPT: ${{ matrix.variant == 'gpl' && 'test:all' || 'test:variant' }}
+      # The full suite needs GPL components (libx264, ...), lgpl runs its own checks. light runs
+      # the full suite, the whisper tests skip themselves without the whisper filter
+      TEST_SCRIPT: ${{ matrix.variant == 'lgpl' && 'test:variant' || 'test:all' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -923,8 +925,9 @@ jobs:
       # Prebuild folder prefix and artifact suffix, empty for gpl (lgpl-darwin-arm64, ffmpeg-v8.1.3-macos-arm64-jellyfin-lgpl.zip)
       VARIANT_PREFIX: ${{ matrix.variant != 'gpl' && format('{0}-', matrix.variant) || '' }}
       VARIANT_SUFFIX: ${{ matrix.variant != 'gpl' && format('-{0}', matrix.variant) || '' }}
-      # The full suite needs GPL components (libx264, ...), the other variants run their own checks
-      TEST_SCRIPT: ${{ matrix.variant == 'gpl' && 'test:all' || 'test:variant' }}
+      # The full suite needs GPL components (libx264, ...), lgpl runs its own checks. light runs
+      # the full suite, the whisper tests skip themselves without the whisper filter
+      TEST_SCRIPT: ${{ matrix.variant == 'lgpl' && 'test:variant' || 'test:all' }}
     steps:
       - uses: actions/checkout@v7
         with:

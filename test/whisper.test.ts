@@ -6,6 +6,7 @@ import { Demuxer } from '../src/api/demuxer.js';
 import { FilterAPI } from '../src/api/filter.js';
 import { WhisperTranscriber } from '../src/api/whisper.js';
 import { AV_SAMPLE_FMT_S16 } from '../src/index.js';
+import { Filter } from '../src/lib/filter.js';
 import { getInputFile, isCI, prepareTestEnvironment, skipInCI } from './index.js';
 
 import type { Frame } from '../src/lib/frame.js';
@@ -14,7 +15,10 @@ prepareTestEnvironment();
 
 const audioFile = getInputFile('audio-speech.wav');
 
-describe('WhisperTranscriber', () => {
+// node-av-light is built without the whisper filter
+const noWhisper = Filter.getByName('whisper') ? false : 'This FFmpeg build has no whisper filter';
+
+describe('WhisperTranscriber', { skip: noWhisper }, () => {
   describe('model download', () => {
     it('should download model if not present', async () => {
       console.log('Downloading model test...');
