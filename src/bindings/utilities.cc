@@ -4,7 +4,6 @@
 #include "codec_parameters.h"
 #include "packet.h"
 #include "stream.h"
-#include "codec_parser.h"
 #include <cstring>
 #include <vector>
 extern "C" {
@@ -1865,9 +1864,10 @@ Napi::Value Utilities::DtsPredict(const Napi::CallbackInfo& info) {
   int frame_size = par->frame_size;
   AVRational frame_rate = par->framerate;
 
-  // Get parser context from stream (if available)
-  AVCodecParserContext* parser_ctx = av_stream_get_parser(stream);
-  int repeat_pict = parser_ctx ? parser_ctx->repeat_pict : 0;
+  // The parser state is captured by the thread that read the packet, -1 without
+  // a parser. The stream's parser itself belongs to the input's owner thread,
+  // which reads ahead and frees it at the end of the stream.
+  int repeat_pict = packetWrapper->ParserRepeatPict();
 
   // Check if codec has AV_CODEC_PROP_FIELDS property
   const AVCodecDescriptor* desc = avcodec_descriptor_get(par->codec_id);
@@ -1915,7 +1915,7 @@ Napi::Value Utilities::DtsPredict(const Napi::CallbackInfo& info) {
         AVRational field_rate = av_mul_q(frame_rate, two_one);
         int fields = 2;
 
-        if (has_fields_property && parser_ctx && repeat_pict >= 0) {
+        if (has_fields_property && repeat_pict >= 0) {
           fields = 1 + repeat_pict;
         }
 

@@ -22,6 +22,11 @@ public:
 
   void SyncExternalMemory(napi_env env);
 
+  // repeat_pict of the stream's parser as of the av_read_frame() that put this
+  // packet here, -1 without a parser (see FormatContext::ParserRepeatPict)
+  int ParserRepeatPict() const { return parser_repeat_pict_; }
+  void SetParserRepeatPict(int repeatPict) { parser_repeat_pict_ = repeatPict; }
+
 private:
   friend class Stream;
   friend class SyncQueue;
@@ -32,6 +37,8 @@ private:
   friend class FormatContext;
 
   AVPacket* packet_ = nullptr;
+
+  int parser_repeat_pict_ = -1;
 
   // In-flight threadpool operations touching packet_ (decoder/encoder I/O,
   // bitstream filters, muxer writes). free()/unref()/alloc() wait on this so

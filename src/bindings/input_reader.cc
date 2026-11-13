@@ -55,12 +55,13 @@ Napi::Promise InputReader::ReadFrame(Napi::Env env, std::vector<Napi::Object> pi
 
   std::unique_lock<std::mutex> lock(mutex_);
   if (!packets_.empty()) {
-    AVPacket* queued = packets_.front();
+    QueuedPacket queued = packets_.front();
     packets_.pop_front();
-    queuedBytes_ -= static_cast<size_t>(queued->size);
+    queuedBytes_ -= static_cast<size_t>(queued.packet->size);
     lock.unlock();
     cv_.notify_all();
-    completion->delivered = queued;
+    completion->delivered = queued.packet;
+    completion->repeatPict = queued.repeatPict;
     Deliver(env, completion, 0);
     return promise;
   }
@@ -200,6 +201,10 @@ void InputReader::Run() {
       continue;
     }
 
+    // Captured with the packet like the ffmpeg CLI's demuxer thread does: JS
+    // handles it while this thread reads on, and av_read_frame() frees the
+    // stream's parser at the end of the stream
+    int repeatPict = FormatContext::ParserRepeatPict(owner_->ctx_, pkt);
     AVPacket* slot = av_packet_alloc();
     av_packet_move_ref(slot, pkt);
 
@@ -207,6 +212,7 @@ void InputReader::Run() {
       Completion* completion = pendingReads_.front();
       pendingReads_.pop_front();
       completion->delivered = slot;
+      completion->repeatPict = repeatPict;
       lock.unlock();
       Complete(completion, 0);
       lock.lock();
@@ -214,7 +220,7 @@ void InputReader::Run() {
     }
 
     queuedBytes_ += static_cast<size_t>(slot->size);
-    packets_.push_back(slot);
+    packets_.push_back({slot, repeatPict});
   }
 
   lock.unlock();
@@ -222,8 +228,8 @@ void InputReader::Run() {
 }
 
 void InputReader::FlushQueueLocked() {
-  for (AVPacket* queued : packets_) {
-    av_packet_free(&queued);
+  for (QueuedPacket& queued : packets_) {
+    av_packet_free(&queued.packet);
   }
   packets_.clear();
   queuedBytes_ = 0;
@@ -259,6 +265,7 @@ void InputReader::Deliver(Napi::Env env, Completion* completion, int result) {
     if (target && result >= 0) {
       av_packet_unref(target);
       av_packet_move_ref(target, completion->delivered);
+      completion->packet->SetParserRepeatPict(completion->repeatPict);
       completion->packet->SyncExternalMemory(env);
     }
     av_packet_free(&completion->delivered);

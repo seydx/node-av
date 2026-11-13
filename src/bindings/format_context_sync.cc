@@ -59,6 +59,7 @@ Napi::Value FormatContext::ReadFrameSync(const Napi::CallbackInfo& info) {
 
   // av_read_frame fills the packet's buffer internally; reconcile V8 accounting.
   if (result >= 0) {
+    packet->SetParserRepeatPict(ParserRepeatPict(ctx_, packet->Get()));
     packet->SyncExternalMemory(env);
   }
 

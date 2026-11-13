@@ -1159,6 +1159,14 @@ void FormatContext::RequestInterrupt() {
   }
 }
 
+int FormatContext::ParserRepeatPict(AVFormatContext* ctx, const AVPacket* pkt) {
+  if (!ctx || pkt->stream_index < 0 || static_cast<unsigned>(pkt->stream_index) >= ctx->nb_streams) {
+    return -1;
+  }
+  AVCodecParserContext* parser = av_stream_get_parser(ctx->streams[pkt->stream_index]);
+  return parser ? parser->repeat_pict : -1;
+}
+
 void FormatContext::StopReader() {
   // closeInput()'s worker and a sync close/free on the main thread can stop
   // concurrently. The one that finds reader_ already taken must not return

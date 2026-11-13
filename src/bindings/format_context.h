@@ -114,6 +114,12 @@ public:
   const AVFormatContext* Get() const { return ctx_; }
   bool IsOutput() const { return is_output_; }
 
+  // repeat_pict of the parser of the stream `pkt` belongs to, -1 without one.
+  // Call it on the thread that just read `pkt`: av_read_frame() frees a
+  // stream's parser at the end of the stream, so with an owner thread reading
+  // ahead the main thread must not touch it.
+  static int ParserRepeatPict(AVFormatContext* ctx, const AVPacket* pkt);
+
 private:
   friend class AVOptionWrapper;
   friend class InputReader;
