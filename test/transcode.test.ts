@@ -2,7 +2,7 @@ import assert from 'node:assert';
 import { describe, it } from 'node:test';
 
 import { AV_PIX_FMT_NV12, AV_PIX_FMT_YUV420P, Decoder, Demuxer, Encoder, FF_ENCODER_LIBX264, FilterAPI, FilterPreset, HardwareContext } from '../src/index.js';
-import { decodePacket, encodeFrame, filterFrame, getInputFile, prepareTestEnvironment } from './index.js';
+import { decodePacket, encodeFrame, filterFrame, getInputFile, needsX264, prepareTestEnvironment } from './index.js';
 
 prepareTestEnvironment();
 
@@ -65,7 +65,7 @@ async function processFrames(input: Demuxer, decoder: Decoder, filter: FilterAPI
 }
 
 describe('Transcode Scenarios', () => {
-  it('should handle SW Decode -> SW Filter -> SW Encode', async () => {
+  it('should handle SW Decode -> SW Filter -> SW Encode', needsX264, async () => {
     await using input = await Demuxer.open(inputFile);
     const videoStream = input.video();
     assert.ok(videoStream, 'Should have video stream');
@@ -90,7 +90,7 @@ describe('Transcode Scenarios', () => {
     assert.ok(frameCount > 0, 'Should process at least one frame');
   });
 
-  it('should handle SW Decode -> SW Encode (no filter)', async () => {
+  it('should handle SW Decode -> SW Encode (no filter)', needsX264, async () => {
     await using input = await Demuxer.open(inputFile);
     const videoStream = input.video();
     assert.ok(videoStream, 'Should have video stream');
@@ -108,7 +108,7 @@ describe('Transcode Scenarios', () => {
     assert.ok(frameCount > 0, 'Should process at least one frame');
   });
 
-  it('should handle HW Decode -> HW Filter -> SW Encode', async () => {
+  it('should handle HW Decode -> HW Filter -> SW Encode', needsX264, async () => {
     using hw = HardwareContext.auto();
     if (!hw) {
       console.log('No hardware available - skipping test');
@@ -360,7 +360,7 @@ describe('Transcode Scenarios', () => {
       hw.dispose();
     });
 
-    it('should handle encoder/decoder mismatch gracefully', async () => {
+    it('should handle encoder/decoder mismatch gracefully', needsX264, async () => {
       await using input = await Demuxer.open(inputFile);
       const videoStream = input.video();
       assert.ok(videoStream, 'Should have video stream');

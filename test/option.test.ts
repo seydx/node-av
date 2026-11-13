@@ -30,10 +30,11 @@ import {
   SoftwareResampleContext,
   SoftwareScaleContext,
 } from '../src/index.js';
+import { needsX264 } from './index.js';
 
 describe('Option API', () => {
   describe('CodecContext Options', () => {
-    it('should set and get options on encoder context', () => {
+    it('should set and get options on encoder context', needsX264, () => {
       const codec = Codec.findEncoderByName(FF_ENCODER_LIBX264);
       assert.ok(codec, 'Should find h264 encoder');
 
@@ -77,7 +78,7 @@ describe('Option API', () => {
       ctx.freeContext();
     });
 
-    it('should handle invalid option names', () => {
+    it('should handle invalid option names', needsX264, () => {
       const codec = Codec.findEncoderByName(FF_ENCODER_LIBX264);
       assert.ok(codec);
 
@@ -363,7 +364,7 @@ describe('Option API', () => {
   });
 
   describe('Option Types', () => {
-    it('should handle different option types', () => {
+    it('should handle different option types', needsX264, () => {
       const codec = Codec.findEncoderByName(FF_ENCODER_LIBX264);
       assert.ok(codec);
 
@@ -412,7 +413,7 @@ describe('Option API', () => {
       ctx.freeContext();
     });
 
-    it('should handle binary data options', () => {
+    it('should handle binary data options', needsX264, () => {
       const codec = Codec.findEncoderByName(FF_ENCODER_LIBX264);
       assert.ok(codec);
 
@@ -447,7 +448,7 @@ describe('Option API', () => {
       ctx.freeContext();
     });
 
-    it('should handle boolean options', () => {
+    it('should handle boolean options', needsX264, () => {
       const codec = Codec.findEncoderByName(FF_ENCODER_LIBX264);
       assert.ok(codec);
 
@@ -470,7 +471,7 @@ describe('Option API', () => {
       ctx.freeContext();
     });
 
-    it('should handle flags options', () => {
+    it('should handle flags options', needsX264, () => {
       const codec = Codec.findEncoderByName(FF_ENCODER_LIBX264);
       assert.ok(codec);
 
@@ -486,7 +487,7 @@ describe('Option API', () => {
     });
   });
 
-  describe('Search Flags', () => {
+  describe('Search Flags', needsX264, () => {
     it('should use search flags when setting options', () => {
       const codec = Codec.findEncoderByName(FF_ENCODER_LIBX264);
       assert.ok(codec);

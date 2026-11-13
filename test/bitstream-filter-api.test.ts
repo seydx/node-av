@@ -15,7 +15,7 @@ import {
   Packet,
   pipeline,
 } from '../src/index.js';
-import { getInputFile, getOutputFile, prepareTestEnvironment } from './index.js';
+import { getInputFile, getOutputFile, needsX264, prepareTestEnvironment } from './index.js';
 
 prepareTestEnvironment();
 
@@ -874,7 +874,7 @@ describe('BitStreamFilterAPI', () => {
     });
   });
 
-  describe('Encoder Source', () => {
+  describe('Encoder Source', needsX264, () => {
     it('should throw from getStream() when created from an encoder', async () => {
       await using media = await Demuxer.open(inputFile);
       const stream = media.video();

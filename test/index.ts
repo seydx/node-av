@@ -3,6 +3,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { AV_PIX_FMT_YUV420P } from '../src/constants/constants.js';
+import { FF_ENCODER_LIBX264, FF_ENCODER_LIBX265 } from '../src/constants/encoders.js';
+import { Codec } from '../src/lib/codec.js';
+import { Filter } from '../src/lib/filter.js';
 import { Frame } from '../src/lib/frame.js';
 import { Rational } from '../src/lib/rational.js';
 
@@ -11,6 +14,8 @@ import type { Decoder } from '../src/api/decoder.js';
 import type { DemuxerOptions } from '../src/api/demuxer.js';
 import type { Encoder } from '../src/api/encoder.js';
 import type { FilterAPI } from '../src/api/filter.js';
+import type { FFDecoderCodec } from '../src/constants/decoders.js';
+import type { FFEncoderCodec } from '../src/constants/encoders.js';
 import type { AVPixelFormat } from '../src/constants/index.js';
 import type { Packet } from '../src/lib/packet.js';
 
@@ -52,6 +57,39 @@ export function isCI(): boolean {
 }
 
 export const skipInCI = { skip: isCI() ? 'Skipping hardware tests in CI' : false };
+
+/** FFmpeg components a test needs. */
+interface RequiredComponents {
+  encoders?: FFEncoderCodec[];
+  decoders?: FFDecoderCodec[];
+  filters?: string[];
+}
+
+/**
+ * Skip option for tests that need components the FFmpeg build may leave out.
+ *
+ * Checks the build itself rather than the variant name, so it also covers custom builds.
+ * node-av-lgpl has no libx264, libx265, libfdk_aac or GPL-only filters, node-av-light no whisper.
+ *
+ * @param components - Encoders, decoders and filters the test uses
+ * @param extra - Further test options to merge, e.g. {@link skipInCI}
+ *
+ * @returns Test options with a skip reason naming what is missing
+ */
+export function requires(components: RequiredComponents, extra: { skip?: string | boolean } = {}): { skip: string | boolean } {
+  const missing = [
+    ...(components.encoders ?? []).filter((name) => !Codec.findEncoderByName(name)),
+    ...(components.decoders ?? []).filter((name) => !Codec.findDecoderByName(name)),
+    ...(components.filters ?? []).filter((name) => !Filter.getByName(name)),
+  ];
+  return { skip: missing.length > 0 ? `This FFmpeg build has no ${missing.join(', ')}` : (extra.skip ?? false) };
+}
+
+/** Tests that encode H.264 in software. */
+export const needsX264 = requires({ encoders: [FF_ENCODER_LIBX264] });
+
+/** Tests that encode H.265 in software. */
+export const needsX265 = requires({ encoders: [FF_ENCODER_LIBX265] });
 
 export async function* decodePacket(decoder: Decoder, packet: Packet | null): AsyncGenerator<Frame> {
   await decoder.decode(packet);

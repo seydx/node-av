@@ -43,6 +43,7 @@ import {
   type FFDecoderCodec,
   type FFEncoderCodec,
 } from '../src/index.js';
+import { needsX264 } from './index.js';
 
 describe('Codec', () => {
   describe('Find Decoders', () => {
@@ -480,7 +481,7 @@ describe('Codec', () => {
   });
 
   describe('Codec Options (getOptions)', () => {
-    it('should return private options for an encoder', () => {
+    it('should return private options for an encoder', needsX264, () => {
       const libx264 = Codec.findEncoderByName(FF_ENCODER_LIBX264);
       assert.ok(libx264);
 

@@ -461,9 +461,6 @@ jobs:
       # Prebuild folder prefix and artifact suffix, empty for gpl (lgpl-win32-x64-msvc, ffmpeg-v8.1.3-win-x64-lgpl.zip)
       VARIANT_PREFIX: ${{ matrix.variant != 'gpl' && format('{0}-', matrix.variant) || '' }}
       VARIANT_SUFFIX: ${{ matrix.variant != 'gpl' && format('-{0}', matrix.variant) || '' }}
-      # The full suite needs GPL components (libx264, ...), lgpl runs its own checks. light runs
-      # the full suite, the whisper tests skip themselves without the whisper filter
-      TEST_SCRIPT: ${{ matrix.variant == 'lgpl' && 'test:variant' || 'test:all' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -622,10 +619,12 @@ jobs:
           path: models
           key: whisper-models-v1
 
+      # Every variant runs the full suite, a test that needs a component the variant
+      # leaves out (libx264, whisper, ...) skips itself (requires() in test/index.ts)
       - name: Run Tests
         env:
           AV_FROM_SOURCE: 1
-        run: npm run ${{ env.TEST_SCRIPT }}
+        run: npm run test:all
 
       - name: Upload prebuilds
         if: always()
@@ -675,9 +674,6 @@ jobs:
       # Prebuild folder prefix and artifact suffix, empty for gpl (lgpl-linux-x64, ffmpeg-v8.1.3-linux-x64-jellyfin-lgpl.zip)
       VARIANT_PREFIX: ${{ matrix.variant != 'gpl' && format('{0}-', matrix.variant) || '' }}
       VARIANT_SUFFIX: ${{ matrix.variant != 'gpl' && format('-{0}', matrix.variant) || '' }}
-      # The full suite needs GPL components (libx264, ...), lgpl runs its own checks. light runs
-      # the full suite, the whisper tests skip themselves without the whisper filter
-      TEST_SCRIPT: ${{ matrix.variant == 'lgpl' && 'test:variant' || 'test:all' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -937,11 +933,13 @@ jobs:
           path: models
           key: whisper-models-v1
 
+      # Every variant runs the full suite, a test that needs a component the variant
+      # leaves out (libx264, whisper, ...) skips itself (requires() in test/index.ts)
       - name: Run Tests
         if: matrix.suffix != '-musl'
         env:
           AV_FROM_SOURCE: 1
-        run: npm run ${{ env.TEST_SCRIPT }}
+        run: npm run test:all
 
       # The musl build only loads on a musl system. The container has no Vulkan
       # loader, so the whisper tests also cover ggml's CPU fallback.
@@ -953,9 +951,8 @@ jobs:
             -w /workspace \
             -e AV_FROM_SOURCE=1 \
             -e NODE_AV_VARIANT \
-            -e TEST_SCRIPT \
             node:24-alpine \
-            sh -c 'npm run "$TEST_SCRIPT"; status=$?; chown -R 1001:127 /workspace; exit $status'
+            sh -c 'npm run test:all; status=$?; chown -R 1001:127 /workspace; exit $status'
 
       - name: Upload Prebuild
         if: always()
@@ -992,9 +989,6 @@ jobs:
       # Prebuild folder prefix and artifact suffix, empty for gpl (lgpl-darwin-arm64, ffmpeg-v8.1.3-macos-arm64-jellyfin-lgpl.zip)
       VARIANT_PREFIX: ${{ matrix.variant != 'gpl' && format('{0}-', matrix.variant) || '' }}
       VARIANT_SUFFIX: ${{ matrix.variant != 'gpl' && format('-{0}', matrix.variant) || '' }}
-      # The full suite needs GPL components (libx264, ...), lgpl runs its own checks. light runs
-      # the full suite, the whisper tests skip themselves without the whisper filter
-      TEST_SCRIPT: ${{ matrix.variant == 'lgpl' && 'test:variant' || 'test:all' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -1214,11 +1208,13 @@ jobs:
           path: models
           key: whisper-models-v1
 
+      # Every variant runs the full suite, a test that needs a component the variant
+      # leaves out (libx264, whisper, ...) skips itself (requires() in test/index.ts)
       - name: Run Tests
         if: matrix.arch == 'arm64'
         env:
           AV_FROM_SOURCE: 1
-        run: npm run ${{ env.TEST_SCRIPT }}
+        run: npm run test:all
 
       - name: Run Tests
         if: matrix.arch == 'x64'

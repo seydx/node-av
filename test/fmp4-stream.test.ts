@@ -4,7 +4,7 @@ import { describe, it } from 'node:test';
 
 import { PacketAgeWatchdog } from '../src/api/utilities/packet-age-watchdog.js';
 import { AV_CODEC_ID_OPUS, AV_NOPTS_VALUE, AV_PIX_FMT_NV12, AV_PIX_FMT_YUV420P, avGetPixFmtName, Demuxer, FMP4Stream, FormatContext } from '../src/index.js';
-import { encoderInputFormat, getInputFile, getOutputFile, prepareTestEnvironment, stallingFrameSource, syntheticVideoFrame, yuvj422pSource } from './index.js';
+import { encoderInputFormat, getInputFile, getOutputFile, needsX264, prepareTestEnvironment, stallingFrameSource, syntheticVideoFrame, yuvj422pSource } from './index.js';
 
 import type { AVPixelFormat, Encoder, FMP4Data, FMP4StreamOptions, FMP4VideoInfo, Frame, MediaFrameSource, MP4Box, Packet } from '../src/index.js';
 
@@ -472,7 +472,7 @@ describe('FMP4Stream', () => {
     });
   });
 
-  describe('stalled frame source', () => {
+  describe('stalled frame source', needsX264, () => {
     it('should stop when the frame source goes silent', async () => {
       const silent = Promise.withResolvers<void>();
       const stream = FMP4Stream.create(
@@ -800,7 +800,7 @@ describe('FMP4Stream', () => {
     });
   });
 
-  describe('transcode keyframe cadence', () => {
+  describe('transcode keyframe cadence', needsX264, () => {
     // hevc-short.mp4: 320x240, 15fps, 4s, single keyframe (long GOP in the source).
     // Transcoding to H.264 must bound the encoder GOP to the fragment duration so
     // every fMP4 fragment starts with a keyframe - otherwise frag_duration cuts
@@ -897,7 +897,7 @@ describe('FMP4Stream', () => {
     });
   });
 
-  describe('transcode B-frames', () => {
+  describe('transcode B-frames', needsX264, () => {
     it('encodes without B-frames, also with encoder options that would add them', async () => {
       const reorderOf = async (input: string | MediaFrameSource): Promise<number | undefined> => {
         let reorder: number | undefined;
@@ -958,7 +958,7 @@ describe('FMP4Stream', () => {
       return encoded;
     };
 
-    it('transcodes a supported codec when transcode is set', async () => {
+    it('transcodes a supported codec when transcode is set', needsX264, async () => {
       const encoded = await encodedVideo({ transcode: true, width: 160 });
       assert.equal(encoded?.width, 160);
       assert.equal(encoded?.height, 90);
@@ -970,7 +970,7 @@ describe('FMP4Stream', () => {
       assert.equal(await encodedVideo({ width: 160 }), undefined);
     });
 
-    it('keeps the source size instead of scaling up', async () => {
+    it('keeps the source size instead of scaling up', needsX264, async () => {
       const encoded = await encodedVideo({ transcode: true, width: 640 });
       assert.equal(encoded?.width, 320);
       assert.equal(encoded?.height, 180);
@@ -978,13 +978,13 @@ describe('FMP4Stream', () => {
       assert.equal(encoded?.info?.height, 180);
     });
 
-    it('applies the bitrate as target and VBV cap', async () => {
+    it('applies the bitrate as target and VBV cap', needsX264, async () => {
       const encoded = await encodedVideo({ transcode: true, bitrate: 300_000 });
       assert.equal(encoded?.bitRate, 300000n, 'the 1 Mbps seed must not stay the target');
       assert.equal(encoded?.rcMaxRate, 300000n);
     });
 
-    it('derives the bitrate from picture size and frame rate when none is given', async () => {
+    it('derives the bitrate from picture size and frame rate when none is given', needsX264, async () => {
       const encoded = await encodedVideo({ transcode: true });
       assert.ok(encoded);
       // libx264 keeps whole kbit/s
@@ -998,7 +998,7 @@ describe('FMP4Stream', () => {
     // 4:2:2 JPEG cameras decode to yuvj422p: x264 took it as is and wrote High 4:2:2,
     // which browsers and HomeKit cannot decode, hardware encoders rejected it outright
     for (const hardware of [undefined, 'auto'] as const) {
-      it(`hands the encoder 8-bit 4:2:0 for a 4:2:2 source (${hardware ?? 'software'})`, async () => {
+      it(`hands the encoder 8-bit 4:2:0 for a 4:2:2 source (${hardware ?? 'software'})`, needsX264, async () => {
         const { file, inputOptions } = yuvj422pSource('fmp4-yuvj422p.raw');
         let format: AVPixelFormat | undefined;
         const closed = Promise.withResolvers<void>();

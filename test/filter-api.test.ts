@@ -18,7 +18,7 @@ import {
   Frame,
   Rational,
 } from '../src/index.js';
-import { decodePacket, decodePacketSync, filterFrame, getInputFile, prepareTestEnvironment, syntheticVideoFrame } from './index.js';
+import { decodePacket, decodePacketSync, filterFrame, getInputFile, needsX264, prepareTestEnvironment, syntheticVideoFrame } from './index.js';
 
 prepareTestEnvironment();
 
@@ -51,7 +51,7 @@ describe('High-Level Filter API', () => {
       filter.close();
     });
 
-    it('should create filter for encoder', async () => {
+    it('should create filter for encoder', needsX264, async () => {
       const encoder = await Encoder.create(FF_ENCODER_LIBX264);
       const filter = FilterAPI.create('scale=1280:720');
 

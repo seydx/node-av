@@ -20,7 +20,7 @@ import {
   Packet,
   pipeline,
 } from '../src/index.js';
-import { decodePacket, decodePacketSync, encodeFrame, encodeFrameSync, getInputFile, getOutputFile, prepareTestEnvironment } from './index.js';
+import { decodePacket, decodePacketSync, encodeFrame, encodeFrameSync, getInputFile, getOutputFile, needsX264, prepareTestEnvironment } from './index.js';
 
 import type { AVSeekWhence, IOOutputCallbacks } from '../src/index.js';
 
@@ -479,7 +479,7 @@ describe('Muxer', () => {
       await cleanup();
     });
 
-    it('should get streams (async)', async () => {
+    it('should get streams (async)', needsX264, async () => {
       const input = await Demuxer.open(inputFile);
       const outputFile = getTempFile('mp4');
       const output = await Muxer.open(outputFile);
@@ -505,7 +505,7 @@ describe('Muxer', () => {
       await cleanup();
     });
 
-    it('should track initialization state (async)', async () => {
+    it('should track initialization state (async)', needsX264, async () => {
       const input = await Demuxer.open(inputFile);
       const outputFile = getTempFile('mp4');
       const output = await Muxer.open(outputFile);
@@ -565,7 +565,7 @@ describe('Muxer', () => {
   });
 
   describe('addStream', () => {
-    it('should add stream from encoder only (async)', async () => {
+    it('should add stream from encoder only (async)', needsX264, async () => {
       const outputFile = getTempFile('mp4');
       const output = await Muxer.open(outputFile);
 
@@ -582,7 +582,7 @@ describe('Muxer', () => {
       await cleanup();
     });
 
-    it('should add stream from encoder only (sync)', () => {
+    it('should add stream from encoder only (sync)', needsX264, () => {
       const outputFile = getTempFile('mp4');
       const output = Muxer.openSync(outputFile);
 
@@ -598,7 +598,7 @@ describe('Muxer', () => {
       output.closeSync();
     });
 
-    it('should add stream from encoder with input stream for metadata (async)', async () => {
+    it('should add stream from encoder with input stream for metadata (async)', needsX264, async () => {
       const input = await Demuxer.open(inputFile);
       const outputFile = getTempFile('mp4');
       const output = await Muxer.open(outputFile);
@@ -619,7 +619,7 @@ describe('Muxer', () => {
       await cleanup();
     });
 
-    it('should add stream from encoder with input stream for metadata (sync)', () => {
+    it('should add stream from encoder with input stream for metadata (sync)', needsX264, () => {
       const input = Demuxer.openSync(inputFile);
       const outputFile = getTempFile('mp4');
       const output = Muxer.openSync(outputFile);
@@ -639,7 +639,7 @@ describe('Muxer', () => {
       input.closeSync();
     });
 
-    it('should add stream with transcoding (async)', async () => {
+    it('should add stream with transcoding (async)', needsX264, async () => {
       const input = await Demuxer.open(inputFile);
       const outputFile = getTempFile('mp4');
       const output = await Muxer.open(outputFile);
@@ -660,7 +660,7 @@ describe('Muxer', () => {
       await cleanup();
     });
 
-    it('should add stream with transcoding (sync)', () => {
+    it('should add stream with transcoding (sync)', needsX264, () => {
       const input = Demuxer.openSync(inputFile);
       const outputFile = getTempFile('mp4');
       const output = Muxer.openSync(outputFile);
@@ -711,7 +711,7 @@ describe('Muxer', () => {
       input.closeSync();
     });
 
-    it('should support custom timebase override (async)', async () => {
+    it('should support custom timebase override (async)', needsX264, async () => {
       const input = await Demuxer.open(inputFile);
       const outputFile = getTempFile('mp4');
       const output = await Muxer.open(outputFile);
@@ -730,7 +730,7 @@ describe('Muxer', () => {
       await cleanup();
     });
 
-    it('should support custom timebase override (sync)', () => {
+    it('should support custom timebase override (sync)', needsX264, () => {
       const input = Demuxer.openSync(inputFile);
       const outputFile = getTempFile('mp4');
       const output = Muxer.openSync(outputFile);
@@ -748,7 +748,7 @@ describe('Muxer', () => {
       input.closeSync();
     });
 
-    it('should add multiple streams (async)', async () => {
+    it('should add multiple streams (async)', needsX264, async () => {
       const input = await Demuxer.open(inputFile);
       const outputFile = getTempFile('mp4');
       const output = await Muxer.open(outputFile);
@@ -774,7 +774,7 @@ describe('Muxer', () => {
       await cleanup();
     });
 
-    it('should add multiple streams (sync)', () => {
+    it('should add multiple streams (sync)', needsX264, () => {
       const input = Demuxer.openSync(inputFile);
       const outputFile = getTempFile('mp4');
       const output = Muxer.openSync(outputFile);
@@ -799,7 +799,7 @@ describe('Muxer', () => {
       input.closeSync();
     });
 
-    it('should throw when adding stream after header (async)', async () => {
+    it('should throw when adding stream after header (async)', needsX264, async () => {
       const input = await Demuxer.open(inputFile);
       const outputFile = getTempFile('mp4');
       const output = await Muxer.open(outputFile);
@@ -852,7 +852,7 @@ describe('Muxer', () => {
       await cleanup();
     });
 
-    it('should throw when output is closed (async)', async () => {
+    it('should throw when output is closed (async)', needsX264, async () => {
       const input = await Demuxer.open(inputFile);
       const outputFile = getTempFile('mp4');
       const output = await Muxer.open(outputFile);
@@ -869,7 +869,7 @@ describe('Muxer', () => {
       await cleanup();
     });
 
-    it('should throw when output is closed (sync)', () => {
+    it('should throw when output is closed (sync)', needsX264, () => {
       const input = Demuxer.openSync(inputFile);
       const outputFile = getTempFile('mp4');
       const output = Muxer.openSync(outputFile);
@@ -886,7 +886,7 @@ describe('Muxer', () => {
     });
   });
 
-  describe('automatic header/trailer', () => {
+  describe('automatic header/trailer', needsX264, () => {
     it('should write header automatically on first packet and trailer on close (async)', async () => {
       const input = await Demuxer.open(inputFile);
       const outputFile = getTempFile('mp4');
@@ -969,7 +969,7 @@ describe('Muxer', () => {
     });
   });
 
-  describe('writePacket', () => {
+  describe('writePacket', needsX264, () => {
     it('should write packet to stream (async)', async () => {
       const input = await Demuxer.open(inputFile);
       const outputFile = getTempFile('mp4');
@@ -1117,7 +1117,7 @@ describe('Muxer', () => {
     });
   });
 
-  describe('AsyncDisposable', () => {
+  describe('AsyncDisposable', needsX264, () => {
     it('should support await using syntax (async)', async () => {
       const input = await Demuxer.open(inputFile);
       const outputFile = getTempFile('mp4');
@@ -1240,7 +1240,7 @@ describe('Muxer', () => {
       assert.ok(chunks.length > 0, 'Should have written data');
     });
 
-    it('should handle errors correctly with using keyword and IOOutputCallbacks', async () => {
+    it('should handle errors correctly with using keyword and IOOutputCallbacks', needsX264, async () => {
       const input = Demuxer.openSync(inputFile);
       const chunks: Buffer[] = [];
 
@@ -1505,7 +1505,7 @@ describe('Muxer', () => {
     });
   });
 
-  describe('encoded stream input properties', () => {
+  describe('encoded stream input properties', needsX264, () => {
     it('should copy them from the input stream even if its demuxer closed before the first packet', async () => {
       const demuxer = await Demuxer.open(inputFile);
       const video = demuxer.video()!;
@@ -1541,7 +1541,7 @@ describe('Muxer', () => {
   });
 
   describe('Integration', () => {
-    it('should transcode video with Demuxer/Output (async)', async () => {
+    it('should transcode video with Demuxer/Output (async)', needsX264, async () => {
       const input = await Demuxer.open(inputFile);
       const outputFile = getTempFile('mp4');
       const output = await Muxer.open(outputFile);
@@ -1674,7 +1674,7 @@ describe('Muxer', () => {
     });
   });
 
-  describe('coded side data', () => {
+  describe('coded side data', needsX264, () => {
     it('preserves input coded side data across a transcode (async)', async () => {
       const outputFile = getTempFile('mp4');
       await using input = await Demuxer.open(inputFile);
@@ -1704,7 +1704,7 @@ describe('Muxer', () => {
     });
   });
 
-  describe('configure', () => {
+  describe('configure', needsX264, () => {
     it('runs the configure hook to set stream metadata before the header (async)', async () => {
       const outputFile = getTempFile('mkv');
       await using input = await Demuxer.open(inputFile);

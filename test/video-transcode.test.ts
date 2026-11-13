@@ -37,7 +37,7 @@ import {
   findUsableHardwareEncoder,
   videoTranscodeGraph,
 } from '../src/api/utilities/video-transcode.js';
-import { prepareTestEnvironment, syntheticVideoFrame } from './index.js';
+import { needsX264, prepareTestEnvironment, syntheticVideoFrame } from './index.js';
 
 import type { AVHWDeviceType, AVPixelFormat, FFHWDeviceType } from '../src/index.js';
 import type { DeviceFilters, VideoGraphInput } from '../src/api/utilities/video-transcode.js';
@@ -109,7 +109,7 @@ describe('video transcode graph', () => {
     });
   });
 
-  describe('frames on the device, encoder in software', () => {
+  describe('frames on the device, encoder in software', needsX264, () => {
     it('scales on the device and downloads NV12', () => {
       assert.equal(videoTranscodeGraph(onDevice(AV_PIX_FMT_NV12), { ...keep, encoder: libx264, hardware: vaapi }, withScaler), 'hwdownload,format=nv12');
       assert.equal(
@@ -158,7 +158,7 @@ describe('video transcode graph', () => {
     });
   });
 
-  describe('frames in software, encoder in software', () => {
+  describe('frames in software, encoder in software', needsX264, () => {
     it('passes 8-bit 4:2:0 the encoder lists untouched', () => {
       assert.equal(videoTranscodeGraph(software(AV_PIX_FMT_YUVJ420P), { ...keep, encoder: libx264 }, noFilters), 'null');
       assert.equal(videoTranscodeGraph(software(AV_PIX_FMT_YUV420P), { ...keep, encoder: libx264 }, noFilters), 'null');
@@ -212,7 +212,7 @@ describe('video transcode graph', () => {
     });
   });
 
-  describe('findSoftwareEncoder', () => {
+  describe('findSoftwareEncoder', needsX264, () => {
     // Linux arm64 builds register h264_rkmpp ahead of libx264
     it('passes over hardware encoders registered first', () => {
       assert.equal(findSoftwareEncoder(AV_CODEC_ID_H264)?.name, FF_ENCODER_LIBX264);

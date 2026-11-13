@@ -16,7 +16,7 @@ import {
   Muxer,
   pipeline,
 } from '../src/index.js';
-import { encoderInputFormat, getInputFile, getOutputFile, prepareTestEnvironment, stallingFrameSource, syntheticVideoFrame, yuvj422pSource } from './index.js';
+import { encoderInputFormat, getInputFile, getOutputFile, needsX264, prepareTestEnvironment, stallingFrameSource, syntheticVideoFrame, yuvj422pSource } from './index.js';
 
 import type { RtpPacket } from 'werift';
 import type { AVPixelFormat, Frame } from '../src/index.js';
@@ -119,7 +119,7 @@ describe('RTPStream', skipWerift, () => {
     });
   });
 
-  describe('fps fallback', () => {
+  describe('fps fallback', needsX264, () => {
     it('keeps the input frame rate when transcoding without an fps option', async () => {
       // video-vp8.webm: 30 fps in a 1/1000 timebase (33/34 ms per frame), forced
       // to transcode via libx264. Without an explicit fps option no fps filter
@@ -150,7 +150,7 @@ describe('RTPStream', skipWerift, () => {
     });
   });
 
-  describe('scaling', () => {
+  describe('scaling', needsX264, () => {
     it('transcodes and scales a packed yuyv422 source (issue #294)', async () => {
       // A yuyv422 (packed 4:2:2) source fed through scale=WxH used to fail: swscale can't
       // scale packed yuyv422 in place (yuyv422 -> yuyv422 => ENOSYS on some builds) and
@@ -254,7 +254,7 @@ describe('RTPStream', skipWerift, () => {
     // 4:2:2 JPEG cameras decode to yuvj422p: x264 took it as is and wrote High 4:2:2,
     // which browsers cannot decode, hardware encoders rejected it outright
     for (const hardware of [undefined, 'auto'] as const) {
-      it(`hands the encoder 8-bit 4:2:0 for a 4:2:2 source (${hardware ?? 'software'})`, async () => {
+      it(`hands the encoder 8-bit 4:2:0 for a 4:2:2 source (${hardware ?? 'software'})`, needsX264, async () => {
         const { RTPStream } = await import('../src/webrtc/index.js');
         const { file, inputOptions } = yuvj422pSource('rtp-yuvj422p.raw');
         let format: AVPixelFormat | undefined;
@@ -276,7 +276,7 @@ describe('RTPStream', skipWerift, () => {
     }
   });
 
-  describe('bitrate cap', () => {
+  describe('bitrate cap', needsX264, () => {
     it('applies the negotiated bitrate as a VBV cap on the transcode path', async () => {
       const { RTPStream } = await import('../src/webrtc/index.js');
 
@@ -409,7 +409,7 @@ describe('RTPStream', skipWerift, () => {
       }
     });
 
-    it('reports a deliberate stop as a clean close, not a pipeline error', async () => {
+    it('reports a deliberate stop as a clean close, not a pipeline error', needsX264, async () => {
       const { RTPStream } = await import('../src/webrtc/index.js');
 
       const closeArgs: (Error | undefined)[] = [];
@@ -485,7 +485,7 @@ describe('RTPStream', skipWerift, () => {
     });
   });
 
-  describe('keyframe request', () => {
+  describe('keyframe request', needsX264, () => {
     // Start of an IDR picture in an H.264 RTP payload: single NAL, FU-A start or inside a STAP-A
     const startsIdr = (payload: Buffer): boolean => {
       const type = payload[0] & 0x1f;
@@ -553,7 +553,7 @@ describe('RTPStream', skipWerift, () => {
     });
   });
 
-  describe('stalled frame source', () => {
+  describe('stalled frame source', needsX264, () => {
     it('should stop when the frame source goes silent', async () => {
       const { RTPStream } = await import('../src/webrtc/index.js');
 

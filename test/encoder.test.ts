@@ -26,7 +26,7 @@ import {
   HardwareContext,
 } from '../src/index.js';
 import { Frame, Rational, avcodecFindBestPixFmtOfList } from '../src/lib/index.js';
-import { encodeFrame, encodeFrameSync, getInputFile, syntheticVideoFrame } from './index.js';
+import { encodeFrame, encodeFrameSync, getInputFile, needsX264, syntheticVideoFrame } from './index.js';
 
 import type { Packet } from '../src/lib/index.js';
 
@@ -70,7 +70,7 @@ function createMjpegFrame(width: number, height: number): Frame {
 
 describe('Encoder', () => {
   describe('create', () => {
-    it('should create video encoder (async)', async () => {
+    it('should create video encoder (async)', needsX264, async () => {
       const encoder = await Encoder.create(FF_ENCODER_LIBX264, {
         bitrate: '1M',
         gopSize: 30,
@@ -95,7 +95,7 @@ describe('Encoder', () => {
       encoder.close();
     });
 
-    it('should create encoder with codec options (async)', async () => {
+    it('should create encoder with codec options (async)', needsX264, async () => {
       const encoder = await Encoder.create(FF_ENCODER_LIBX264, {
         options: {
           preset: 'fast',
@@ -140,7 +140,7 @@ describe('Encoder', () => {
       );
     });
 
-    it('should create video encoder (sync)', () => {
+    it('should create video encoder (sync)', needsX264, () => {
       const encoder = Encoder.createSync(FF_ENCODER_LIBX264, {
         bitrate: '1M',
         gopSize: 30,
@@ -165,7 +165,7 @@ describe('Encoder', () => {
       encoder.close();
     });
 
-    it('should create encoder with codec options (sync)', () => {
+    it('should create encoder with codec options (sync)', needsX264, () => {
       const encoder = Encoder.createSync(FF_ENCODER_LIBX264, {
         options: {
           preset: 'fast',
@@ -212,7 +212,7 @@ describe('Encoder', () => {
   });
 
   describe('encode', () => {
-    it('should encode video frames (async)', async () => {
+    it('should encode video frames (async)', needsX264, async () => {
       const encoder = await Encoder.create(FF_ENCODER_LIBX264, {
         bitrate: '500k',
         gopSize: 10,
@@ -307,7 +307,7 @@ describe('Encoder', () => {
         options: { preset: 'ultrafast', tune: 'zerolatency', 'forced-idr': true },
       });
 
-    it('should not force a keyframe from pictType by default', async () => {
+    it('should not force a keyframe from pictType by default', needsX264, async () => {
       const encoder = await forcedKeyframeEncoder();
       const keyframes = await keyframeIndices(encoder, 10, 5);
       encoder.close();
@@ -315,7 +315,7 @@ describe('Encoder', () => {
       assert.deepEqual(keyframes, [0], `expected only the initial keyframe, got [${keyframes}]`);
     });
 
-    it('should force a keyframe from pictType when preserveFramePictType is set', async () => {
+    it('should force a keyframe from pictType when preserveFramePictType is set', needsX264, async () => {
       const encoder = await Encoder.create(FF_ENCODER_LIBX264, {
         gopSize: 1000,
         maxBFrames: 0,
@@ -327,7 +327,7 @@ describe('Encoder', () => {
       assert.ok(keyframes.includes(5), `expected a forced keyframe at frame 5, got [${keyframes}]`);
     });
 
-    it('should encode video frames (sync)', () => {
+    it('should encode video frames (sync)', needsX264, () => {
       const encoder = Encoder.createSync(FF_ENCODER_LIBX264, {
         bitrate: '500k',
         gopSize: 10,
@@ -709,7 +709,7 @@ describe('Encoder', () => {
       }
     });
 
-    it('should handle null packets gracefully (async)', async () => {
+    it('should handle null packets gracefully (async)', needsX264, async () => {
       const encoder = await Encoder.create(FF_ENCODER_LIBX264);
 
       // Create and encode frame
@@ -730,7 +730,7 @@ describe('Encoder', () => {
       encoder.close();
     });
 
-    it('should handle null packets gracefully (sync)', () => {
+    it('should handle null packets gracefully (sync)', needsX264, () => {
       const encoder = Encoder.createSync(FF_ENCODER_LIBX264);
 
       // Create and encode frame
@@ -751,7 +751,7 @@ describe('Encoder', () => {
       encoder.close();
     });
 
-    it('should not throw when encoder is closed (async)', async () => {
+    it('should not throw when encoder is closed (async)', needsX264, async () => {
       const encoder = await Encoder.create(FF_ENCODER_LIBX264);
 
       // Initialize encoder with a frame first
@@ -781,7 +781,7 @@ describe('Encoder', () => {
       await assert.doesNotReject(async () => await encoder.encode(frame));
     });
 
-    it('should not throw when encoder is closed (sync)', () => {
+    it('should not throw when encoder is closed (sync)', needsX264, () => {
       const encoder = Encoder.createSync(FF_ENCODER_LIBX264);
 
       // Initialize encoder with a frame first
@@ -842,13 +842,13 @@ describe('Encoder', () => {
       assert.equal(best, AV_PIX_FMT_YUV444P, 'should pick the full-chroma format for an RGB source');
     });
 
-    it('throws a descriptive error on an unsupported pixel format when disabled (async)', async () => {
+    it('throws a descriptive error on an unsupported pixel format when disabled (async)', needsX264, async () => {
       using encoder = await Encoder.create(FF_ENCODER_LIBX264, { bitrate: '500k' });
       using frame = makeRgbFrame(0n);
       await assert.rejects(() => encoder.encode(frame), /does not support the input pixel format \(rgb24\)/);
     });
 
-    it('converts an unsupported pixel format to a codec-supported one when enabled (async)', async () => {
+    it('converts an unsupported pixel format to a codec-supported one when enabled (async)', needsX264, async () => {
       const encoder = await Encoder.create(FF_ENCODER_LIBX264, { bitrate: '500k', autoFormat: true });
       try {
         let packets = 0;
@@ -867,7 +867,7 @@ describe('Encoder', () => {
       }
     });
 
-    it('converts an unsupported pixel format to a codec-supported one when enabled (sync)', () => {
+    it('converts an unsupported pixel format to a codec-supported one when enabled (sync)', needsX264, () => {
       const encoder = Encoder.createSync(FF_ENCODER_LIBX264, { bitrate: '500k', autoFormat: true });
       try {
         let packets = 0;
@@ -891,7 +891,7 @@ describe('Encoder', () => {
     });
   });
 
-  describe('configure', () => {
+  describe('configure', needsX264, () => {
     const makeYuvFrame = (pts: bigint): Frame => {
       const frame = new Frame();
       frame.alloc();
@@ -1006,7 +1006,7 @@ describe('Encoder', () => {
   });
 
   describe('flush', () => {
-    it('should flush remaining packets (async)', async () => {
+    it('should flush remaining packets (async)', needsX264, async () => {
       const encoder = await Encoder.create(FF_ENCODER_LIBX264, {
         gopSize: 10,
       });
@@ -1040,7 +1040,7 @@ describe('Encoder', () => {
       encoder.close();
     });
 
-    it('should flush remaining packets (sync)', () => {
+    it('should flush remaining packets (sync)', needsX264, () => {
       const encoder = Encoder.createSync(FF_ENCODER_LIBX264, {
         gopSize: 10,
       });
@@ -1155,7 +1155,7 @@ describe('Encoder', () => {
       }
     });
 
-    it('should handle flush when encoder is closed (async)', async () => {
+    it('should handle flush when encoder is closed (async)', needsX264, async () => {
       const encoder = await Encoder.create(FF_ENCODER_LIBX264);
 
       encoder.close();
@@ -1164,7 +1164,7 @@ describe('Encoder', () => {
       await encoder.flush(); // Should not throw
     });
 
-    it('should handle flush when encoder is closed (sync)', () => {
+    it('should handle flush when encoder is closed (sync)', needsX264, () => {
       const encoder = Encoder.createSync(FF_ENCODER_LIBX264);
 
       encoder.close();
@@ -1174,7 +1174,7 @@ describe('Encoder', () => {
     });
   });
 
-  describe('async iterator', () => {
+  describe('async iterator', needsX264, () => {
     it('should encode frames using iterator (async)', async () => {
       const encoder = await Encoder.create(FF_ENCODER_LIBX264, {
         bitrate: '500k',
@@ -1326,7 +1326,7 @@ describe('Encoder', () => {
     });
   });
 
-  describe('resource management', () => {
+  describe('resource management', needsX264, () => {
     it('should support Symbol.dispose', async () => {
       {
         using encoder = await Encoder.create(FF_ENCODER_LIBX264);
@@ -1376,7 +1376,7 @@ describe('Encoder', () => {
     });
   });
 
-  describe('AbortSignal', () => {
+  describe('AbortSignal', needsX264, () => {
     it('should reject create with pre-aborted signal', async () => {
       const controller = new AbortController();
       controller.abort();
@@ -1403,7 +1403,7 @@ describe('Encoder', () => {
     });
   });
 
-  describe('options object', () => {
+  describe('options object', needsX264, () => {
     it('should leave the options object it was given unchanged', async () => {
       const options = { gopSize: 30 };
       const audio = await Encoder.create(FF_ENCODER_AAC, options);
@@ -1416,7 +1416,7 @@ describe('Encoder', () => {
     });
   });
 
-  describe('frame rate', () => {
+  describe('frame rate', needsX264, () => {
     it("should take the stream's guessed frame rate when the decoder has none", async () => {
       // VP9 carries no frame rate in its bitstream: the decoder reports 0/1, the
       // WebM stream 30 fps. Without a framerate the encoder would fall back to
@@ -1499,7 +1499,7 @@ describe('Encoder', () => {
     });
   });
 
-  describe('video timestamps', () => {
+  describe('video timestamps', needsX264, () => {
     // Encodes 320x240 frames with the given pts (time base 1/25) and returns the packets
     const encodeAt = async (encoder: Encoder, frames: { pts: bigint; key?: boolean }[]): Promise<{ pts: bigint; key: boolean }[]> => {
       const out: { pts: bigint; key: boolean }[] = [];

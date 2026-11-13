@@ -27,7 +27,7 @@ import {
   pipeline,
   Rational,
 } from '../src/index.js';
-import { getInputFile, getOutputFile, getTmpDir, prepareTestEnvironment, skipInCI } from './index.js';
+import { getInputFile, getOutputFile, getTmpDir, needsX264, prepareTestEnvironment, requires, skipInCI } from './index.js';
 
 import type { AVSeekWhence, IOInputCallbacks } from '../src/index.js';
 
@@ -89,7 +89,7 @@ describe('Pipeline - Comprehensive Tests', () => {
     }
   });
 
-  describe('Progress', () => {
+  describe('Progress', needsX264, () => {
     it('should report progress during a transcode', async () => {
       const outputFile = getTestOutputPath('progress.mp4');
 
@@ -205,7 +205,7 @@ describe('Pipeline - Comprehensive Tests', () => {
     });
   });
 
-  describe('Simple Pipeline - Transcode', () => {
+  describe('Simple Pipeline - Transcode', needsX264, () => {
     it('should transcode with decoder and encoder', async () => {
       const outputFile = getTestOutputPath('transcode.mp4');
 
@@ -318,7 +318,7 @@ describe('Pipeline - Comprehensive Tests', () => {
       }
     });
 
-    it('should apply bitstream filter after encoding', async function (t) {
+    it('should apply bitstream filter after encoding', needsX264, async function (t) {
       const outputFile = getTestOutputPath('transcode-bsf.mp4');
 
       try {
@@ -353,7 +353,7 @@ describe('Pipeline - Comprehensive Tests', () => {
     });
   });
 
-  describe('Named Pipeline', () => {
+  describe('Named Pipeline', needsX264, () => {
     it('should process multiple named streams', async () => {
       const outputFile = getTestOutputPath('named-multi.mp4');
 
@@ -778,7 +778,7 @@ describe('Pipeline - Comprehensive Tests', () => {
       assert.ok(frameCount > 0, 'Should have yielded frames');
     });
 
-    it('should return packets for decoder + encoder partial pipeline', async () => {
+    it('should return packets for decoder + encoder partial pipeline', needsX264, async () => {
       await using input = await Demuxer.open(inputFile);
       const videoStream = input.video();
 
@@ -812,7 +812,7 @@ describe('Pipeline - Comprehensive Tests', () => {
       assert.ok(packetCount > 0, 'Should have yielded packets');
     });
 
-    it('should return generator for named partial pipeline', async () => {
+    it('should return generator for named partial pipeline', needsX264, async () => {
       await using input = await Demuxer.open(inputFile);
       const videoStream = input.video();
 
@@ -845,7 +845,7 @@ describe('Pipeline - Comprehensive Tests', () => {
     });
   });
 
-  describe('Complex Scenarios', () => {
+  describe('Complex Scenarios', needsX264, () => {
     it('should handle multiple filters in chain', async () => {
       const outputFile = getTestOutputPath('multi-filter.mp4');
 
@@ -1057,7 +1057,7 @@ describe('Pipeline - Comprehensive Tests', () => {
     });
   });
 
-  describe('Hardware Acceleration', () => {
+  describe('Hardware Acceleration', needsX264, () => {
     it('should support hardware decoder in pipeline', async function (t) {
       // Check if hardware acceleration is available
       const hw = HardwareContext.auto();
@@ -1132,7 +1132,7 @@ describe('Pipeline - Comprehensive Tests', () => {
         }
       });
 
-      it('should handle frames as source with filter and encoder', async () => {
+      it('should handle frames as source with filter and encoder', needsX264, async () => {
         const outputFile = getTestOutputPath('frames-filter-encode.mp4');
 
         try {
@@ -1224,7 +1224,7 @@ describe('Pipeline - Comprehensive Tests', () => {
         assert.ok(frameCount > 0, 'Should have yielded filtered frames');
       });
 
-      it('should handle partial pipeline with frames and encoder', async () => {
+      it('should handle partial pipeline with frames and encoder', needsX264, async () => {
         // Create a frame generator
         async function* generateFrames() {
           for (let i = 0; i < 10; i++) {
@@ -1266,7 +1266,7 @@ describe('Pipeline - Comprehensive Tests', () => {
         assert.ok(packetCount > 0, 'Should have yielded packets');
       });
 
-      it('should handle partial pipeline with frames, filter and encoder', async () => {
+      it('should handle partial pipeline with frames, filter and encoder', needsX264, async () => {
         // Create a frame generator
         async function* generateFrames() {
           for (let i = 0; i < 10; i++) {
@@ -1314,7 +1314,7 @@ describe('Pipeline - Comprehensive Tests', () => {
     });
 
     describe('Edge Cases', () => {
-      it('should handle pipeline with multiple outputs in named pipeline', skipInCI, async () => {
+      it('should handle pipeline with multiple outputs in named pipeline', requires({ encoders: [FF_ENCODER_LIBX264] }, skipInCI), async () => {
         if (process.platform === 'darwin' && process.arch === 'x64') {
           console.log('Skipping test on macOS x64 due to known race condition');
           return;
@@ -1426,7 +1426,7 @@ describe('Pipeline - Comprehensive Tests', () => {
         }
       });
 
-      it('should handle stop() during processing', async () => {
+      it('should handle stop() during processing', needsX264, async () => {
         const outputFile = getTestOutputPath('stopped-early.mp4');
 
         try {
@@ -1465,7 +1465,7 @@ describe('Pipeline - Comprehensive Tests', () => {
         }
       });
 
-      it('should handle empty input gracefully', async () => {
+      it('should handle empty input gracefully', needsX264, async () => {
         // Create an empty frame generator
         async function* emptyFrames(): AsyncGenerator<Frame> {
           // Yield nothing
@@ -1490,7 +1490,7 @@ describe('Pipeline - Comprehensive Tests', () => {
       });
     });
 
-    describe('Performance and Memory', () => {
+    describe('Performance and Memory', needsX264, () => {
       it('should handle large number of frames without memory leak', async () => {
         const outputFile = getTestOutputPath('large-frames.mp4');
 
@@ -1559,7 +1559,7 @@ describe('Pipeline - Comprehensive Tests', () => {
       }
     });
 
-    it('should abort pipeline with signal (transcode)', async () => {
+    it('should abort pipeline with signal (transcode)', needsX264, async () => {
       const outputFile = getTestOutputPath('abort-transcode.mp4');
 
       try {
