@@ -61,8 +61,9 @@ const version = positionals[0] ?? mainPackage.version;
 const prebuildsDir = args.prebuilds ? resolve(args.prebuilds) : null;
 const ffmpegBinariesDir = args['ffmpeg-binaries'] ? resolve(args['ffmpeg-binaries']) : null;
 
-// Package folders (relative to the repository root) in publish order: binaries first,
-// then the packages depending on them. The root folder is the gpl main package (node-av).
+// Package folders (relative to the repository root) by publish stage: the platform
+// binaries first, then the packages that pin them. The root folder is the gpl main
+// package (node-av).
 const publishOrder = { binaries: [], ffmpeg: [], main: [] };
 
 /**
@@ -368,6 +369,9 @@ ${rootReadme}`,
   console.log(`Created ${variant.package}`);
 }
 
-writeFileSync(join(packagesDir, 'publish-order.json'), JSON.stringify([...publishOrder.binaries, ...publishOrder.ffmpeg, ...publishOrder.main], null, 2) + '\n');
+// Publish stages, the release publishes the packages of a stage in parallel and starts a
+// stage only when the one before is on npm
+const publishStages = [publishOrder.binaries, [...publishOrder.ffmpeg, ...publishOrder.main]];
+writeFileSync(join(packagesDir, 'publish-order.json'), JSON.stringify(publishStages, null, 2) + '\n');
 
 console.log('\nAll packages created successfully!');

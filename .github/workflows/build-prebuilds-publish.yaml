@@ -209,7 +209,7 @@ jobs:
             echo "### 📦 Packages"
             echo ""
             echo "The following packages have been updated to v$VERSION_NO_V:"
-            for dir in $(jq -r '.[]' packages/publish-order.json); do
+            for dir in $(jq -r '.[][]' packages/publish-order.json); do
               echo "- \`$(jq -r .name "$dir/package.json")@$VERSION_NO_V\`"
             done
           } >> release_notes.md
@@ -236,25 +236,36 @@ jobs:
       # for a publish token, so no NPM_TOKEN is needed. Every package needs a
       # trusted publisher on npmjs.com for this workflow file.
       - name: Publish to NPM
+        env:
+          NPM_TAG: ${{ steps.npm_tag.outputs.tag }}
         run: |
-          NPM_TAG="${{ steps.npm_tag.outputs.tag }}"
           echo "Publishing with tag: $NPM_TAG"
 
-          # Skips versions that are already on npm, so a failed run can be re-run
+          # Skips versions that are already on npm, so a failed run can be re-run. The
+          # publishes run in parallel, so each one prints its output in one block at the end
           publish() {
-            local name version
+            local name version output status=0
             name=$(node -p "require('./$1/package.json').name")
             version=$(node -p "require('./$1/package.json').version")
             if npm view "$name@$version" version >/dev/null 2>&1; then
               echo "$name@$version is already published, skipping"
               return
             fi
-            (cd "$1" && npm publish --access public --tag "$NPM_TAG" --provenance)
+            output=$(cd "$1" && npm publish --access public --tag "$NPM_TAG" --provenance 2>&1) || status=$?
+            if [ "$status" -eq 0 ]; then
+              printf '::group::Published %s\n%s\n::endgroup::\n' "$name@$version" "$output"
+            else
+              printf '::group::Failed to publish %s\n%s\n::endgroup::\n::error::Failed to publish %s\n' "$name@$version" "$output" "$name@$version"
+            fi
+            return "$status"
           }
+          export -f publish
 
-          # Binary packages first, then the packages that depend on them
-          for dir in $(jq -r '.[]' packages/publish-order.json); do
-            publish "$dir"
+          # Platform packages first, then the packages that pin them. A stage starts only
+          # when every package of the one before is on npm (xargs fails the step otherwise),
+          # so a main package never goes out without its platform packages
+          for stage in $(jq -r 'keys[]' packages/publish-order.json); do
+            jq -r ".[$stage][]" packages/publish-order.json | xargs -P 6 -n 1 bash -c 'publish "$1"' _
           done
 
       - name: Create GitHub Release

@@ -157,7 +157,7 @@ jobs:
             echo "### 📦 Test Packages (NOT PUBLISHED)"
             echo ""
             echo "The following packages would be updated to $VERSION:"
-            for dir in $(jq -r '.[]' packages/publish-order.json); do
+            for dir in $(jq -r '.[][]' packages/publish-order.json); do
               echo "- $(jq -r .name "$dir/package.json")@$VERSION"
             done
           } > test_release_notes.md
@@ -207,11 +207,18 @@ jobs:
           rm -rf prebuilds-artifacts
           rm -f *.zip
 
-          # Same order as the release: binaries, FFmpeg CLI meta packages, main packages
-          for dir in $(jq -r '.[]' packages/publish-order.json); do
-            echo ""
-            echo "📦 Testing publish for $(jq -r .name "$dir/package.json"):"
-            (cd "$dir" && npm publish --access public --dry-run --tag test)
+          # Same stages as the release, platform packages first, each stage in parallel
+          dry_run() {
+            local output status=0
+            output=$(cd "$1" && npm publish --access public --dry-run --tag test 2>&1) || status=$?
+            printf '::group::📦 %s\n%s\n::endgroup::\n' "$(jq -r .name "$1/package.json")" "$output"
+            [ "$status" -eq 0 ] || printf '::error::Dry run failed for %s\n' "$(jq -r .name "$1/package.json")"
+            return "$status"
+          }
+          export -f dry_run
+
+          for stage in $(jq -r 'keys[]' packages/publish-order.json); do
+            jq -r ".[$stage][]" packages/publish-order.json | xargs -P 6 -n 1 bash -c 'dry_run "$1"' _
           done
 
           echo ""
