@@ -139,7 +139,7 @@
     "updates": "^20.0.1",
     "vitepress": "^2.0.0-alpha.21",
     "werift": "^0.27.0",
-    "ws": "^8.22.2"
+    "ws": "^8.23.0"
   },
   "bugs": {
     "url": "https://github.com/seydx/node-av/issues"
