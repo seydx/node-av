@@ -10,6 +10,8 @@ env:
   CACHE_VERSION_MACOS: "v17"
   FFMPEG_MSVC_PREBUILT_TAG: "autobuild-2026-11-13-17-13"
   XCODE_VERSION: "26.5"
+  # Bump to rebuild the native addon although none of its inputs changed (see addon_key)
+  CACHE_VERSION_ADDON: "v1"
   # JELLYFIN_FFMPEG_HASH: "5cd65f8388fbcd2f87088d3b10fe53fc5ea81ed5"
 
 on:
@@ -417,8 +419,31 @@ jobs:
   #           path: ffmpeg-binary-win-${{ matrix.os.arch }}-jellyfin/
   #           if-no-files-found: ignore
 
+  # The native addon is cached like FFmpeg: a job whose addon inputs and FFmpeg are unchanged
+  # reuses the last addon that passed its tests instead of compiling it again
+  addon_key:
+    name: "Native addon cache key"
+    runs-on: ubuntu-latest
+    outputs:
+      inputs: ${{ steps.key.outputs.inputs }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Hash the native addon inputs
+        id: key
+        run: |
+          # Everything the addon is compiled from besides FFmpeg's libraries, which each job adds
+          # with its FFmpeg key: the bindings, the gyp files with the variant's library filter,
+          # node-addon-api, and the jellyfin-ffmpeg submodule (internal headers, sync_queue.c).
+          # Not package-lock.json as a whole: the release bump changes it, and the tag build
+          # should reuse the addons of the commit before.
+          NAPI=$(node -p "require('./package-lock.json').packages['node_modules/node-addon-api'].version")
+          SUBMODULE=$(git ls-tree HEAD --object-only externals/jellyfin-ffmpeg)
+          echo "inputs=${CACHE_VERSION_ADDON}-${{ hashFiles('src/bindings/**', 'binding*.gyp', 'scripts/ffmpeg-variant.js') }}-napi${NAPI}-${SUBMODULE:0:12}" >> "$GITHUB_OUTPUT"
+
   build_windows_msvc:
     name: "Windows MSVC ${{ matrix.os.arch }} (${{ matrix.variant }})"
+    needs: addon_key
     runs-on: ${{ matrix.os.runner }}
     strategy:
       fail-fast: false
@@ -509,7 +534,16 @@ jobs:
       - name: Install Node dependencies
         run: npm install --ignore-scripts
 
+      # Saved after the job succeeded, i.e. only an addon that passed its tests is reused
+      - name: Restore native addon cache
+        id: cache-addon
+        uses: actions/cache@v6
+        with:
+          path: .addon-cache
+          key: addon-win32-${{ matrix.os.arch }}${{ env.VARIANT_SUFFIX }}-${{ needs.addon_key.outputs.inputs }}-${{ env.FFMPEG_MSVC_PREBUILT_TAG }}
+
       - name: Build Native Addon
+        if: steps.cache-addon.outputs.cache-hit != 'true'
         shell: powershell
         run: |
           # Use the MSVC-compatible binding.gyp
@@ -520,16 +554,21 @@ jobs:
           npx node-gyp configure --arch=${{ matrix.os.arch }} --verbose --release
           npx node-gyp build --arch=${{ matrix.os.arch }} --verbose --release
 
+          New-Item -ItemType Directory -Path ".addon-cache" -Force
+          Copy-Item "build\Release\*.node" ".addon-cache\node-av.node"
+
+          Write-Host "Build completed successfully"
+
+      - name: Collect Native Addon
+        shell: powershell
+        run: |
           # Create prebuilds directory structure
           $prebuildDir = "prebuilds\${env:VARIANT_PREFIX}win32-${{ matrix.os.arch }}-msvc"
           New-Item -ItemType Directory -Path "binary" -Force
           New-Item -ItemType Directory -Path $prebuildDir -Force
 
-          # Copy the built .node file
-          Copy-Item "build\Release\*.node" "binary\node-av.node"
-          Copy-Item "build\Release\*.node" "$prebuildDir\node-av.node"
-
-          Write-Host "Build completed successfully"
+          Copy-Item ".addon-cache\node-av.node" "binary\node-av.node"
+          Copy-Item ".addon-cache\node-av.node" "$prebuildDir\node-av.node"
 
       - name: Check DLL dependencies
         shell: powershell
@@ -540,7 +579,7 @@ jobs:
             Write-Host "dumpbin not found, skipping the dependency check"
             exit 0
           }
-          & $dumpbin.FullName /DEPENDENTS "build\Release\node-av.node"
+          & $dumpbin.FullName /DEPENDENTS ".addon-cache\node-av.node"
 
           Write-Host "`n=== Checking FFmpeg binary dependencies ==="
           if (Test-Path "ffmpeg-msvc\bin\ffmpeg.exe") {
@@ -597,6 +636,7 @@ jobs:
 
   build_linux:
     name: "Linux ${{ matrix.arch }}${{ matrix.suffix }} (${{ matrix.variant }})"
+    needs: addon_key
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -782,7 +822,16 @@ jobs:
             echo "Warning: FFmpeg binary not found at $FFMPEG_BIN"
           fi
 
+      # Saved after the job succeeded, i.e. only an addon that passed its tests is reused
+      - name: Restore native addon cache
+        id: cache-addon
+        uses: actions/cache@v6
+        with:
+          path: .addon-cache
+          key: addon-linux-${{ matrix.arch }}${{ matrix.suffix }}${{ env.VARIANT_SUFFIX }}-${{ needs.addon_key.outputs.inputs }}-${{ env.CACHE_VERSION_LINUX }}
+
       - name: Build Native Addon in Docker
+        if: steps.cache-addon.outputs.cache-hit != 'true'
         run: |
           cp binding-jellyfin.gyp binding.gyp
 
@@ -832,33 +881,32 @@ jobs:
               chown -R 1001:127 prebuilds node_modules build 2>/dev/null || true
             "
 
-          # Rename the built file to node-av.node for consistency
           BUILT_FILE=$(find prebuilds -name "*.node" -type f | head -1)
-          if [ -n "$BUILT_FILE" ]; then
-            DIR=$(dirname "$BUILT_FILE")
-            mv "$BUILT_FILE" "$DIR/node-av.node"
-            echo "Renamed $(basename $BUILT_FILE) -> node-av.node"
-
-            # prebuildify names the folder linux-<arch> for either C library and variant
-            NAME="${VARIANT_PREFIX}$(basename "$DIR")${{ matrix.suffix }}"
-            if [ "$NAME" != "$(basename "$DIR")" ]; then
-              mv "$DIR" "prebuilds/$NAME"
-              DIR="prebuilds/$NAME"
-            fi
-
-            # Copy binary for tests
-            mkdir -p binary
-            cp "$DIR/node-av.node" binary/node-av.node
-            echo "Copied binary for tests"
-
-            # Copy FFmpeg binary to binary folder
-            if [ -f "ffmpeg-binary-linux-${{ matrix.arch }}${{ matrix.suffix }}-jellyfin/ffmpeg" ]; then
-              cp "ffmpeg-binary-linux-${{ matrix.arch }}${{ matrix.suffix }}-jellyfin/ffmpeg" binary/ffmpeg
-              echo "Copied FFmpeg binary for tests"
-            fi
-          else
+          if [ -z "$BUILT_FILE" ]; then
             echo "Error: No .node file found in prebuilds directory"
             exit 1
+          fi
+          mkdir -p .addon-cache
+          mv "$BUILT_FILE" .addon-cache/node-av.node
+          rm -rf prebuilds
+
+      # The addon build installs them inside its container
+      - name: Install Node dependencies
+        if: steps.cache-addon.outputs.cache-hit == 'true'
+        run: npm install --ignore-scripts
+
+      - name: Collect Native Addon
+        run: |
+          # prebuildify names the folder linux-<arch> for either C library and variant
+          DIR="prebuilds/${VARIANT_PREFIX}linux-${{ matrix.arch }}${{ matrix.suffix }}"
+          mkdir -p "$DIR" binary
+          cp .addon-cache/node-av.node "$DIR/node-av.node"
+
+          # Copy binaries for tests
+          cp .addon-cache/node-av.node binary/node-av.node
+          if [ -f "ffmpeg-binary-linux-${{ matrix.arch }}${{ matrix.suffix }}-jellyfin/ffmpeg" ]; then
+            cp "ffmpeg-binary-linux-${{ matrix.arch }}${{ matrix.suffix }}-jellyfin/ffmpeg" binary/ffmpeg
+            echo "Copied FFmpeg binary for tests"
           fi
 
       # Cache the Whisper test models so runners don't re-download them from
@@ -909,6 +957,7 @@ jobs:
 
   build_macos:
     name: "macOS ${{ matrix.arch }} (${{ matrix.variant }})"
+    needs: addon_key
     # Pinned image generation: macos-latest resolves to different images during
     # GitHub's label rollouts (mixed Xcode sets across the pool), which broke
     # both the FFmpeg cache key and the XCODE_VERSION pin. Bump together with
@@ -1074,7 +1123,16 @@ jobs:
       - name: Install Node dependencies
         run: npm install --ignore-scripts
 
+      # Saved after the job succeeded, i.e. only an addon that passed its tests is reused
+      - name: Restore native addon cache
+        id: cache-addon
+        uses: actions/cache@v6
+        with:
+          path: .addon-cache
+          key: addon-macos-${{ matrix.arch }}${{ env.VARIANT_SUFFIX }}-${{ needs.addon_key.outputs.inputs }}-${{ env.CACHE_VERSION_MACOS }}-xcode${{ env.XCODE_VERSION }}
+
       - name: Build Native Addon
+        if: steps.cache-addon.outputs.cache-hit != 'true'
         run: |
           cp binding-jellyfin.gyp binding.gyp
 
@@ -1097,32 +1155,27 @@ jobs:
             --strip \
             --arch=${{ matrix.arch }}
 
-          # Rename the built file to node-av.node for consistency
           BUILT_FILE=$(find prebuilds -name "*.node" -type f | head -1)
-          if [ -n "$BUILT_FILE" ]; then
-            DIR=$(dirname "$BUILT_FILE")
-            mv "$BUILT_FILE" "$DIR/node-av.node"
-            echo "Renamed $(basename $BUILT_FILE) -> node-av.node"
-
-            # The variant's packages get their own folder (lgpl-darwin-arm64)
-            if [ -n "$VARIANT_PREFIX" ]; then
-              mv "$DIR" "prebuilds/${VARIANT_PREFIX}$(basename "$DIR")"
-              DIR="prebuilds/${VARIANT_PREFIX}$(basename "$DIR")"
-            fi
-
-            # Copy binary for tests
-            mkdir -p binary
-            cp "$DIR/node-av.node" binary/node-av.node
-            echo "Copied binary for tests"
-
-            # Copy FFmpeg binary to binary folder
-            if [ -f "ffmpeg-binary-macos-${{ matrix.arch }}-jellyfin/ffmpeg" ]; then
-              cp "ffmpeg-binary-macos-${{ matrix.arch }}-jellyfin/ffmpeg" binary/ffmpeg
-              echo "Copied FFmpeg binary for tests"
-            fi
-          else
+          if [ -z "$BUILT_FILE" ]; then
             echo "Error: No .node file found in prebuilds directory"
             exit 1
+          fi
+          mkdir -p .addon-cache
+          mv "$BUILT_FILE" .addon-cache/node-av.node
+          rm -rf prebuilds
+
+      - name: Collect Native Addon
+        run: |
+          # The variant's packages get their own folder (lgpl-darwin-arm64)
+          DIR="prebuilds/${VARIANT_PREFIX}darwin-${{ matrix.arch }}"
+          mkdir -p "$DIR" binary
+          cp .addon-cache/node-av.node "$DIR/node-av.node"
+
+          # Copy binaries for tests
+          cp .addon-cache/node-av.node binary/node-av.node
+          if [ -f "ffmpeg-binary-macos-${{ matrix.arch }}-jellyfin/ffmpeg" ]; then
+            cp "ffmpeg-binary-macos-${{ matrix.arch }}-jellyfin/ffmpeg" binary/ffmpeg
+            echo "Copied FFmpeg binary for tests"
           fi
 
       # Cache the Whisper test models (see the other test jobs - avoids HTTP 429
@@ -1171,9 +1224,9 @@ jobs:
           if-no-files-found: ignore
 
   cleanup_caches:
-    name: "Cleanup stale FFmpeg caches"
+    name: "Cleanup stale caches"
     runs-on: ubuntu-latest
-    needs: [build_windows_msvc, build_linux, build_macos]
+    needs: [addon_key, build_windows_msvc, build_linux, build_macos]
     if: always() && github.event_name != 'pull_request'
     permissions:
       actions: write
@@ -1181,9 +1234,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Delete FFmpeg caches with outdated keys
+      - name: Delete FFmpeg and addon caches with outdated keys
         env:
           GH_TOKEN: ${{ github.token }}
+          ADDON_INPUTS: ${{ needs.addon_key.outputs.inputs }}
         run: |
           # The submodule pointer is part of the tree - no submodule checkout needed
           HASH="${JELLYFIN_FFMPEG_HASH:-$(git ls-tree HEAD --object-only externals/jellyfin-ffmpeg)}"
@@ -1198,8 +1252,23 @@ jobs:
             done
           done
 
-          gh cache list --limit 100 --json id,key --jq '.[] | select(.key | startswith("ffmpeg-")) | "\(.id) \(.key)"' |
+          # The addon keys of this commit, in the format of the build jobs
+          if [ -n "$ADDON_INPUTS" ]; then
+            for variant in "" -lgpl -light; do
+              for platform in linux-x64 linux-arm64 linux-x64-musl linux-arm64-musl; do
+                KEEP+="addon-${platform}${variant}-${ADDON_INPUTS}-${CACHE_VERSION_LINUX}"$'\n'
+              done
+              for arch in x64 arm64; do
+                KEEP+="addon-macos-${arch}${variant}-${ADDON_INPUTS}-${CACHE_VERSION_MACOS}-xcode${XCODE_VERSION}"$'\n'
+                KEEP+="addon-win32-${arch}${variant}-${ADDON_INPUTS}-${FFMPEG_MSVC_PREBUILT_TAG}"$'\n'
+              done
+            done
+          fi
+
+          gh cache list --limit 200 --json id,key --jq '.[] | select(.key | startswith("ffmpeg-") or startswith("addon-")) | "\(.id) \(.key)"' |
           while read -r id key; do
+            # Without the addon_key output nothing is known to be current, the addon caches stay
+            [[ $key == addon-* && -z "$ADDON_INPUTS" ]] && continue
             if ! grep -qxF "$key" <<< "$KEEP"; then
               echo "Deleting stale cache: $key"
               gh cache delete "$id" || true
