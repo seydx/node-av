@@ -43,6 +43,7 @@ Native Node.js bindings for FFmpeg with full TypeScript support - including type
 - [Examples](#examples)
 - [Prebuilt Binaries](#prebuilt-binaries)
   - [Cross-Platform Packaging (CI/CD)](#cross-platform-packaging-cicd)
+- [Variants](#variants)
 - [Troubleshooting](#troubleshooting)
 - [License](#license)
 - [Contributing](#contributing)
@@ -60,6 +61,8 @@ The FFmpeg command-line tool is a separate, optional package (see [FFmpeg Binary
 ```bash
 npm install @seydx/node-av-ffmpeg
 ```
+
+node-av links a GPL build of FFmpeg. For an LGPL build or a smaller one, see [Variants](#variants).
 
 ## Quick Start
 
@@ -434,6 +437,8 @@ async function convertVideo(input: string, output: string) {
 
 `ffmpegPath()` throws if the package is not installed, so check `isFfmpegAvailable()` first when the CLI is optional. In Electron apps, unpack `node_modules/@seydx/**` from the ASAR archive so the binary can be executed.
 
+Every [variant](#variants) has its own CLI package, built from the same FFmpeg as its native binding: `@seydx/node-av-ffmpeg-lgpl` for node-av-lgpl and `@seydx/node-av-ffmpeg-light` for node-av-light. `ffmpegPath()` looks for the one of the installed variant.
+
 ## Resource Management
 
 The library supports automatic resource cleanup using the Disposable pattern:
@@ -564,6 +569,8 @@ Prebuilt binaries are available for multiple platforms:
 - **Linux**: x64, ARM64 (glibc and musl, e.g. Alpine)
 - **Windows**: x64, ARM64
 
+Each [variant](#variants) is built for all of them.
+
 ### Cross-Platform Packaging (CI/CD)
 
 By default npm installs the native binding (and the FFmpeg binary, if
@@ -581,6 +588,28 @@ npm install --os=linux --cpu=x64 --libc=musl
 
 npm filters the platform-specific `optionalDependencies` of both packages by
 these flags.
+
+## Variants
+
+node-av is published in three variants with the same API. They differ in the FFmpeg they link, and with it in its license:
+
+| Package | FFmpeg license | FFmpeg CLI | Contents |
+| --- | --- | --- | --- |
+| `node-av` | GPL v3 or later | `@seydx/node-av-ffmpeg` | All of FFmpeg, including the x264 and x265 encoders and the GPL-only filters |
+| `node-av-lgpl` | LGPL v3 or later | `@seydx/node-av-ffmpeg-lgpl` | Everything except the GPL components and libfdk_aac: no libx264, libx265, chromaprint or GPL-only filters (`hqdn3d`, `delogo`, `eq`, ...), and AAC through FFmpeg's own encoder |
+| `node-av-light` | GPL v3 or later | `@seydx/node-av-ffmpeg-light` | A smaller build: all of FFmpeg's own codecs, formats and filters, every hardware backend, x264, x265, Opus and libfdk_aac, but no Whisper, libplacebo, libvpx, SVT-AV1, JPEG XL, WebP, Vorbis, Theora, libass, zimg, SRT, Blu-ray, teletext or tracker music |
+
+To keep the `node-av/...` imports with another variant, install it under the name node-av, together with its FFmpeg CLI if you need one:
+
+```bash
+npm install node-av@npm:node-av-lgpl
+npm install @seydx/node-av-ffmpeg-lgpl
+```
+
+The JavaScript code is MIT licensed in every variant. The native binding and the FFmpeg CLI link FFmpeg statically, so they fall under the FFmpeg license in the table. With node-av and node-av-light, an application you distribute with them falls under the GPL as well. node-av-lgpl is plain LGPL and can be used in closed-source applications under the usual LGPL terms.
+
+> [!NOTE]
+> **node-av and node-av-light include libfdk_aac**, the Fraunhofer AAC encoder and decoder. It is built from [fdk-aac-stripped](https://gitlab.freedesktop.org/wtaymans/fdk-aac-stripped), fdk-aac with all patent-encumbered parts (HE-AAC, HE-AACv2, xHE-AAC) removed, and keeps the [Fraunhofer FDK AAC license](https://github.com/mstorsjo/fdk-aac/blob/master/NOTICE). [Fedora Legal](https://lists.fedoraproject.org/archives/list/legal@lists.fedoraproject.org/thread/OVW25JRWOKOLVMW3XGUX7E4OXFUR2RCG/) considers this stripped version GPL-compatible, and Fedora ships it. Upstream FFmpeg still marks libfdk_aac as nonfree in GPL builds; the Jellyfin FFmpeg patches node-av is built with drop that flag ([jellyfin/jellyfin-ffmpeg#61](https://github.com/jellyfin/jellyfin-ffmpeg/pull/61)). node-av-lgpl leaves it out and stays plain LGPL. See [#134](https://github.com/seydx/node-av/issues/134) for the background.
 
 ## Troubleshooting
 
@@ -631,9 +660,9 @@ The OpenCL packages need Alpine 3.23 or newer. Alpine's `intel-compute-runtime` 
 
 ## License
 
-This project is licensed under the MIT License. See the LICENSE file for details.
+The node-av source code is licensed under the MIT License. See the LICENSE file for details.
 
-**Important**: FFmpeg itself is licensed under LGPL/GPL. Please ensure compliance with FFmpeg's license terms when using this library. The FFmpeg libraries themselves retain their original licenses, and this wrapper library does not change those terms. See [FFmpeg License](https://ffmpeg.org/legal.html) for details.
+The prebuilt native bindings and FFmpeg CLI packages link FFmpeg statically and carry its license: the GPL v3 or later for node-av and node-av-light, the LGPL v3 or later for node-av-lgpl. node-av and node-av-light also link libfdk_aac under the Fraunhofer FDK AAC license. Each of these packages ships the license texts and a LICENSE.md that links the exact sources it was built from. See [Variants](#variants) for what each one contains and [FFmpeg License](https://ffmpeg.org/legal.html) for FFmpeg's terms.
 
 ## Contributing
 
