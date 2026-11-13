@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- **node-av-lgpl, an LGPL build of node-av** ([#99](https://github.com/seydx/node-av/issues/99)). Same API, linked against FFmpeg built without GPL components: no libx264, libx265 and chromaprint, no GPL-only filters, and no libfdk_aac, which has its own license (AAC goes through FFmpeg's own encoder). Install it as `npm install node-av@npm:node-av-lgpl` to keep the `node-av/...` imports. Its FFmpeg CLI is `@seydx/node-av-ffmpeg-lgpl`.
+- **node-av-lgpl, an LGPL build of node-av** ([#99](https://github.com/seydx/node-av/issues/99)). Same API, linked against FFmpeg built without GPL components: no libx264, libx265 and chromaprint, no GPL-only filters, and no libfdk_aac, which has its own license (AAC goes through FFmpeg's own encoder). H.264 and H.265 are encoded only with a hardware encoder: there is no LGPL software encoder for them, and `FMP4Stream` says so when it has to transcode without one. Install it as `npm install node-av@npm:node-av-lgpl` to keep the `node-av/...` imports. Its FFmpeg CLI is `@seydx/node-av-ffmpeg-lgpl`.
 - **node-av-light, a smaller build of node-av** ([#69](https://github.com/seydx/node-av/issues/69)). It keeps all of FFmpeg's own components and every hardware backend, plus x264, x265, Opus and libfdk_aac, and leaves out the less common external libraries: Whisper, libplacebo, libvpx, SVT-AV1, JPEG XL, WebP, Vorbis, Theora, libass, zimg, SRT, Blu-ray, teletext and tracker music. Its FFmpeg CLI is `@seydx/node-av-ffmpeg-light`.
 
 ### Changed
@@ -18,11 +18,6 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 
 - **node-av can be imported in an Electron renderer.** The demuxer created a `SharedArrayBuffer` when the module loaded, which a renderer without cross-origin isolation doesn't have, so the import failed. It is now created on the first EAGAIN retry in `packetsSync()`. Closing a demuxer also no longer calls `unref()` on the browser timers of a renderer, which are plain numbers.
-
-## [7.0.4-beta.1] - 2026-11-13
-
-### Fixed
-
 - **Logging no longer aborts the process after a worker thread that set the log callback has ended.** The callback belongs to the thread that called `Log.setCallback()`. When that worker ended without `Log.resetCallback()`, the next FFmpeg log line from any other thread still went to its function. Logging now falls back to FFmpeg's default output. A callback that replaces one set in another thread also releases the old one.
 - **`RTPStream.stop()` and `FMP4Stream.stop()` close the input when a codec fails to close.** A decoder, filter or encoder that was still busy threw from `close()` and the teardown ended there, so the input, e.g. an RTSP connection, stayed open. The error still reaches the caller.
 - **`AudioFifo` checks the length of the buffers it is given.** `write()`, `read()`, `peek()` and their sync variants copied `nb_samples` per buffer without looking at its size, so a buffer that was too short was read or written past its end. They now throw a `RangeError`, and a `TypeError` for a plane that is not a `Buffer`.
