@@ -921,8 +921,7 @@ export class FMP4Stream {
       const { codecpar } = videoStream;
       const scale = transcodeScale(codecpar.width, codecpar.height, this.options.video.width, this.options.video.height);
       // a GPU encodes up to a size of its own, test it with the size it will get
-      const encoderCodec =
-        (await findUsableHardwareEncoder(this.hardwareContext, 'h264', this.options.video.encoderOptions, scale.output)) ?? Codec.findEncoderByName(FF_ENCODER_LIBX264)!;
+      const encoderCodec = (await findUsableHardwareEncoder(this.hardwareContext, 'h264', this.options.video.encoderOptions, scale.output)) ?? this.softwareH264Encoder();
       this.throwIfStopRequested();
 
       this.videoDecoder = await openTranscodeDecoder(videoStream, this.hardwareContext, {
@@ -1006,6 +1005,23 @@ export class FMP4Stream {
     if (this.stopRequested) {
       throw new Error('FMP4Stream stopped during start');
     }
+  }
+
+  /**
+   * libx264, the encoder for H.264 output when no hardware encoder is usable.
+   *
+   * @returns The libx264 encoder
+   *
+   * @throws {Error} If the FFmpeg build has no libx264 (node-av-lgpl)
+   *
+   * @internal
+   */
+  private softwareH264Encoder(): Codec {
+    const codec = Codec.findEncoderByName(FF_ENCODER_LIBX264);
+    if (!codec) {
+      throw new Error('No H.264 encoder available: no usable hardware encoder and this FFmpeg build has no libx264 (node-av-lgpl encodes H.264 only in hardware)');
+    }
+    return codec;
   }
 
   /**
@@ -1215,8 +1231,7 @@ export class FMP4Stream {
         this.hardwareContext = HardwareContext.create(this.options.hardware.deviceType, this.options.hardware.device, this.options.hardware.options);
       }
 
-      const encoderCodec =
-        (await findUsableHardwareEncoder(this.hardwareContext, 'h264', this.options.video.encoderOptions)) ?? Codec.findEncoderByName(FF_ENCODER_LIBX264)!;
+      const encoderCodec = (await findUsableHardwareEncoder(this.hardwareContext, 'h264', this.options.video.encoderOptions)) ?? this.softwareH264Encoder();
       this.throwIfStopRequested();
 
       let encoderOptions: EncoderOptions['options'] = {};

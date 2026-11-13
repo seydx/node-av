@@ -596,7 +596,7 @@ node-av is published in three variants with the same API. They differ in the FFm
 | Package | FFmpeg license | FFmpeg CLI | Contents |
 | --- | --- | --- | --- |
 | `node-av` | GPL v3 or later | `@seydx/node-av-ffmpeg` | All of FFmpeg, including the x264 and x265 encoders and the GPL-only filters |
-| `node-av-lgpl` | LGPL v3 or later | `@seydx/node-av-ffmpeg-lgpl` | Everything except the GPL components and libfdk_aac: no libx264, libx265, chromaprint or GPL-only filters (`hqdn3d`, `delogo`, `eq`, ...), and AAC through FFmpeg's own encoder |
+| `node-av-lgpl` | LGPL v3 or later | `@seydx/node-av-ffmpeg-lgpl` | Everything except the GPL components and libfdk_aac: no libx264, libx265, chromaprint or GPL-only filters (`hqdn3d`, `delogo`, `eq`, ...). H.264 and H.265 are encoded only with a hardware encoder, AAC through FFmpeg's own encoder |
 | `node-av-light` | GPL v3 or later | `@seydx/node-av-ffmpeg-light` | A smaller build: all of FFmpeg's own codecs, formats and filters, every hardware backend, x264, x265, Opus and libfdk_aac, but no Whisper, libplacebo, libvpx, SVT-AV1, JPEG XL, WebP, Vorbis, Theora, libass, zimg, SRT, Blu-ray, teletext or tracker music |
 
 To keep the `node-av/...` imports with another variant, install it under the name node-av, together with its FFmpeg CLI if you need one:
