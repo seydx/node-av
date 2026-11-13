@@ -41,9 +41,39 @@ import type { Stream } from '../lib/stream.js';
 import type { IRational } from '../lib/types.js';
 import type { IOInputCallbacks } from './io-stream.js';
 
-// Scratch buffer for Atomics.wait() - gives packetsSync a blocking sleep for
-// EAGAIN retries (mirrors FFmpeg CLI's av_usleep()) without spinning the CPU.
-const SYNC_SLEEP_SIGNAL = new Int32Array(new SharedArrayBuffer(4));
+// Scratch buffer for Atomics.wait(), created on first use: Electron renderers
+// without cross-origin isolation have no SharedArrayBuffer, so creating it at
+// import time would make the whole module fail to load there.
+let syncSleepSignal: Int32Array | undefined;
+
+/**
+ * Block the calling thread without spinning the CPU.
+ *
+ * Gives packetsSync a blocking sleep for EAGAIN retries (mirrors FFmpeg CLI's av_usleep()).
+ *
+ * @param ms - Sleep duration in milliseconds
+ *
+ * @internal
+ */
+function sleepSync(ms: number): void {
+  syncSleepSignal ??= new Int32Array(new SharedArrayBuffer(4));
+  Atomics.wait(syncSleepSignal, 0, 0, ms);
+}
+
+/**
+ * Keep a timer from holding the process open.
+ *
+ * Electron renderers use browser timers, where setTimeout returns a number without unref().
+ *
+ * @param timer - Timer handle returned by setTimeout
+ *
+ * @internal
+ */
+function unrefTimer(timer: ReturnType<typeof setTimeout>): void {
+  if (typeof timer === 'object') {
+    timer.unref();
+  }
+}
 
 /**
  * Per-stream timestamp processing state.
@@ -1973,7 +2003,7 @@ export class Demuxer implements AsyncDisposable, Disposable {
       if (ret < 0) {
         // No data available yet (live device capture) - blocking retry
         if (ret === AVERROR_EAGAIN) {
-          Atomics.wait(SYNC_SLEEP_SIGNAL, 0, 0, 10);
+          sleepSync(10);
           continue;
         }
         // Real read errors propagate; end-of-file and a deliberate
@@ -2388,7 +2418,7 @@ export class Demuxer implements AsyncDisposable, Disposable {
       let timer: ReturnType<typeof setTimeout>;
       const timeoutPromise = new Promise<void>((resolve) => {
         timer = setTimeout(resolve, 2000);
-        timer.unref();
+        unrefTimer(timer);
       });
       await Promise.race([threadPromise, timeoutPromise]);
       clearTimeout(timer!);
@@ -2731,7 +2761,7 @@ export class Demuxer implements AsyncDisposable, Disposable {
       let timer: ReturnType<typeof setTimeout>;
       const timeoutPromise = new Promise<void>((resolve) => {
         timer = setTimeout(resolve, 2000);
-        timer.unref();
+        unrefTimer(timer);
       });
       await Promise.race([threadPromise, timeoutPromise]);
       clearTimeout(timer!);
