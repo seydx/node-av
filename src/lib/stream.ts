@@ -357,15 +357,16 @@ export class Stream implements NativeWrapper<NativeStream> {
   }
 
   /**
-   * Get the codec parser attached to this stream.
+   * Get the state of the codec parser attached to this stream.
    *
-   * Returns the parser context if the stream has an active parser, null otherwise.
-   * Parsers are automatically created by FFmpeg for certain formats and codecs.
-   * Useful for accessing parser state like repeat_pict for interlaced video.
+   * FFmpeg creates a parser for certain formats and codecs. The returned parser is a copy of its
+   * state as of the last packet read from this stream, e.g. repeat_pict for interlaced video. It
+   * cannot parse: the stream's parser belongs to the thread that reads the input, which frees it at
+   * the end of the stream and on a seek.
    *
-   * Direct mapping to av_stream_get_parser().
+   * Based on av_stream_get_parser().
    *
-   * @returns Parser context or null if no parser attached
+   * @returns Parser state, or null before the first packet and when the stream had no parser for it
    *
    * @example
    * ```typescript

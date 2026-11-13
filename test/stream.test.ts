@@ -20,6 +20,7 @@ import {
   Demuxer,
   Dictionary,
   FormatContext,
+  Packet,
   Rational,
 } from '../src/index.js';
 
@@ -331,6 +332,45 @@ describe('Stream', () => {
       assert.equal(tb2.num, 1);
       assert.equal(tb2.den, 48000);
     });
+  });
+
+  describe('Parser', () => {
+    // The stream's parser belongs to the thread that reads the input, which frees it at the
+    // end of the stream and on a seek, so stream.parser hands out a copy of its state
+    for (const mode of ['sync', 'async'] as const) {
+      it(`reports the parser state of the last packet read and keeps its copy (${mode})`, async () => {
+        const input = new FormatContext();
+        if (mode === 'sync') {
+          assert.equal(input.openInputSync(getInputFile('test.mp4'), null, null), 0);
+          assert.ok(input.findStreamInfoSync(null) >= 0);
+        } else {
+          assert.equal(await input.openInput(getInputFile('test.mp4'), null, null), 0);
+          assert.ok((await input.findStreamInfo(null)) >= 0);
+        }
+        const video = input.streams[0];
+        assert.equal(video.parser, null, 'no packet read yet');
+
+        using packet = new Packet();
+        packet.alloc();
+        const read = async (): Promise<number> => (mode === 'sync' ? input.readFrameSync(packet) : await input.readFrame(packet));
+        assert.equal(await read(), 0);
+        const parser = video.parser;
+        assert.ok(parser, 'the H.264 stream of an MP4 is parsed');
+        assert.equal(parser.repeatPict, 1);
+
+        while ((await read()) >= 0) {
+          packet.unref();
+        }
+        if (mode === 'sync') {
+          input.closeInputSync();
+        } else {
+          await input.closeInput();
+        }
+
+        assert.equal(video.parser, null);
+        assert.equal(parser.repeatPict, 1, 'the copy outlives the parser and its input');
+      });
+    }
   });
 
   describe('After its format context is freed', () => {

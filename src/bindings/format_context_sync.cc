@@ -59,7 +59,9 @@ Napi::Value FormatContext::ReadFrameSync(const Napi::CallbackInfo& info) {
 
   // av_read_frame fills the packet's buffer internally; reconcile V8 accounting.
   if (result >= 0) {
-    packet->SetParserRepeatPict(ParserRepeatPict(ctx_, packet->Get()));
+    int repeatPict = ParserRepeatPict(ctx_, packet->Get());
+    packet->SetParserRepeatPict(repeatPict);
+    RecordParserRepeatPict(packet->Get()->stream_index, repeatPict);
     packet->SyncExternalMemory(env);
   }
 
@@ -439,7 +441,7 @@ Napi::Value FormatContext::CloseInputSync(const Napi::CallbackInfo& info) {
     return env.Undefined();
   }
 
-  borrowers_->InvalidateAll();
+  InvalidateBorrowers();
   ReleasePbIO(!detachPb && ClosesPb());
 
   // Detach a caller-owned pb only now: until the guard above waited for it, an

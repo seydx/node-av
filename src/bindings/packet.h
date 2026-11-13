@@ -2,6 +2,7 @@
 #define FFMPEG_PACKET_H
 
 #include <napi.h>
+#include <climits>
 #include "common.h"
 #include "promise_worker.h"
 
@@ -10,6 +11,10 @@ extern "C" {
 }
 
 namespace ffmpeg {
+
+// Parser state of a packet whose stream had no parser when it was read (see
+// FormatContext::ParserRepeatPict)
+constexpr int kNoParserRepeatPict = INT_MIN;
 
 class Packet : public Napi::ObjectWrap<Packet> {
 public:
@@ -23,7 +28,7 @@ public:
   void SyncExternalMemory(napi_env env);
 
   // repeat_pict of the stream's parser as of the av_read_frame() that put this
-  // packet here, -1 without a parser (see FormatContext::ParserRepeatPict)
+  // packet here, kNoParserRepeatPict without one
   int ParserRepeatPict() const { return parser_repeat_pict_; }
   void SetParserRepeatPict(int repeatPict) { parser_repeat_pict_ = repeatPict; }
 
@@ -38,7 +43,7 @@ private:
 
   AVPacket* packet_ = nullptr;
 
-  int parser_repeat_pict_ = -1;
+  int parser_repeat_pict_ = kNoParserRepeatPict;
 
   // In-flight threadpool operations touching packet_ (decoder/encoder I/O,
   // bitstream filters, muxer writes). free()/unref()/alloc() wait on this so

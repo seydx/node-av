@@ -481,7 +481,7 @@ Napi::Value FormatContext::CloseInputAsync(const Napi::CallbackInfo& info) {
 
   // Here, not in the worker: the wrappers are read on this thread, so after
   // this no JS access can reach the context the worker frees
-  borrowers_->InvalidateAll();
+  InvalidateBorrowers();
   ReleasePbIO(!detachPb && ClosesPb());
 
   FormatContext* self = this;
@@ -577,7 +577,7 @@ Napi::Value FormatContext::DisposeAsync(const Napi::CallbackInfo& info) {
     }
 
     // On this thread, before the worker frees the context (see CloseInputAsync)
-    borrowers_->InvalidateAll();
+    InvalidateBorrowers();
     ReleasePbIO(ClosesPb());
 
     FormatContext* self = this;

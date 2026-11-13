@@ -28,7 +28,7 @@ CodecParser::CodecParser(const Napi::CallbackInfo& info)
 }
 
 CodecParser::~CodecParser() {
-  if (parser_ctx_ && owns_parser_) {
+  if (parser_ctx_) {
     av_parser_close(parser_ctx_);
     parser_ctx_ = nullptr;
   }
@@ -44,13 +44,9 @@ Napi::Value CodecParser::InitParser(const Napi::CallbackInfo& info) {
   
   int codec_id = info[0].As<Napi::Number>().Int32Value();
 
-  // A new parser is our own: close a previous one we own and stop tracking a
-  // stream's parser
-  if (parser_ctx_ && owns_parser_) {
+  if (parser_ctx_) {
     av_parser_close(parser_ctx_);
   }
-  owns_parser_ = true;
-  StopBorrowing();
 
   parser_ctx_ = av_parser_init(codec_id);
   if (!parser_ctx_) {
@@ -147,7 +143,7 @@ Napi::Value CodecParser::Parse2(const Napi::CallbackInfo& info) {
 Napi::Value CodecParser::Close(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
-  if (parser_ctx_ && owns_parser_) {
+  if (parser_ctx_) {
     av_parser_close(parser_ctx_);
     parser_ctx_ = nullptr;
   }
@@ -155,21 +151,11 @@ Napi::Value CodecParser::Close(const Napi::CallbackInfo& info) {
   return env.Undefined();
 }
 
-void CodecParser::SetParserContext(AVCodecParserContext* parser_ctx, bool owns) {
-  if (parser_ctx_ && owns_parser_) {
-    av_parser_close(parser_ctx_);
-  }
-  parser_ctx_ = parser_ctx;
-  owns_parser_ = owns;
-  // a borrowing caller registers with the owner after this
-  StopBorrowing();
-}
-
 Napi::Value CodecParser::GetRepeatPict(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
   if (!parser_ctx_) {
-    return Napi::Number::New(env, 0);
+    return Napi::Number::New(env, snapshot_repeat_pict_);
   }
 
   return Napi::Number::New(env, parser_ctx_->repeat_pict);

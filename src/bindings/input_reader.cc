@@ -266,6 +266,7 @@ void InputReader::Deliver(Napi::Env env, Completion* completion, int result) {
       av_packet_unref(target);
       av_packet_move_ref(target, completion->delivered);
       completion->packet->SetParserRepeatPict(completion->repeatPict);
+      owner_->RecordParserRepeatPict(target->stream_index, completion->repeatPict);
       completion->packet->SyncExternalMemory(env);
     }
     av_packet_free(&completion->delivered);

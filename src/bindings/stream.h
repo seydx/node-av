@@ -14,6 +14,7 @@ namespace ffmpeg {
 // Forward declarations
 class CodecParameters;
 class Dictionary;
+class FormatContext;
 class Packet;
 
 // Points into its AVFormatContext, which invalidates it before freeing the
@@ -27,19 +28,25 @@ public:
 
   AVStream* Get() { return stream_; }
   const AVStream* Get() const { return stream_; }
-  // `owner` is the registry of the format context the stream belongs to
-  void Set(AVStream* stream, const std::shared_ptr<BorrowRegistry>& owner) {
+  // `registry` is the borrow registry of `owner`, the format context the
+  // stream belongs to
+  void Set(AVStream* stream, const std::shared_ptr<BorrowRegistry>& registry, FormatContext* owner) {
     stream_ = stream;
-    BorrowFrom(owner);
+    owner_ = owner;
+    BorrowFrom(registry);
   }
 
 private:
   friend class FormatContext;
 
-  void Invalidate() override { stream_ = nullptr; }
-
+  void Invalidate() override {
+    stream_ = nullptr;
+    owner_ = nullptr;
+  }
 
   AVStream* stream_ = nullptr;
+  // Cleared together with stream_, before the format context frees it
+  FormatContext* owner_ = nullptr;
 
   Napi::Value GetIndex(const Napi::CallbackInfo& info);
 

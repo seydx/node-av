@@ -97,7 +97,7 @@ FormatContext::~FormatContext() {
 
   // Clean up if user forgot to call freeContext()
   if (ctx_) {
-    borrowers_->InvalidateAll();
+    InvalidateBorrowers();
 
     // An IOContext still holding this pb must not use or close it again
     if (pb_io_) {
@@ -278,7 +278,7 @@ Napi::Value FormatContext::FreeContext(const Napi::CallbackInfo& info) {
     return env.Undefined();
   }
 
-  borrowers_->InvalidateAll();
+  InvalidateBorrowers();
 
   // Clear the interrupt callback opaque pointer
   ctx->interrupt_callback.opaque = nullptr;
@@ -330,7 +330,7 @@ Napi::Value FormatContext::NewStream(const Napi::CallbackInfo& info) {
   // Wrap AVStream and return it
   Napi::Object streamObj = Stream::constructor.New({});
   Stream* streamWrapper = UnwrapNativeObject<Stream>(env, streamObj, "Stream");
-  streamWrapper->Set(stream, borrowers_);
+  streamWrapper->Set(stream, borrowers_, this);
   
   return streamObj;
 }
@@ -636,7 +636,7 @@ Napi::Value FormatContext::GetStreams(const Napi::CallbackInfo& info) {
     // Wrap AVStream and add to array
     Napi::Object streamObj = Stream::constructor.New({});
     Stream* streamWrapper = UnwrapNativeObject<Stream>(env, streamObj, "Stream");
-    streamWrapper->Set(ctx->streams[i], borrowers_);
+    streamWrapper->Set(ctx->streams[i], borrowers_, this);
     streams[i] = streamObj;
   }
   
@@ -1161,10 +1161,32 @@ void FormatContext::RequestInterrupt() {
 
 int FormatContext::ParserRepeatPict(AVFormatContext* ctx, const AVPacket* pkt) {
   if (!ctx || pkt->stream_index < 0 || static_cast<unsigned>(pkt->stream_index) >= ctx->nb_streams) {
-    return -1;
+    return kNoParserRepeatPict;
   }
   AVCodecParserContext* parser = av_stream_get_parser(ctx->streams[pkt->stream_index]);
-  return parser ? parser->repeat_pict : -1;
+  return parser ? parser->repeat_pict : kNoParserRepeatPict;
+}
+
+int FormatContext::LastParserRepeatPict(int index) const {
+  if (index < 0 || static_cast<size_t>(index) >= parser_repeat_picts_.size()) {
+    return kNoParserRepeatPict;
+  }
+  return parser_repeat_picts_[index];
+}
+
+void FormatContext::RecordParserRepeatPict(int index, int repeatPict) {
+  if (index < 0) {
+    return;
+  }
+  if (static_cast<size_t>(index) >= parser_repeat_picts_.size()) {
+    parser_repeat_picts_.resize(static_cast<size_t>(index) + 1, kNoParserRepeatPict);
+  }
+  parser_repeat_picts_[index] = repeatPict;
+}
+
+void FormatContext::InvalidateBorrowers() {
+  borrowers_->InvalidateAll();
+  parser_repeat_picts_.clear();
 }
 
 void FormatContext::StopReader() {

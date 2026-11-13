@@ -114,11 +114,17 @@ public:
   const AVFormatContext* Get() const { return ctx_; }
   bool IsOutput() const { return is_output_; }
 
-  // repeat_pict of the parser of the stream `pkt` belongs to, -1 without one.
-  // Call it on the thread that just read `pkt`: av_read_frame() frees a
-  // stream's parser at the end of the stream, so with an owner thread reading
-  // ahead the main thread must not touch it.
+  // repeat_pict of the parser of the stream `pkt` belongs to,
+  // kNoParserRepeatPict without one. Call it on the thread that just read
+  // `pkt`: av_read_frame() frees a stream's parser at the end of the stream
+  // and a seek frees them all, so with an owner thread reading ahead the main
+  // thread must not touch them.
   static int ParserRepeatPict(AVFormatContext* ctx, const AVPacket* pkt);
+
+  // Main thread: the parser state captured with the last packet read from
+  // stream `index` (see Stream::GetParser)
+  int LastParserRepeatPict(int index) const;
+  void RecordParserRepeatPict(int index, int repeatPict);
 
 private:
   friend class AVOptionWrapper;
@@ -144,10 +150,18 @@ private:
   // closed under it; false with a pending exception if they do not finish
   bool GuardPbIO(Napi::Env env);
 
-  // The Stream wrappers handed to JS, and the codecpar/parser wrappers they
-  // hand out, point into ctx_: invalidated on the JS thread before every free
-  // of it, so a wrapper that outlives the context reads defaults
+  // The Stream wrappers handed to JS, and the codecpar wrappers they hand out,
+  // point into ctx_: invalidated on the JS thread before every free of it, so
+  // a wrapper that outlives the context reads defaults
   std::shared_ptr<BorrowRegistry> borrowers_ = std::make_shared<BorrowRegistry>();
+
+  // repeat_pict of each stream's parser as of the last packet read from it,
+  // indexed by stream; main thread only
+  std::vector<int> parser_repeat_picts_;
+
+  // Main thread, before every free of ctx_: detaches the JS wrappers and drops
+  // the state captured from its streams
+  void InvalidateBorrowers();
 
   // Owner thread of an input context, started by the first async readFrame()
   // and the only thread touching ctx_ from then on (see input_reader.h).

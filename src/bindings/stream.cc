@@ -2,6 +2,7 @@
 #include "codec_parameters.h"
 #include "codec_parser.h"
 #include "dictionary.h"
+#include "format_context.h"
 #include "packet.h"
 #include "common.h"
 
@@ -341,25 +342,22 @@ void Stream::SetEventFlagsAccessor(const Napi::CallbackInfo& info, const Napi::V
 Napi::Value Stream::GetParser(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
-  if (!stream_) {
+  if (!stream_ || !owner_) {
     return env.Null();
   }
 
-  // Get parser from stream using av_stream_get_parser
-  AVCodecParserContext* parser_ctx = av_stream_get_parser(stream_);
-  if (!parser_ctx) {
+  // A copy of the state captured with the last packet read from this stream,
+  // not the parser: that belongs to the thread reading the input, which frees
+  // it at the end of the stream and on a seek
+  int repeatPict = owner_->LastParserRepeatPict(stream_->index);
+  if (repeatPict == kNoParserRepeatPict) {
     return env.Null();
   }
 
-  // Create CodecParser wrapper
-  // Note: Parser context is owned by AVStream, so we don't transfer ownership
   Napi::Object parserObj = CodecParser::constructor.New({});
   CodecParser* parser = UnwrapNativeObject<CodecParser>(env, parserObj, "CodecParser");
-
   if (parser) {
-    parser->SetParserContext(parser_ctx, false); // false = not owned
-    // freed with the stream, so it borrows from the stream's format context
-    parser->BorrowFrom(BorrowedFrom());
+    parser->SetSnapshot(repeatPict);
   }
 
   return parserObj;

@@ -1864,9 +1864,10 @@ Napi::Value Utilities::DtsPredict(const Napi::CallbackInfo& info) {
   int frame_size = par->frame_size;
   AVRational frame_rate = par->framerate;
 
-  // The parser state is captured by the thread that read the packet, -1 without
-  // a parser. The stream's parser itself belongs to the input's owner thread,
-  // which reads ahead and frees it at the end of the stream.
+  // The parser state is captured by the thread that read the packet,
+  // kNoParserRepeatPict (negative) without a parser. The stream's parser itself
+  // belongs to the input's owner thread, which reads ahead and frees it at the
+  // end of the stream.
   int repeat_pict = packetWrapper->ParserRepeatPict();
 
   // Check if codec has AV_CODEC_PROP_FIELDS property
