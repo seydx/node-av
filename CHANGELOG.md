@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Logging no longer aborts the process after a worker thread that set the log callback has ended.** The callback belongs to the thread that called `Log.setCallback()`. When that worker ended without `Log.resetCallback()`, the next FFmpeg log line from any other thread still went to its function. Logging now falls back to FFmpeg's default output. A callback that replaces one set in another thread also releases the old one.
+- **`RTPStream.stop()` and `FMP4Stream.stop()` close the input when a codec fails to close.** A decoder, filter or encoder that was still busy threw from `close()` and the teardown ended there, so the input, e.g. an RTSP connection, stayed open. The error still reaches the caller.
+- **`AudioFifo` checks the length of the buffers it is given.** `write()`, `read()`, `peek()` and their sync variants copied `nb_samples` per buffer without looking at its size, so a buffer that was too short was read or written past its end. They now throw a `RangeError`, and a `TypeError` for a plane that is not a `Buffer`.
+- **`sendRTSPPacket()` rejects a packet over 65535 bytes on a TCP session.** The interleaved header has 16 bits for the length, a larger packet was sent with a wrong one. It now returns `AVERROR(EINVAL)`.
+- **An input with custom I/O no longer reads freed memory when its `IOContext` is garbage collected first.** This could happen to an input that was dropped without `close()` while it was still reading. Its reads now end with an error.
+
 ## [7.0.3] - 2026-11-12
 
 ### Fixed
