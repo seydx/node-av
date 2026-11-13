@@ -4,8 +4,6 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-## [7.1.0-beta.1] - 2026-11-13
-
 ### Added
 
 - **node-av-lgpl, an LGPL build of node-av** ([#99](https://github.com/seydx/node-av/issues/99)). Same API, linked against FFmpeg built without GPL components: no libx264, libx265 and chromaprint, no GPL-only filters, and no libfdk_aac, which has its own license (AAC goes through FFmpeg's own encoder). H.264 and H.265 are encoded only with a hardware encoder: there is no LGPL software encoder for them, and `FMP4Stream` says so when it has to transcode without one. Install it as `npm install node-av@npm:node-av-lgpl` to keep the `node-av/...` imports. Its FFmpeg CLI is `@seydx/node-av-ffmpeg-lgpl`.
@@ -25,6 +23,7 @@ All notable changes to this project will be documented in this file.
 - **`AudioFifo` checks the length of the buffers it is given.** `write()`, `read()`, `peek()` and their sync variants copied `nb_samples` per buffer without looking at its size, so a buffer that was too short was read or written past its end. They now throw a `RangeError`, and a `TypeError` for a plane that is not a `Buffer`.
 - **`sendRTSPPacket()` rejects a packet over 65535 bytes on a TCP session.** The interleaved header has 16 bits for the length, a larger packet was sent with a wrong one. It now returns `AVERROR(EINVAL)`.
 - **An input with custom I/O no longer reads freed memory when its `IOContext` is garbage collected first.** This could happen to an input that was dropped without `close()` while it was still reading. Its reads now end with an error.
+- **Reading an input with `packets()` no longer crashes at the end of the stream on musl (Alpine).** The DTS prediction read the stream's parser on the main thread, while the input's reader thread reads ahead and frees that parser at the end of the stream and on a seek. On musl this crashed now and then with a segmentation fault, elsewhere it could read a stale value. The parser state is now taken with each packet on the thread that reads it, as the FFmpeg CLI does.
 
 ## [7.0.3] - 2026-11-12
 
