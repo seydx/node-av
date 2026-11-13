@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [7.0.4-beta.1] - 2026-11-13
+
 ### Fixed
 
 - **Logging no longer aborts the process after a worker thread that set the log callback has ended.** The callback belongs to the thread that called `Log.setCallback()`. When that worker ended without `Log.resetCallback()`, the next FFmpeg log line from any other thread still went to its function. Logging now falls back to FFmpeg's default output. A callback that replaces one set in another thread also releases the old one.
