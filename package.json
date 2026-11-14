@@ -1,6 +1,6 @@
 {
   "name": "node-av",
-  "version": "7.1.0-beta.1",
+  "version": "7.1.0-beta.2",
   "description": "FFmpeg bindings for Node.js",
   "author": "seydx (https://github.com/seydx/node-av)",
   "type": "module",
@@ -92,14 +92,14 @@
     "update": "updates --update ./"
   },
   "optionalDependencies": {
-    "@seydx/node-av-darwin-arm64": "7.1.0-beta.1",
-    "@seydx/node-av-darwin-x64": "7.1.0-beta.1",
-    "@seydx/node-av-linux-arm64": "7.1.0-beta.1",
-    "@seydx/node-av-linux-arm64-musl": "7.1.0-beta.1",
-    "@seydx/node-av-linux-x64": "7.1.0-beta.1",
-    "@seydx/node-av-linux-x64-musl": "7.1.0-beta.1",
-    "@seydx/node-av-win32-arm64-msvc": "7.1.0-beta.1",
-    "@seydx/node-av-win32-x64-msvc": "7.1.0-beta.1"
+    "@seydx/node-av-darwin-arm64": "7.1.0-beta.2",
+    "@seydx/node-av-darwin-x64": "7.1.0-beta.2",
+    "@seydx/node-av-linux-arm64": "7.1.0-beta.2",
+    "@seydx/node-av-linux-arm64-musl": "7.1.0-beta.2",
+    "@seydx/node-av-linux-x64": "7.1.0-beta.2",
+    "@seydx/node-av-linux-x64-musl": "7.1.0-beta.2",
+    "@seydx/node-av-win32-arm64-msvc": "7.1.0-beta.2",
+    "@seydx/node-av-win32-x64-msvc": "7.1.0-beta.2"
   },
   "peerDependencies": {
     "@seydx/node-av-ffmpeg": "*",
