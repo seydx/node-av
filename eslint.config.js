@@ -137,6 +137,7 @@ export default [
       '@typescript-eslint/no-this-alias': 'off',
 
       // Stylistic specific rules
+      '@stylistic/list-style': 'off',
       '@stylistic/generator-star-spacing': 'off',
       '@stylistic/max-len': ['error', { code: 170, tabWidth: 2 }],
       '@stylistic/quotes': ['error', 'single', { avoidEscape: true }],
