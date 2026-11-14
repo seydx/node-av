@@ -24,6 +24,7 @@ All notable changes to this project will be documented in this file.
 - **`sendRTSPPacket()` rejects a packet over 65535 bytes on a TCP session.** The interleaved header has 16 bits for the length, a larger packet was sent with a wrong one. It now returns `AVERROR(EINVAL)`.
 - **An input with custom I/O no longer reads freed memory when its `IOContext` is garbage collected first.** This could happen to an input that was dropped without `close()` while it was still reading. Its reads now end with an error.
 - **Reading an input with `packets()` no longer crashes at the end of the stream on musl (Alpine).** The DTS prediction read the stream's parser on the main thread, while the input's reader thread reads ahead and frees that parser at the end of the stream and on a seek. On musl this crashed now and then with a segmentation fault, elsewhere it could read a stale value. The parser state is now taken with each packet on the thread that reads it, as the FFmpeg CLI does.
+- **`Stream.parser` returns a copy of the parser state instead of the stream's parser.** The returned `CodecParser` pointed to a parser FFmpeg frees at the end of the stream and on a seek, so reading `repeatPict` afterwards read freed memory, and with `readFrame()` the main thread touched a parser the reader thread was using. It now carries the state as of the last packet read from the stream, stays valid after the input is closed, and is `null` before the first packet. It cannot parse; a parser of your own comes from `new CodecParser()` and `init()`.
 
 ## [7.0.3] - 2026-11-12
 
