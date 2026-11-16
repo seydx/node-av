@@ -48,6 +48,7 @@
     }
   },
   "scripts": {
+    "audit": "npm audit fix --min-release-age=0",
     "benchmark": "tsx benchmarks/index.ts",
     "build": "npm run generate && npm run build:tests && npm run build:examples && npm run build:tsc && npm run build:native",
     "build:benchmarks": "tsc -p tsconfig.benchmarks.json",
@@ -165,5 +166,8 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/seydx/node-av.git"
+  },
+  "allowScripts": {
+    "esbuild": true
   }
 }

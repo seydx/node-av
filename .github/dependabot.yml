@@ -4,6 +4,20 @@ updates:
     directory: "/"
     schedule:
       interval: daily
+    # let a release age first, security updates ignore this
+    cooldown:
+      default-days: 7
+      # our own packages go out at once
+      exclude:
+        - "@camera.ui/*"
+        - "camera.ui"
+        - "node-av"
+        - "node-av-light"
+        - "node-av-lgpl"
+        - "@seydx/*"
+        - "camera-ui-*"
+        - "github.com/cameraui/*"
+        - "github.com/seydx/*"
   - package-ecosystem: npm
     directories:
       - "/"
@@ -12,6 +26,20 @@ updates:
       - "examples/**"
     schedule:
       interval: daily
+    # let a release age first, security updates ignore this
+    cooldown:
+      default-days: 7
+      # our own packages go out at once
+      exclude:
+        - "@camera.ui/*"
+        - "camera.ui"
+        - "node-av"
+        - "node-av-light"
+        - "node-av-lgpl"
+        - "@seydx/*"
+        - "camera-ui-*"
+        - "github.com/cameraui/*"
+        - "github.com/seydx/*"
     ignore:
       - dependency-name: "eslint"
       - dependency-name: "typescript"
@@ -19,6 +47,20 @@ updates:
     directory: "/examples"
     schedule:
       interval: "monthly"
+    # let a release age first, security updates ignore this
+    cooldown:
+      default-days: 7
+      # our own packages go out at once
+      exclude:
+        - "@camera.ui/*"
+        - "camera.ui"
+        - "node-av"
+        - "node-av-light"
+        - "node-av-lgpl"
+        - "@seydx/*"
+        - "camera-ui-*"
+        - "github.com/cameraui/*"
+        - "github.com/seydx/*"
     labels: []
     ignore:
       - dependency-name: "*"
