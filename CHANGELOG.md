@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [7.1.1-beta.1] - 2026-11-18
+
 ### Fixed
 
 - **`sendRTSPPacket()` puts RTCP on the RTCP channel over TCP.** It sent every packet on the stream's RTP channel, so an RTCP sender report, e.g. from an `rtp` muxer feeding the backchannel, reached the server as an RTP packet with payload type 72 and could end up at the camera as audio. RTCP now goes on the second channel of the interleaved pair, as in FFmpeg's own RTSP muxer. `sendRTSPPacketSync()` does the same, and over UDP RTCP already went to the RTCP port.
