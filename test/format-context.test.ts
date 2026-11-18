@@ -1,6 +1,8 @@
 import assert from 'node:assert';
+import { createSocket } from 'node:dgram';
 import { existsSync, unlinkSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
+import { createServer } from 'node:net';
 import { after, afterEach, beforeEach, describe, it } from 'node:test';
 
 import {
@@ -29,6 +31,7 @@ import {
   Rational,
 } from '../src/index.js';
 
+import type { AddressInfo } from 'node:net';
 import type { AVFormatFlag } from '../src/index.js';
 import { getInputFile, getOutputFile, prepareTestEnvironment } from './index.js';
 
@@ -1262,6 +1265,150 @@ describe('FormatContext', () => {
       ioCtx.freeContext();
       ctx = null as any;
     });
+  });
+
+  describe('RTSP backchannel', () => {
+    const rtp = Buffer.from([0x80, 0x08, 0x00, 0x01, 0x00, 0x00, 0x00, 0xa0, 0x00, 0x00, 0x00, 0x01, ...Array(160).fill(0xd5)]);
+    const senderReport = Buffer.from([0x80, 200, 0x00, 0x06, 0x00, 0x00, 0x00, 0x01, ...Array(20).fill(0)]);
+
+    // FFmpeg sends RTCP over UDP to the port after the RTP port
+    async function bindPortPair() {
+      for (;;) {
+        const rtpSocket = createSocket('udp4');
+        await new Promise<void>((resolve) => rtpSocket.bind(0, '127.0.0.1', resolve));
+        const port = rtpSocket.address().port;
+        const rtcpSocket = createSocket('udp4');
+        const bound = await new Promise<boolean>((resolve) => {
+          rtcpSocket.once('error', () => resolve(false));
+          rtcpSocket.bind(port + 1, '127.0.0.1', () => resolve(true));
+        });
+        if (bound) return { port, rtpSocket, rtcpSocket };
+        rtpSocket.close();
+      }
+    }
+
+    // a camera with one audio track and an ONVIF-style backchannel (a=sendonly), noting for every packet on the backchannel whether it came over its RTP or its RTCP path
+    async function startCamera() {
+      const received: { path: string; packet: Buffer }[] = [];
+      const live = await bindPortPair();
+      const talk = await bindPortPair();
+      talk.rtpSocket.on('message', (packet) => received.push({ path: 'rtp', packet }));
+      talk.rtcpSocket.on('message', (packet) => received.push({ path: 'rtcp', packet }));
+      let channels: number[] = [];
+
+      const server = createServer((socket) => {
+        let buffer = Buffer.alloc(0);
+        socket.on('error', () => {});
+        socket.on('data', (chunk: Buffer) => {
+          buffer = Buffer.concat([buffer, chunk]);
+          while (buffer.length > 0) {
+            if (buffer[0] === 0x24) {
+              const size = buffer.length < 4 ? 0 : buffer.readUInt16BE(2);
+              if (buffer.length < 4 || buffer.length < 4 + size) return;
+              const path = ['rtp', 'rtcp'][channels.indexOf(buffer[1])] ?? `channel ${buffer[1]}`;
+              received.push({ path, packet: Buffer.from(buffer.subarray(4, 4 + size)) });
+              buffer = buffer.subarray(4 + size);
+              continue;
+            }
+
+            const end = buffer.indexOf('\r\n\r\n');
+            if (end < 0) return;
+            const request = buffer.subarray(0, end).toString();
+            buffer = buffer.subarray(end + 4);
+
+            const [method, url] = request.split(' ');
+            const headers = ['RTSP/1.0 200 OK', `CSeq: ${/^CSeq:\s*(\d+)/im.exec(request)?.[1]}`, 'Session: 1'];
+            let body = '';
+
+            if (method === 'OPTIONS') {
+              headers.push('Public: OPTIONS, DESCRIBE, SETUP, PLAY, TEARDOWN');
+            } else if (method === 'DESCRIBE') {
+              body = [
+                'v=0',
+                'o=- 0 0 IN IP4 127.0.0.1',
+                's=camera',
+                'c=IN IP4 127.0.0.1',
+                't=0 0',
+                'm=audio 0 RTP/AVP 8',
+                'a=control:live',
+                'a=recvonly',
+                'm=audio 0 RTP/AVP 8',
+                'a=control:talk',
+                'a=sendonly',
+                '',
+              ].join('\r\n');
+              headers.push(`Content-Base: ${url}/`, 'Content-Type: application/sdp', `Content-Length: ${body.length}`);
+            } else if (method === 'SETUP') {
+              const transport = /^Transport:.*$/im.exec(request)![0];
+              const track = url.endsWith('/talk') ? talk : live;
+              if (track === talk) {
+                channels = (/interleaved=(\d+)-(\d+)/.exec(transport)?.slice(1) ?? []).map(Number);
+              }
+              headers.push(transport.includes('/TCP') ? transport : `${transport};server_port=${track.port}-${track.port + 1}`);
+            }
+
+            socket.write(`${headers.join('\r\n')}\r\n\r\n${body}`);
+          }
+        });
+      });
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+
+      return {
+        url: `rtsp://127.0.0.1:${(server.address() as AddressInfo).port}/stream`,
+        pathsOf: (packet: Buffer) => received.filter((entry) => entry.packet.equals(packet)).map((entry) => entry.path),
+        close: () => {
+          server.close();
+          for (const pair of [live, talk]) {
+            pair.rtpSocket.close();
+            pair.rtcpSocket.close();
+          }
+        },
+      };
+    }
+
+    async function openCamera(url: string, transport: string) {
+      const options = new Dictionary();
+      options.alloc();
+      options.set('rtsp_transport', transport);
+      const ret = await ctx.openInput(url, null, options);
+      options.free();
+      assert.equal(ret, 0);
+
+      const stream = ctx.getRTSPStreamInfo()?.find((s) => s.direction === 'sendonly');
+      assert.ok(stream, 'the backchannel track is listed');
+      return stream.streamIndex;
+    }
+
+    async function waitFor(condition: () => boolean) {
+      for (let i = 0; i < 100 && !condition(); i++) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+    }
+
+    for (const transport of ['tcp', 'udp']) {
+      for (const mode of ['async', 'sync']) {
+        it(`should send RTP on the RTP path and RTCP on the RTCP path over ${transport} (${mode})`, { timeout: 10000 }, async () => {
+          const camera = await startCamera();
+          try {
+            const streamIndex = await openCamera(camera.url, transport);
+            // the interleaved header counts as written
+            const overhead = transport === 'tcp' ? 4 : 0;
+
+            for (const packet of [senderReport, rtp]) {
+              const ret = mode === 'async' ? await ctx.sendRTSPPacket(streamIndex, packet) : ctx.sendRTSPPacketSync(streamIndex, packet);
+              assert.equal(ret, packet.length + overhead);
+            }
+            await waitFor(() => camera.pathsOf(rtp).length > 0 && camera.pathsOf(senderReport).length > 0);
+
+            assert.deepEqual(camera.pathsOf(rtp), ['rtp']);
+            assert.deepEqual(camera.pathsOf(senderReport), ['rtcp']);
+            await ctx.closeInput();
+          } finally {
+            camera.close();
+          }
+        });
+      }
+    }
   });
 
   describe('Flag Operations', () => {
