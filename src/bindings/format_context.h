@@ -277,6 +277,9 @@ private:
   static bool BuildStreamOptions(Napi::Env env, const Napi::Value& value, unsigned int nb_streams, std::vector<AVDictionary*>& out);
   static void FreeStreamOptions(std::vector<AVDictionary*>& options);
 
+  // Shared by sendRTSPPacket() and sendRTSPPacketSync()
+  static int WriteRTSPPacket(AVFormatContext* ctx, int stream_index, const uint8_t* data, size_t len);
+
   // Interrupt callback mechanism for cancelling blocking operations
   static int InterruptCallback(void* opaque);
   void RequestInterrupt();

@@ -1159,6 +1159,68 @@ void FormatContext::RequestInterrupt() {
   }
 }
 
+int FormatContext::WriteRTSPPacket(AVFormatContext* ctx, int stream_index, const uint8_t* data, size_t len) {
+  // Check if this is an RTSP input context
+  if (!ctx->iformat || !ctx->iformat->name || strcmp(ctx->iformat->name, "rtsp") != 0) {
+    return AVERROR(ENOTSUP);
+  }
+
+  // Access RTSP private data
+  RTSPState* rt = static_cast<RTSPState*>(ctx->priv_data);
+  if (!rt) {
+    return AVERROR(ENOTSUP);
+  }
+
+  // Find the RTSP stream by index
+  RTSPStream* rtsp_st = nullptr;
+  for (int i = 0; i < rt->nb_rtsp_streams; i++) {
+    if (rt->rtsp_streams[i] && rt->rtsp_streams[i]->stream_index == stream_index) {
+      rtsp_st = rt->rtsp_streams[i];
+      break;
+    }
+  }
+
+  if (!rtsp_st) {
+    return AVERROR(EINVAL); // Stream not found
+  }
+
+  if (rt->lower_transport == RTSP_LOWER_TRANSPORT_TCP) {
+    if (!rt->rtsp_hd) {
+      return AVERROR(ENOTSUP); // No TCP connection
+    }
+
+    // The interleaved header carries the length in 16 bits
+    if (len > 0xFFFF) {
+      return AVERROR(EINVAL);
+    }
+
+    // RTCP goes on the second channel of the pair, like in FFmpeg's RTSP muxer (RTP_PT_IS_RTCP)
+    bool rtcp = len > 1 && ((data[1] >= 192 && data[1] <= 195) || (data[1] >= 200 && data[1] <= 210));
+
+    // Build interleaved packet: $ + channel_id + length (2 bytes) + RTP/RTCP data
+    std::vector<uint8_t> interleaved_packet(4 + len);
+    interleaved_packet[0] = '$';
+    interleaved_packet[1] = static_cast<uint8_t>(rtcp ? rtsp_st->interleaved_max : rtsp_st->interleaved_min);
+    interleaved_packet[2] = static_cast<uint8_t>((len >> 8) & 0xFF);
+    interleaved_packet[3] = static_cast<uint8_t>(len & 0xFF);
+    memcpy(interleaved_packet.data() + 4, data, len);
+
+    return ffurl_write(static_cast<URLContext*>(rt->rtsp_hd), interleaved_packet.data(), interleaved_packet.size());
+  }
+
+  if (rt->lower_transport == RTSP_LOWER_TRANSPORT_UDP ||
+      rt->lower_transport == RTSP_LOWER_TRANSPORT_UDP_MULTICAST) {
+    if (!rtsp_st->rtp_handle) {
+      return AVERROR(ENOTSUP); // No UDP socket
+    }
+
+    // FFmpeg's rtp protocol sends RTCP to the RTCP port by itself
+    return ffurl_write(static_cast<URLContext*>(rtsp_st->rtp_handle), data, len);
+  }
+
+  return AVERROR(ENOTSUP); // Unknown transport
+}
+
 int FormatContext::ParserRepeatPict(AVFormatContext* ctx, const AVPacket* pkt) {
   if (!ctx || pkt->stream_index < 0 || static_cast<unsigned>(pkt->stream_index) >= ctx->nb_streams) {
     return kNoParserRepeatPict;

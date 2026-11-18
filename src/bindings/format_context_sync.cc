@@ -633,79 +633,10 @@ Napi::Value FormatContext::SendRTSPPacketSync(const Napi::CallbackInfo& info) {
     return env.Undefined();
   }
 
-  // Check if this is an RTSP input context
-  if (!ctx_->iformat || !ctx_->iformat->name ||
-      (strcmp(ctx_->iformat->name, "rtsp") != 0)) {
-    return Napi::Number::New(env, AVERROR(ENOTSUP));
-  }
-
   int stream_index = info[0].As<Napi::Number>().Int32Value();
   Napi::Buffer<uint8_t> buffer = info[1].As<Napi::Buffer<uint8_t>>();
-  uint8_t* data = buffer.Data();
-  size_t len = buffer.Length();
 
-  // Access RTSP private data
-  RTSPState* rt = static_cast<RTSPState*>(ctx_->priv_data);
-  if (!rt) {
-    return Napi::Number::New(env, AVERROR(ENOTSUP));
-  }
-
-  // Find the RTSP stream by index
-  RTSPStream* rtsp_st = nullptr;
-  for (int i = 0; i < rt->nb_rtsp_streams; i++) {
-    if (rt->rtsp_streams[i] && rt->rtsp_streams[i]->stream_index == stream_index) {
-      rtsp_st = rt->rtsp_streams[i];
-      break;
-    }
-  }
-
-  if (!rtsp_st) {
-    return Napi::Number::New(env, AVERROR(EINVAL)); // Stream not found
-  }
-
-  int ret = 0;
-
-  // Send based on transport type
-  if (rt->lower_transport == RTSP_LOWER_TRANSPORT_TCP) {
-    // TCP: Send with interleaved header over RTSP connection
-    if (!rt->rtsp_hd) {
-      return Napi::Number::New(env, AVERROR(ENOTSUP)); // No TCP connection
-    }
-
-    // The interleaved header carries the length in 16 bits
-    if (len > 0xFFFF) {
-      return Napi::Number::New(env, AVERROR(EINVAL));
-    }
-
-    // Build interleaved packet: $ + channel_id + length (2 bytes) + RTP data
-    int channel_id = rtsp_st->interleaved_min;
-    size_t total_len = 4 + len;
-    std::vector<uint8_t> interleaved_packet(total_len);
-
-    interleaved_packet[0] = '$';
-    interleaved_packet[1] = static_cast<uint8_t>(channel_id);
-    interleaved_packet[2] = static_cast<uint8_t>((len >> 8) & 0xFF);
-    interleaved_packet[3] = static_cast<uint8_t>(len & 0xFF);
-    memcpy(interleaved_packet.data() + 4, data, len);
-
-    // Write to RTSP TCP socket
-    ret = ffurl_write(static_cast<URLContext*>(rt->rtsp_hd), interleaved_packet.data(), total_len);
-
-  } else if (rt->lower_transport == RTSP_LOWER_TRANSPORT_UDP ||
-             rt->lower_transport == RTSP_LOWER_TRANSPORT_UDP_MULTICAST) {
-    // UDP: Send raw RTP packet directly over UDP socket
-    if (!rtsp_st->rtp_handle) {
-      return Napi::Number::New(env, AVERROR(ENOTSUP)); // No UDP socket
-    }
-
-    // Write raw RTP packet to UDP socket (no interleaved header)
-    ret = ffurl_write(static_cast<URLContext*>(rtsp_st->rtp_handle), data, len);
-
-  } else {
-    return Napi::Number::New(env, AVERROR(ENOTSUP)); // Unknown transport
-  }
-
-  return Napi::Number::New(env, ret);
+  return Napi::Number::New(env, WriteRTSPPacket(ctx_, stream_index, buffer.Data(), buffer.Length()));
 }
 
 } // namespace ffmpeg

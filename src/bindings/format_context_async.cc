@@ -684,70 +684,7 @@ Napi::Value FormatContext::SendRTSPPacketAsync(const Napi::CallbackInfo& info) {
       return AVERROR(EINVAL);
     }
 
-    // Check if this is an RTSP input context
-    if (!self->ctx_->iformat || !self->ctx_->iformat->name ||
-        (strcmp(self->ctx_->iformat->name, "rtsp") != 0)) {
-      return AVERROR(ENOTSUP);
-    }
-
-    // Access RTSP private data
-    RTSPState* rt = static_cast<RTSPState*>(self->ctx_->priv_data);
-    if (!rt) {
-      return AVERROR(ENOTSUP);
-    }
-
-    // Find the RTSP stream by index
-    RTSPStream* rtsp_st = nullptr;
-    for (int i = 0; i < rt->nb_rtsp_streams; i++) {
-      if (rt->rtsp_streams[i] && rt->rtsp_streams[i]->stream_index == stream_index) {
-        rtsp_st = rt->rtsp_streams[i];
-        break;
-      }
-    }
-
-    if (!rtsp_st) {
-      return AVERROR(EINVAL); // Stream not found
-    }
-
-    // Send based on transport type
-    if (rt->lower_transport == RTSP_LOWER_TRANSPORT_TCP) {
-      // TCP: Send with interleaved header over RTSP connection
-      if (!rt->rtsp_hd) {
-        return AVERROR(ENOTSUP); // No TCP connection
-      }
-
-      // The interleaved header carries the length in 16 bits
-      if (rtpData->size() > 0xFFFF) {
-        return AVERROR(EINVAL);
-      }
-
-      // Build interleaved packet: $ + channel_id + length (2 bytes) + RTP data
-      int channel_id = rtsp_st->interleaved_min;
-      size_t total_len = 4 + rtpData->size();
-      std::vector<uint8_t> interleaved_packet(total_len);
-
-      interleaved_packet[0] = '$';
-      interleaved_packet[1] = static_cast<uint8_t>(channel_id);
-      interleaved_packet[2] = static_cast<uint8_t>((rtpData->size() >> 8) & 0xFF);
-      interleaved_packet[3] = static_cast<uint8_t>(rtpData->size() & 0xFF);
-      memcpy(interleaved_packet.data() + 4, rtpData->data(), rtpData->size());
-
-      // Write to RTSP TCP socket
-      return ffurl_write(static_cast<URLContext*>(rt->rtsp_hd), interleaved_packet.data(), total_len);
-    }
-
-    if (rt->lower_transport == RTSP_LOWER_TRANSPORT_UDP ||
-        rt->lower_transport == RTSP_LOWER_TRANSPORT_UDP_MULTICAST) {
-      // UDP: Send raw RTP packet directly over UDP socket
-      if (!rtsp_st->rtp_handle) {
-        return AVERROR(ENOTSUP); // No UDP socket
-      }
-
-      // Write raw RTP packet to UDP socket (no interleaved header)
-      return ffurl_write(static_cast<URLContext*>(rtsp_st->rtp_handle), rtpData->data(), rtpData->size());
-    }
-
-    return AVERROR(ENOTSUP); // Unknown transport
+    return WriteRTSPPacket(self->ctx_, stream_index, rtpData->data(), rtpData->size());
   }, false);
 }
 

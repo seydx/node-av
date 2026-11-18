@@ -1491,15 +1491,16 @@ export class FormatContext extends OptionMember<NativeFormatContext> implements 
    * Send RTP packet to RTSP stream (supports both TCP and UDP)
    *
    * Automatically handles transport-specific packet formatting:
-   * - TCP: Sends with interleaved header ($channelId + length + RTP)
-   * - UDP: Sends raw RTP packet directly to UDP socket
+   * - TCP: Sends with interleaved header ($channelId + length + packet), RTP on the
+   *   stream's RTP channel and RTCP on its RTCP channel
+   * - UDP: Sends the raw packet to the RTP socket, RTCP to the RTCP port
    *
    * Used for backchannel/talkback audio streaming.
    * Only works with RTSP input contexts.
    *
    * @param streamIndex - RTSP stream index
    *
-   * @param rtpData - Raw RTP packet data (12-byte header + payload)
+   * @param rtpData - Raw RTP packet (12-byte header + payload) or RTCP packet
    *
    * @returns Promise resolving to number of bytes written on success, negative AVERROR on failure
    *
@@ -1530,15 +1531,16 @@ export class FormatContext extends OptionMember<NativeFormatContext> implements 
    * Synchronous version of sendRTSPPacket.
    *
    * Automatically handles transport-specific packet formatting:
-   * - TCP: Sends with interleaved header ($channelId + length + RTP)
-   * - UDP: Sends raw RTP packet directly to UDP socket
+   * - TCP: Sends with interleaved header ($channelId + length + packet), RTP on the
+   *   stream's RTP channel and RTCP on its RTCP channel
+   * - UDP: Sends the raw packet to the RTP socket, RTCP to the RTCP port
    *
    * Used for backchannel/talkback audio streaming.
    * Only works with RTSP input contexts.
    *
    * @param streamIndex - RTSP stream index
    *
-   * @param rtpData - Raw RTP packet data (12-byte header + payload)
+   * @param rtpData - Raw RTP packet (12-byte header + payload) or RTCP packet
    *
    * @returns Number of bytes written on success, negative AVERROR on failure
    *
